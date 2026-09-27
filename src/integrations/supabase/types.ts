@@ -734,7 +734,7 @@ export type Database = {
       [_ in never]: never
     }
     Functions: {
-      is_space_member: { Args: { _space_id: string }; Returns: boolean }
+      [_ in never]: never
     }
     Enums: {
       interest_reaction: "fire" | "like" | "neutral" | "dislike"
