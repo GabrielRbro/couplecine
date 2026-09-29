@@ -11,7 +11,15 @@
 import { Route as rootRouteImport } from './routes/__root'
 import { Route as AuthenticatedRouteRouteImport } from './routes/_authenticated/route'
 import { Route as AuthRouteImport } from './routes/auth'
+import { Route as AuthenticatedIndexRouteImport } from './routes/_authenticated/index'
+import { Route as AuthenticatedAddRouteImport } from './routes/_authenticated/add'
+import { Route as AuthenticatedLibraryRouteImport } from './routes/_authenticated/library'
+import { Route as AuthenticatedMatchRouteImport } from './routes/_authenticated/match'
 import { Route as AuthenticatedOnboardingRouteImport } from './routes/_authenticated/onboarding'
+import { Route as AuthenticatedSettingsRouteImport } from './routes/_authenticated/settings'
+import { Route as AuthenticatedWatchDiceRouteImport } from './routes/_authenticated/watch.dice'
+import { Route as AuthenticatedWatchGalleryRouteImport } from './routes/_authenticated/watch.gallery'
+import { Route as AuthenticatedWorkIdRouteImport } from './routes/_authenticated/work.$id'
 
 const AuthenticatedRouteRoute = AuthenticatedRouteRouteImport.update({
   id: '/_authenticated',
@@ -22,34 +30,129 @@ const AuthRoute = AuthRouteImport.update({
   path: '/auth',
   getParentRoute: () => rootRouteImport,
 } as any)
+const AuthenticatedIndexRoute = AuthenticatedIndexRouteImport.update({
+  id: '/',
+  path: '/',
+  getParentRoute: () => AuthenticatedRouteRoute,
+} as any)
+const AuthenticatedAddRoute = AuthenticatedAddRouteImport.update({
+  id: '/add',
+  path: '/add',
+  getParentRoute: () => AuthenticatedRouteRoute,
+} as any)
+const AuthenticatedLibraryRoute = AuthenticatedLibraryRouteImport.update({
+  id: '/library',
+  path: '/library',
+  getParentRoute: () => AuthenticatedRouteRoute,
+} as any)
+const AuthenticatedMatchRoute = AuthenticatedMatchRouteImport.update({
+  id: '/match',
+  path: '/match',
+  getParentRoute: () => AuthenticatedRouteRoute,
+} as any)
 const AuthenticatedOnboardingRoute = AuthenticatedOnboardingRouteImport.update({
   id: '/onboarding',
   path: '/onboarding',
   getParentRoute: () => AuthenticatedRouteRoute,
 } as any)
+const AuthenticatedSettingsRoute = AuthenticatedSettingsRouteImport.update({
+  id: '/settings',
+  path: '/settings',
+  getParentRoute: () => AuthenticatedRouteRoute,
+} as any)
+const AuthenticatedWatchDiceRoute = AuthenticatedWatchDiceRouteImport.update({
+  id: '/watch/dice',
+  path: '/watch/dice',
+  getParentRoute: () => AuthenticatedRouteRoute,
+} as any)
+const AuthenticatedWatchGalleryRoute =
+  AuthenticatedWatchGalleryRouteImport.update({
+    id: '/watch/gallery',
+    path: '/watch/gallery',
+    getParentRoute: () => AuthenticatedRouteRoute,
+  } as any)
+const AuthenticatedWorkIdRoute = AuthenticatedWorkIdRouteImport.update({
+  id: '/work/$id',
+  path: '/work/$id',
+  getParentRoute: () => AuthenticatedRouteRoute,
+} as any)
 
 export interface FileRoutesByFullPath {
-  '/': typeof AuthenticatedRouteRouteWithChildren
+  '/': typeof AuthenticatedIndexRoute
   '/auth': typeof AuthRoute
+  '/add': typeof AuthenticatedAddRoute
+  '/library': typeof AuthenticatedLibraryRoute
+  '/match': typeof AuthenticatedMatchRoute
   '/onboarding': typeof AuthenticatedOnboardingRoute
+  '/settings': typeof AuthenticatedSettingsRoute
+  '/watch/dice': typeof AuthenticatedWatchDiceRoute
+  '/watch/gallery': typeof AuthenticatedWatchGalleryRoute
+  '/work/$id': typeof AuthenticatedWorkIdRoute
 }
 export interface FileRoutesByTo {
-  '/': typeof AuthenticatedRouteRouteWithChildren
   '/auth': typeof AuthRoute
+  '/add': typeof AuthenticatedAddRoute
+  '/library': typeof AuthenticatedLibraryRoute
+  '/match': typeof AuthenticatedMatchRoute
   '/onboarding': typeof AuthenticatedOnboardingRoute
+  '/settings': typeof AuthenticatedSettingsRoute
+  '/': typeof AuthenticatedIndexRoute
+  '/watch/dice': typeof AuthenticatedWatchDiceRoute
+  '/watch/gallery': typeof AuthenticatedWatchGalleryRoute
+  '/work/$id': typeof AuthenticatedWorkIdRoute
 }
 export interface FileRoutesById {
   __root__: typeof rootRouteImport
   '/_authenticated': typeof AuthenticatedRouteRouteWithChildren
   '/auth': typeof AuthRoute
+  '/_authenticated/add': typeof AuthenticatedAddRoute
+  '/_authenticated/library': typeof AuthenticatedLibraryRoute
+  '/_authenticated/match': typeof AuthenticatedMatchRoute
   '/_authenticated/onboarding': typeof AuthenticatedOnboardingRoute
+  '/_authenticated/settings': typeof AuthenticatedSettingsRoute
+  '/_authenticated/': typeof AuthenticatedIndexRoute
+  '/_authenticated/watch/dice': typeof AuthenticatedWatchDiceRoute
+  '/_authenticated/watch/gallery': typeof AuthenticatedWatchGalleryRoute
+  '/_authenticated/work/$id': typeof AuthenticatedWorkIdRoute
 }
 export interface FileRouteTypes {
   fileRoutesByFullPath: FileRoutesByFullPath
-  fullPaths: '/' | '/auth' | '/onboarding'
+  fullPaths:
+    | '/'
+    | '/auth'
+    | '/add'
+    | '/library'
+    | '/match'
+    | '/onboarding'
+    | '/settings'
+    | '/watch/dice'
+    | '/watch/gallery'
+    | '/work/$id'
   fileRoutesByTo: FileRoutesByTo
-  to: '/' | '/auth' | '/onboarding'
-  id: '__root__' | '/_authenticated' | '/auth' | '/_authenticated/onboarding'
+  to:
+    | '/auth'
+    | '/add'
+    | '/library'
+    | '/match'
+    | '/onboarding'
+    | '/settings'
+    | '/'
+    | '/watch/dice'
+    | '/watch/gallery'
+    | '/work/$id'
+  id:
+    | '__root__'
+    | '/_authenticated'
+    | '/auth'
+    | '/_authenticated/add'
+    | '/_authenticated/library'
+    | '/_authenticated/match'
+    | '/_authenticated/onboarding'
+    | '/_authenticated/settings'
+    | '/_authenticated/'
+    | '/_authenticated/watch/dice'
+    | '/_authenticated/watch/gallery'
+    | '/_authenticated/work/$id'
   fileRoutesById: FileRoutesById
 }
 export interface RootRouteChildren {
@@ -73,6 +176,34 @@ declare module '@tanstack/react-router' {
       preLoaderRoute: typeof AuthRouteImport
       parentRoute: typeof rootRouteImport
     }
+    '/_authenticated/': {
+      id: '/_authenticated/'
+      path: '/'
+      fullPath: '/'
+      preLoaderRoute: typeof AuthenticatedIndexRouteImport
+      parentRoute: typeof AuthenticatedRouteRoute
+    }
+    '/_authenticated/add': {
+      id: '/_authenticated/add'
+      path: '/add'
+      fullPath: '/add'
+      preLoaderRoute: typeof AuthenticatedAddRouteImport
+      parentRoute: typeof AuthenticatedRouteRoute
+    }
+    '/_authenticated/library': {
+      id: '/_authenticated/library'
+      path: '/library'
+      fullPath: '/library'
+      preLoaderRoute: typeof AuthenticatedLibraryRouteImport
+      parentRoute: typeof AuthenticatedRouteRoute
+    }
+    '/_authenticated/match': {
+      id: '/_authenticated/match'
+      path: '/match'
+      fullPath: '/match'
+      preLoaderRoute: typeof AuthenticatedMatchRouteImport
+      parentRoute: typeof AuthenticatedRouteRoute
+    }
     '/_authenticated/onboarding': {
       id: '/_authenticated/onboarding'
       path: '/onboarding'
@@ -80,15 +211,59 @@ declare module '@tanstack/react-router' {
       preLoaderRoute: typeof AuthenticatedOnboardingRouteImport
       parentRoute: typeof AuthenticatedRouteRoute
     }
+    '/_authenticated/settings': {
+      id: '/_authenticated/settings'
+      path: '/settings'
+      fullPath: '/settings'
+      preLoaderRoute: typeof AuthenticatedSettingsRouteImport
+      parentRoute: typeof AuthenticatedRouteRoute
+    }
+    '/_authenticated/watch/dice': {
+      id: '/_authenticated/watch/dice'
+      path: '/watch/dice'
+      fullPath: '/watch/dice'
+      preLoaderRoute: typeof AuthenticatedWatchDiceRouteImport
+      parentRoute: typeof AuthenticatedRouteRoute
+    }
+    '/_authenticated/watch/gallery': {
+      id: '/_authenticated/watch/gallery'
+      path: '/watch/gallery'
+      fullPath: '/watch/gallery'
+      preLoaderRoute: typeof AuthenticatedWatchGalleryRouteImport
+      parentRoute: typeof AuthenticatedRouteRoute
+    }
+    '/_authenticated/work/$id': {
+      id: '/_authenticated/work/$id'
+      path: '/work/$id'
+      fullPath: '/work/$id'
+      preLoaderRoute: typeof AuthenticatedWorkIdRouteImport
+      parentRoute: typeof AuthenticatedRouteRoute
+    }
   }
 }
 
 interface AuthenticatedRouteRouteChildren {
+  AuthenticatedAddRoute: typeof AuthenticatedAddRoute
+  AuthenticatedLibraryRoute: typeof AuthenticatedLibraryRoute
+  AuthenticatedMatchRoute: typeof AuthenticatedMatchRoute
   AuthenticatedOnboardingRoute: typeof AuthenticatedOnboardingRoute
+  AuthenticatedSettingsRoute: typeof AuthenticatedSettingsRoute
+  AuthenticatedIndexRoute: typeof AuthenticatedIndexRoute
+  AuthenticatedWatchDiceRoute: typeof AuthenticatedWatchDiceRoute
+  AuthenticatedWatchGalleryRoute: typeof AuthenticatedWatchGalleryRoute
+  AuthenticatedWorkIdRoute: typeof AuthenticatedWorkIdRoute
 }
 
 const AuthenticatedRouteRouteChildren: AuthenticatedRouteRouteChildren = {
+  AuthenticatedAddRoute: AuthenticatedAddRoute,
+  AuthenticatedLibraryRoute: AuthenticatedLibraryRoute,
+  AuthenticatedMatchRoute: AuthenticatedMatchRoute,
   AuthenticatedOnboardingRoute: AuthenticatedOnboardingRoute,
+  AuthenticatedSettingsRoute: AuthenticatedSettingsRoute,
+  AuthenticatedIndexRoute: AuthenticatedIndexRoute,
+  AuthenticatedWatchDiceRoute: AuthenticatedWatchDiceRoute,
+  AuthenticatedWatchGalleryRoute: AuthenticatedWatchGalleryRoute,
+  AuthenticatedWorkIdRoute: AuthenticatedWorkIdRoute,
 }
 
 const AuthenticatedRouteRouteWithChildren =
