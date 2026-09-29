@@ -160,7 +160,7 @@ function Comparison({ space, workId, interests, ratings, onChange }: {
     setEditing(null);
   }
 
-  const Col = ({ label, r, s, own }: { label: string; r?: Reaction; s?: number; own: boolean }) => (
+  const Col = ({ label, r, s, own }: { label: string; r: Reaction | undefined; s: number | undefined; own: boolean }) => (
     <div className="flex-1 rounded-xl bg-secondary p-3">
       <p className="text-xs text-muted-foreground">{label}</p>
       <div className="mt-2 flex items-center justify-between">

@@ -29,9 +29,9 @@ function SettingsPage() {
 
   async function invite() {
     const value = email.trim().toLowerCase();
-    if (!/^\S+@\S+\.\S+$/.test(value)) return toast.error("Digite um e-mail válido.");
+    if (!/^\S+@\S+\.\S+$/.test(value)) { toast.error("Digite um e-mail válido."); return; }
     const { error } = await supabase.from("authorized_users").insert({ space_id: space!.spaceId!, email: value, invited_by: space!.userId });
-    if (error) return toast.error("Não foi possível convidar.");
+    if (error) { toast.error("Não foi possível convidar."); return; }
     setEmail("");
     toast.success("Convite registrado. Peça para a pessoa entrar com esse Google.");
     invites.refetch();
