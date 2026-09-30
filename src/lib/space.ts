@@ -77,7 +77,17 @@ export function useLibrary(spaceId: string | null | undefined) {
         .eq("space_id", spaceId!)
         .order("activity_at", { ascending: false });
       if (error) throw error;
-      return (data ?? []) as unknown as LibraryWork[];
+      // One-to-one relations come back as an object or null; normalize to arrays.
+      const arr = (v: unknown) => (Array.isArray(v) ? v : v ? [v] : []);
+      return ((data ?? []) as unknown as Record<string, unknown>[]).map((w) => ({
+        ...w,
+        interests: arr(w["interests"]),
+        ratings: arr(w["ratings"]),
+        indications: arr(w["indications"]),
+        joint_watch_sessions: arr(w["joint_watch_sessions"]),
+        watch_events: arr(w["watch_events"]),
+        series_states: arr(w["series_states"]),
+      })) as unknown as LibraryWork[];
     },
   });
 }
