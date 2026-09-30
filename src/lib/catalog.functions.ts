@@ -87,7 +87,9 @@ export const addWork = createServerFn({ method: "POST" })
       .eq("work_id", workId)
       .eq("indicated_by", userId)
       .maybeSingle();
-    if (!mine) {
+    // Re-indicating (e.g. after watching) creates a fresh indication so the work returns to Indicações.
+    if (mine) await supabase.from("indications").delete().eq("id", mine.id);
+    {
       await supabase.from("indications").insert({ space_id: data.spaceId, work_id: workId, indicated_by: userId });
     }
     const { error: ie } = await supabase

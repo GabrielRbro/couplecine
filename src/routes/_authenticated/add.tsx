@@ -1,7 +1,7 @@
 import { createFileRoute, Link, useNavigate } from "@tanstack/react-router";
 import { useMutation, useQueryClient } from "@tanstack/react-query";
 import { useServerFn } from "@tanstack/react-start";
-import { useState } from "react";
+import { useEffect, useState } from "react";
 import { ArrowLeft, Search } from "lucide-react";
 import { toast } from "sonner";
 import { AppShell } from "@/components/app/AppShell";
@@ -31,6 +31,13 @@ function AddPage() {
   const [picked, setPicked] = useState<Result | null>(null);
 
   const s = useMutation({ mutationFn: (query: string) => search({ data: { query, spaceId: space!.spaceId! } }) });
+  useEffect(() => {
+    const t = q.trim();
+    if (t.length < 2 || !space?.spaceId) return;
+    const id = setTimeout(() => s.mutate(t), 350);
+    return () => clearTimeout(id);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [q, space?.spaceId]);
   const a = useMutation({
     mutationFn: (reaction: Reaction) =>
       add({ data: { spaceId: space!.spaceId!, mediaType: picked!.mediaType, tmdbId: picked!.tmdbId, reaction: reaction as "fire" } }),
@@ -56,7 +63,7 @@ function AddPage() {
         <input autoFocus value={q} onChange={(e) => setQ(e.target.value)} placeholder="Título, ator ou diretor" className="w-full bg-transparent py-3 text-sm outline-none" />
         <button className="text-sm font-medium text-primary">Buscar</button>
       </form>
-      {s.isPending && <p className="mt-6 text-sm text-muted-foreground">Buscando…</p>}
+      {s.isPending && !s.data && <p className="mt-6 text-sm text-muted-foreground">Buscando…</p>}
       {s.error && <p className="mt-6 text-sm text-destructive">{s.error.message}</p>}
       <div className="mt-4 space-y-2">
         {s.data?.map((r) => (
