@@ -95,3 +95,11 @@ export function useLibrary(spaceId: string | null | undefined) {
 export function isWatched(w: LibraryWork) {
   return w.joint_watch_sessions.length > 0 || w.watch_events.length > 0;
 }
+
+/** Shown in Indicações: never watched, series in progress, or re-indicated after the last watch. */
+export function isIndicated(w: LibraryWork) {
+  if (!isWatched(w) || w.series_states[0]?.status === "watching") return true;
+  const last = (xs: { watched_at?: string; created_at?: string }[], k: "watched_at" | "created_at") =>
+    xs.reduce((m, x) => Math.max(m, new Date((x as Record<string, string>)[k] ?? 0).getTime()), 0);
+  return last(w.indications, "created_at") > Math.max(last(w.joint_watch_sessions, "watched_at"), last(w.watch_events, "watched_at"));
+}

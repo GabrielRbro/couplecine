@@ -1,9 +1,9 @@
-import { createFileRoute } from "@tanstack/react-router";
+import { createFileRoute, Link } from "@tanstack/react-router";
 import { useMemo, useState } from "react";
-import { Search } from "lucide-react";
+import { Plus, Search } from "lucide-react";
 import { AppShell } from "@/components/app/AppShell";
 import { EmptyState, MediaCard } from "@/components/app/MediaCard";
-import { isWatched, useLibrary, useSpace } from "@/lib/space";
+import { isIndicated, isWatched, useLibrary, useSpace } from "@/lib/space";
 
 export const Route = createFileRoute("/_authenticated/library")({
   head: () => ({ meta: [{ title: "Biblioteca — AppCinema" }, { name: "description", content: "Indicações e obras assistidas pelo casal." }] }),
@@ -26,7 +26,7 @@ function LibraryPage() {
   const [q, setQ] = useState("");
 
   const list = useMemo(() => {
-    let l = works.filter((w) => (tab === "seen" ? isWatched(w) : !isWatched(w) || w.series_states[0]?.status === "watching"));
+    let l = works.filter((w) => (tab === "seen" ? isWatched(w) : isIndicated(w)));
     if (kind !== "all") l = l.filter((w) => w.media_type === kind);
     if (q.trim()) l = l.filter((w) => norm(`${w.title} ${w.original_title ?? ""}`).includes(norm(q)));
     if (sort === "title") l = [...l].sort((a, b) => a.title.localeCompare(b.title, "pt-BR"));
@@ -39,7 +39,12 @@ function LibraryPage() {
 
   return (
     <div className="px-4 pt-6">
-      <h1 className="text-2xl font-semibold">Biblioteca</h1>
+      <div className="flex items-center justify-between">
+        <h1 className="text-2xl font-semibold">Biblioteca</h1>
+        <Link to="/add" aria-label="Adicionar" className="flex h-10 w-10 items-center justify-center rounded-full border border-border bg-card">
+          <Plus className="h-5 w-5" />
+        </Link>
+      </div>
       <div className="mt-4 flex items-center gap-2 rounded-xl border border-border bg-card px-3">
         <Search className="h-4 w-4 text-muted-foreground" />
         <input value={q} onChange={(e) => setQ(e.target.value)} placeholder="Buscar títulos" className="w-full bg-transparent py-3 text-sm outline-none" />
@@ -67,7 +72,7 @@ function LibraryPage() {
             {list.map((w) => <MediaCard key={w.id} work={w} space={space} />)}
           </div>
           {!isLoading && list.length === 0 && (
-            <EmptyState title={tab === "seen" ? "Nada assistido ainda" : "Nenhuma indicação"} text="Use o botão + no Início para adicionar uma obra." />
+            <EmptyState title={tab === "seen" ? "Nada assistido ainda" : "Nenhuma indicação"} text="Use o botão + para adicionar uma obra." />
           )}
         </>
       )}
