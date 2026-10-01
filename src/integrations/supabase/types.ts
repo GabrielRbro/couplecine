@@ -269,6 +269,83 @@ export type Database = {
           },
         ]
       }
+      match_sessions: {
+        Row: {
+          created_at: string
+          created_by: string
+          id: string
+          space_id: string
+          status: string
+          work_ids: string[]
+        }
+        Insert: {
+          created_at?: string
+          created_by: string
+          id?: string
+          space_id: string
+          status?: string
+          work_ids?: string[]
+        }
+        Update: {
+          created_at?: string
+          created_by?: string
+          id?: string
+          space_id?: string
+          status?: string
+          work_ids?: string[]
+        }
+        Relationships: [
+          {
+            foreignKeyName: "match_sessions_space_id_fkey"
+            columns: ["space_id"]
+            isOneToOne: false
+            referencedRelation: "couple_spaces"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+      match_votes: {
+        Row: {
+          created_at: string
+          id: string
+          liked: boolean
+          session_id: string
+          user_id: string
+          work_id: string
+        }
+        Insert: {
+          created_at?: string
+          id?: string
+          liked: boolean
+          session_id: string
+          user_id: string
+          work_id: string
+        }
+        Update: {
+          created_at?: string
+          id?: string
+          liked?: boolean
+          session_id?: string
+          user_id?: string
+          work_id?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "match_votes_session_id_fkey"
+            columns: ["session_id"]
+            isOneToOne: false
+            referencedRelation: "match_sessions"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "match_votes_work_id_fkey"
+            columns: ["work_id"]
+            isOneToOne: false
+            referencedRelation: "works"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
       notification_preferences: {
         Row: {
           id: string
@@ -734,7 +811,14 @@ export type Database = {
       [_ in never]: never
     }
     Functions: {
-      [_ in never]: never
+      match_status: {
+        Args: { _session: string }
+        Returns: {
+          matches: string[]
+          user_id: string
+          voted: number
+        }[]
+      }
     }
     Enums: {
       interest_reaction: "fire" | "like" | "neutral" | "dislike"
