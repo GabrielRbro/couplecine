@@ -109,7 +109,7 @@ function MatchPage() {
   const next = pool.find((id) => !myVotes.data.has(id));
   const total = pool.length;
   const partnerVoted = space.partner ? status.data?.find((s) => s.user_id === space.partner!.id)?.voted ?? 0 : null;
-  const matches = (status.data?.[0]?.matches ?? []).map((id) => byId.get(id)).filter(Boolean);
+  const matches = (space.partner ? status.data?.[0]?.matches ?? [] : []).map((id) => byId.get(id)).filter(Boolean);
   const current = next ? byId.get(next)! : null;
 
   return (
