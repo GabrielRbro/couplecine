@@ -1,0 +1,13 @@
+{
+  "version": "7",
+  "dialect": "postgresql",
+  "entries": [
+    {
+      "idx": 0,
+      "version": "7",
+      "when": 1791032582045,
+      "tag": "0000_discard_votes_when_match_abandoned",
+      "breakpoints": true
+    }
+  ]
+}
