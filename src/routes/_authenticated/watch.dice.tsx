@@ -2,6 +2,7 @@ import { createFileRoute, Link } from "@tanstack/react-router";
 import { useState } from "react";
 import { Dices } from "lucide-react";
 import { AppShell } from "@/components/app/AppShell";
+import { FilterPills, TogglePill } from "@/components/app/ui";
 import { EmptyState, Poster } from "@/components/app/MediaCard";
 import type { Reaction } from "@/lib/format";
 import { isIndicated, useLibrary, useSpace, type LibraryWork } from "@/lib/space";
@@ -38,15 +39,12 @@ function DicePage() {
     }
     setPicked(pool[pool.length - 1] ?? null);
   };
-  const pill = (on: boolean) => `rounded-full px-3 py-1.5 text-xs font-medium ${on ? "bg-primary text-primary-foreground" : "border border-border text-muted-foreground"}`;
   return (
     <div className="px-4 pt-6">
       <h1 className="text-2xl font-semibold">Sortear</h1>
       <p className="mt-1 text-sm text-muted-foreground">Obras com 🔥 têm mais chance. Se alguém marcou 👎, fica de fora.</p>
       <div className="mt-4 flex gap-2">
-        <button className={pill(kind === "all")} onClick={() => setKind("all")}>Todos</button>
-        <button className={pill(kind === "movie")} onClick={() => setKind("movie")}>Filmes</button>
-        <button className={pill(kind === "tv")} onClick={() => setKind("tv")}>Séries</button>
+        <FilterPills options={[["all", "Todos"], ["movie", "Filmes"], ["tv", "Séries"]] as const} value={kind} onChange={setKind} />
       </div>
       {pool.length === 0 ? (
         <div className="mt-6"><EmptyState title="Nada para sortear" text="Adicione indicações para usar o sorteio." /></div>

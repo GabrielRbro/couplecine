@@ -1,6 +1,7 @@
 import { createFileRoute } from "@tanstack/react-router";
 import { useMemo, useState } from "react";
 import { AppShell } from "@/components/app/AppShell";
+import { FilterPills, TogglePill } from "@/components/app/ui";
 import { EmptyState, MediaCard } from "@/components/app/MediaCard";
 import { isIndicated, useLibrary, useSpace } from "@/lib/space";
 
@@ -28,19 +29,16 @@ function GalleryPage() {
       (!genre || w.genres.includes(genre)) &&
       (!bothLike || w.interests.filter((i) => i.reaction === "fire" || i.reaction === "like").length >= (space.partner ? 2 : 1)),
   );
-  const pill = (on: boolean) => `shrink-0 rounded-full px-3 py-1.5 text-xs font-medium ${on ? "bg-primary text-primary-foreground" : "border border-border text-muted-foreground"}`;
   return (
     <div className="px-4 pt-6">
       <h1 className="text-2xl font-semibold">Galeria</h1>
       <p className="mt-1 text-sm text-muted-foreground">Escolham juntos entre as indicações.</p>
       <div className="no-scrollbar -mx-4 mt-4 flex gap-2 overflow-x-auto px-4">
-        <button className={pill(kind === "all")} onClick={() => setKind("all")}>Todos</button>
-        <button className={pill(kind === "movie")} onClick={() => setKind("movie")}>Filmes</button>
-        <button className={pill(kind === "tv")} onClick={() => setKind("tv")}>Séries</button>
-        <button className={pill(bothLike)} onClick={() => setBothLike((v) => !v)}>Os dois curtiram</button>
+        <FilterPills options={[["all", "Todos"], ["movie", "Filmes"], ["tv", "Séries"]] as const} value={kind} onChange={setKind} />
+        <TogglePill on={bothLike} onClick={() => setBothLike((v) => !v)}>Os dois curtiram</TogglePill>
       </div>
       {genres.length > 0 && (
-        <select value={genre} onChange={(e) => setGenre(e.target.value)} className="mt-3 w-full rounded-lg border border-border bg-card px-3 py-2 text-sm">
+        <select value={genre} onChange={(e) => setGenre(e.target.value)} aria-label="Gênero" className="mt-3 min-h-11 w-full rounded-lg border border-border bg-card px-3 text-sm">
           <option value="">Todos os gêneros</option>
           {genres.map((g) => <option key={g} value={g}>{g}</option>)}
         </select>
