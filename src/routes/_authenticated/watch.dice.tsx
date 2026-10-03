@@ -1,9 +1,12 @@
 import { createFileRoute, Link } from "@tanstack/react-router";
+import { useQuery } from "@tanstack/react-query";
 import { useState } from "react";
 import { Dices, RotateCcw, X } from "lucide-react";
 import { AppShell } from "@/components/app/AppShell";
 import { EmptyState, Poster } from "@/components/app/MediaCard";
 import { FilterPills, TogglePill } from "@/components/app/ui";
+import { Button } from "@/components/ui/button";
+import { supabase } from "@/integrations/supabase/client";
 import type { Reaction } from "@/lib/format";
 import {
   isIndicated,
@@ -19,6 +22,10 @@ export const Route = createFileRoute("/_authenticated/watch/dice")({
     meta: [
       { title: "Sortear — AppCinema" },
       { name: "description", content: "Sorteio ponderado pelas reações do casal." },
+      { property: "og:title", content: "Sortear — AppCinema" },
+      { property: "og:description", content: "Sorteio ponderado pelas reações do casal." },
+      { property: "og:type", content: "website" },
+      { name: "twitter:card", content: "summary" },
     ],
   }),
   component: () => (
@@ -43,13 +50,26 @@ function weightOf(w: LibraryWork, space: SpaceInfo, includeDislike: boolean) {
   return total;
 }
 
-type History = "fresh" | "rewatch" | "any";
+type History = "jointFresh" | "nobody" | "rewatch" | "any";
 
 function DicePage() {
   const { data: space } = useSpace();
   const { data: works = [] } = useLibrary(space?.spaceId);
+  const { data: priorWatch = [] } = useQuery({
+    queryKey: ["dice-prior-watch", space?.spaceId],
+    enabled: Boolean(space?.spaceId),
+    queryFn: async (): Promise<{ work_id: string; user_id: string; watched: boolean }[]> => {
+      const spaceId = space?.spaceId;
+      if (!spaceId) return [];
+      const { data, error } = await supabase
+        .from("prior_watch_status")
+        .select("work_id, user_id, watched");
+      if (error) throw error;
+      return data ?? [];
+    },
+  });
   const [kind, setKind] = useState<"all" | "movie" | "tv">("all");
-  const [history, setHistory] = useState<History>("fresh");
+  const [history, setHistory] = useState<History>("jointFresh");
   const [includeDislike, setIncludeDislike] = useState(false);
   const [declined, setDeclined] = useState<Set<string>>(new Set());
   const [picked, setPicked] = useState<LibraryWork | null>(null);
@@ -59,9 +79,14 @@ function DicePage() {
   const pool = works.filter((w) => {
     if (declined.has(w.id)) return false;
     if (kind !== "all" && w.media_type !== kind) return false;
-    const seen = isWatched(w);
-    if (history === "fresh" && (seen || !isIndicated(w))) return false;
-    if (history === "rewatch" && !seen) return false;
+    if (!isIndicated(w)) return false;
+    const watchedTogether = isWatched(w);
+    const watchedBefore = priorWatch.some(
+      (status) => status.work_id === w.id && status.watched,
+    );
+    if (history === "jointFresh" && watchedTogether) return false;
+    if (history === "nobody" && (watchedTogether || watchedBefore)) return false;
+    if (history === "rewatch" && !watchedTogether) return false;
     return weightOf(w, space, includeDislike) > 0;
   });
 
@@ -111,8 +136,9 @@ function DicePage() {
         <FilterPills
           options={
             [
-              ["fresh", "Nenhum viu"],
-              ["rewatch", "Rever"],
+              ["jointFresh", "Ainda não juntos"],
+              ["nobody", "Nenhum dos dois viu"],
+              ["rewatch", "Rever juntos"],
               ["any", "Qualquer"],
             ] as const
           }
@@ -135,50 +161,55 @@ function DicePage() {
             }
           />
           {declined.size > 0 && (
-            <button
+            <Button
+              variant="outline"
               onClick={() => setDeclined(new Set())}
-              className="pressable mt-3 flex min-h-11 w-full items-center justify-center gap-2 rounded-xl border border-border text-sm"
+              className="pressable mt-3 min-h-11 w-full rounded-xl"
             >
               <RotateCcw className="h-4 w-4" /> Nova rodada
-            </button>
+            </Button>
           )}
         </div>
       ) : (
         <>
-          <div className="mx-auto mt-6 w-44" style={{ minHeight: picked ? undefined : 0 }}>
+          <div className="mx-auto mt-7 w-48 min-h-1">
             {picked && (
-              <Link
-                key={picked.id}
-                to="/work/$id"
-                params={{ id: picked.id }}
-                className={`pressable block transition-[opacity,transform] duration-200 ${rolling ? "scale-95 opacity-0" : "fade-enter"}`}
-              >
-                <Poster path={picked.poster_path} title={picked.title} />
-                <p className="mt-2 text-center font-semibold">{picked.title}</p>
-                <p className="text-center text-xs text-muted-foreground">Toque para ver detalhes</p>
-              </Link>
+              <div className="relative isolate pb-3">
+                <div aria-hidden className="absolute inset-x-3 top-2 bottom-1 -z-10 rotate-2 rounded-xl border border-border bg-secondary" />
+                <Link
+                  key={picked.id}
+                  to="/work/$id"
+                  params={{ id: picked.id }}
+                  className={`pressable block rounded-xl border border-border bg-card p-2 shadow-sm transition-[opacity,transform] duration-200 ${rolling ? "scale-95 opacity-0" : "fade-enter"}`}
+                >
+                  <Poster path={picked.poster_path} title={picked.title} />
+                  <p className="mt-2 text-center font-semibold">{picked.title}</p>
+                  <p className="text-center text-xs text-muted-foreground">Toque para ver detalhes</p>
+                </Link>
+              </div>
             )}
           </div>
           <div className="mt-6 flex gap-2">
             {picked && (
-              <button
+              <Button
+                variant="outline"
                 onClick={decline}
                 aria-label="Recusar nesta rodada"
-                className="pressable flex min-h-14 items-center justify-center gap-1.5 rounded-2xl border border-border px-4 text-sm"
+                className="pressable min-h-14 rounded-2xl px-4"
               >
                 <X className="h-4 w-4" /> Hoje não
-              </button>
+              </Button>
             )}
-            <button
+            <Button
               onClick={roll}
               disabled={pool.length === 0}
-              className="pressable flex min-h-14 flex-1 items-center justify-center gap-2 rounded-2xl bg-primary font-semibold text-primary-foreground disabled:opacity-50"
+              className="pressable min-h-14 flex-1 rounded-2xl font-semibold"
             >
               <Dices
                 className={`h-5 w-5 transition-transform duration-200 ${rolling ? "rotate-180" : ""}`}
               />{" "}
               {picked ? "Sortear de novo" : "Sortear"}
-            </button>
+            </Button>
           </div>
           <p className="mt-2 text-center text-xs text-muted-foreground">
             {pool.length} obras no sorteio
