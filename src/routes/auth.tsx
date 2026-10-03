@@ -9,7 +9,10 @@ export const Route = createFileRoute("/auth")({
   head: () => ({
     meta: [
       { title: "Entrar — AppCinema" },
-      { name: "description", content: "Entre no AppCinema, a biblioteca de filmes e séries do casal." },
+      {
+        name: "description",
+        content: "Entre no AppCinema, a biblioteca de filmes e séries do casal.",
+      },
       { property: "og:title", content: "Entrar — AppCinema" },
       { property: "og:description", content: "A biblioteca privada de filmes e séries do casal." },
     ],
@@ -32,7 +35,9 @@ function AuthPage() {
 
   async function signIn() {
     setBusy(true);
-    const result = await lovable.auth.signInWithOAuth("google", { redirect_uri: window.location.origin + "/auth" });
+    const result = await lovable.auth.signInWithOAuth("google", {
+      redirect_uri: window.location.origin + "/auth",
+    });
     if (result.error) {
       toast.error("Não foi possível entrar com o Google.");
       setBusy(false);
@@ -45,7 +50,9 @@ function AuthPage() {
         <Popcorn className="h-7 w-7" strokeWidth={1.8} />
       </div>
       <h1 className="text-3xl font-semibold">AppCinema</h1>
-      <p className="mt-2 text-muted-foreground">Filmes e séries a dois: indicações, reações, notas e o que assistir hoje.</p>
+      <p className="mt-2 text-muted-foreground">
+        Filmes e séries a dois: indicações, reações, notas e o que assistir hoje.
+      </p>
       <button
         onClick={signIn}
         disabled={busy}
@@ -53,7 +60,9 @@ function AuthPage() {
       >
         {busy ? "Abrindo o Google…" : "Entrar com Google"}
       </button>
-      <p className="mt-4 text-center text-xs text-muted-foreground">Acesso privado: só quem foi convidado entra no espaço do casal.</p>
+      <p className="mt-4 text-center text-xs text-muted-foreground">
+        Acesso privado: só quem foi convidado entra no espaço do casal.
+      </p>
     </main>
   );
 }
