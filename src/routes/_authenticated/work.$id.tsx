@@ -315,7 +315,7 @@ function Comparison({
         <button
           disabled={!own}
           onClick={() => setEditing("reaction")}
-          className="text-2xl"
+          className="pressable -ml-2 flex min-h-11 min-w-11 items-center justify-center text-2xl"
           aria-label="Reação"
         >
           {r ? REACTION_EMOJI[r] : "—"}
@@ -323,7 +323,7 @@ function Comparison({
         <button
           disabled={!own}
           onClick={() => setEditing("score")}
-          className="text-lg font-semibold"
+          className="pressable -mr-2 flex min-h-11 min-w-11 items-center justify-center text-lg font-semibold"
           aria-label="Nota"
         >
           {s !== undefined ? (
@@ -421,7 +421,7 @@ function PriorWatch({
     <div className="flex items-center justify-between text-sm">
       <button
         onClick={toggle}
-        className={`inline-flex items-center gap-1.5 rounded-full border px-3 py-1.5 text-xs ${mine ? "border-primary text-primary" : "border-border text-muted-foreground"}`}
+        className={`hit pressable inline-flex items-center gap-1.5 rounded-full border px-3 py-1.5 text-xs ${mine ? "border-primary text-primary" : "border-border text-muted-foreground"}`}
       >
         {mine && <Check className="h-3.5 w-3.5" />} Eu já assisti antes
       </button>

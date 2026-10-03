@@ -105,7 +105,7 @@ function SettingsPage() {
               />
               <button
                 onClick={invite}
-                className="rounded-xl bg-primary px-4 text-sm font-semibold text-primary-foreground"
+                className="pressable min-h-11 rounded-xl bg-primary px-4 text-sm font-semibold text-primary-foreground"
               >
                 Convidar
               </button>

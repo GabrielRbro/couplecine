@@ -72,9 +72,11 @@ function MatchPage() {
     queryKey: ["match-me", sid],
     enabled: !!sid && hasResumed,
     refetchInterval: 5000,
-    queryFn: async () => {
+    queryFn: async ({ signal }) => {
       if (!sid) throw new Error("Sessão indisponível.");
-      const { data: limit, error } = await supabase.rpc("match_join", { _session: sid });
+      const { data: limit, error } = await supabase
+        .rpc("match_join", { _session: sid })
+        .abortSignal(signal);
       if (error) throw error;
       const [{ data: votes }, { data: part }, { data: partnerWants }] = await Promise.all([
         supabase
@@ -190,6 +192,12 @@ function MatchPage() {
       if (!sid) throw new Error("Sessão indisponível.");
       const { error } = await supabase.rpc("match_abandon", { _session: sid });
       if (error) throw error;
+    },
+    onMutate: async () => {
+      // Stop polling/joining before the session stops being open.
+      setResumedSessionId(null);
+      await qc.cancelQueries({ queryKey: ["match-me", sid] });
+      qc.removeQueries({ queryKey: ["match-me", sid] });
     },
     onSuccess: () => {
       setConfirmingAbandon(false);
