@@ -610,7 +610,7 @@ function SeriesBlock({
               </button>
             ))}
           </div>
-          <div className="no-scrollbar -mx-4 mt-3 flex gap-3 overflow-x-auto px-4">
+          <div className="no-scrollbar -mx-4 mt-2 flex gap-3 overflow-x-auto px-4 py-1.5">
             {eps.isLoading &&
               Array.from({ length: 3 }, (_, i) => (
                 <div key={i} className="w-52 shrink-0">
