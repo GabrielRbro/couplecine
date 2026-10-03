@@ -1,4 +1,4 @@
-import { useEffect, useState, type ReactNode } from "react";
+import { useEffect, useRef, useState, type ReactNode } from "react";
 import { createPortal } from "react-dom";
 
 const EXIT_MS = 200;
@@ -22,6 +22,8 @@ export function AnimatedSheet({
 }) {
   const [mounted, setMounted] = useState(open);
   const [visible, setVisible] = useState(false);
+  const renderedChildren = useRef(children);
+  if (open) renderedChildren.current = children;
 
   useEffect(() => {
     if (open) {
@@ -57,7 +59,7 @@ export function AnimatedSheet({
         className={`mx-auto w-full max-w-md rounded-t-3xl border border-border bg-card p-5 transition-transform duration-200 ease-[cubic-bezier(0.22,1,0.36,1)] motion-reduce:transition-none ${visible ? "translate-y-0" : "translate-y-full"} ${panelClassName}`}
         onClick={(event) => event.stopPropagation()}
       >
-        {children}
+        {renderedChildren.current}
       </div>
     </div>,
     document.body,
