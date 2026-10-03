@@ -235,6 +235,76 @@ export const getDiscover = createServerFn({ method: "POST" })
     }
   });
 
+export const getDismissedDiscover = createServerFn({ method: "POST" })
+  .middleware([requireSupabaseAuth])
+  .inputValidator((d) => z.object({ spaceId: z.string().uuid() }).parse(d))
+  .handler(async ({ data, context }) => {
+    const { supabase, userId } = context;
+    const [{ data: dismissed, error }, { data: localWorks }] = await Promise.all([
+      supabase
+        .from("discover_dismissals")
+        .select("media_type, tmdb_id, created_at")
+        .eq("user_id", userId)
+        .order("created_at", { ascending: false }),
+      supabase
+        .from("works")
+        .select(
+          "id, media_type, tmdb_id, title, original_title, poster_path, backdrop_path, release_year, overview",
+        )
+        .eq("space_id", data.spaceId),
+    ]);
+    if (error) throw new Error("Não foi possível carregar os dispensados.");
+
+    const key = (mediaType: string, tmdbId: number) => `${mediaType}:${tmdbId}`;
+    const local = new Map((localWorks ?? []).map((work) => [key(work.media_type, work.tmdb_id), work]));
+
+    return Promise.all(
+      (dismissed ?? []).map(async (row) => {
+        const work = local.get(key(row.media_type, row.tmdb_id));
+        if (work) {
+          return {
+            mediaType: work.media_type,
+            tmdbId: work.tmdb_id,
+            title: work.title,
+            originalTitle: work.original_title,
+            posterPath: work.poster_path,
+            backdropPath: work.backdrop_path,
+            year: work.release_year,
+            overview: work.overview,
+            existingWorkId: work.id,
+          };
+        }
+
+        try {
+          const details = await fetchDetails(row.media_type, row.tmdb_id);
+          return {
+            mediaType: details.mediaType,
+            tmdbId: details.tmdbId,
+            title: details.title,
+            originalTitle: details.originalTitle,
+            posterPath: details.posterPath,
+            backdropPath: details.backdropPath,
+            year: details.year,
+            overview: details.overview,
+            existingWorkId: null,
+          };
+        } catch {
+          return {
+            mediaType: row.media_type,
+            tmdbId: row.tmdb_id,
+            title: row.media_type === "tv" ? "Série dispensada" : "Filme dispensado",
+            originalTitle: null,
+            posterPath: null,
+            backdropPath: null,
+            year: null,
+            overview: null,
+            existingWorkId: null,
+          };
+        }
+      }),
+    );
+  });
+
 export const markSeenBefore = createServerFn({ method: "POST" })
   .middleware([requireSupabaseAuth])
   .inputValidator((d) =>
