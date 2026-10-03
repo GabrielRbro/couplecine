@@ -145,17 +145,18 @@ function WorkPage() {
               {work.genres.join(", ")}
             </p>
           )}
-          <button
-            disabled
-            className="mt-2 inline-flex items-center gap-1.5 rounded-lg border border-border px-2.5 py-1 text-xs text-muted-foreground"
-            title="Envio para a TV não configurado"
-          >
-            <Tv className="h-3.5 w-3.5" /> TV · não configurado
-          </button>
         </div>
       </div>
 
       <div className="space-y-6 px-4 pt-6">
+        <button
+          disabled
+          aria-label="Assistir na TV, não configurado"
+          title="Envio para a TV não configurado"
+          className="flex min-h-12 w-full items-center justify-center gap-2 rounded-xl bg-primary px-4 text-sm font-semibold text-primary-foreground opacity-60"
+        >
+          <Tv className="h-5 w-5" /> Assistir na TV · não configurado
+        </button>
         <Comparison
           space={space}
           workId={id}
@@ -163,23 +164,37 @@ function WorkPage() {
           ratings={data.ratings}
           onChange={refresh}
         />
-        <PriorWatch space={space} workId={id} prior={data.prior} onChange={refresh} />
+        <section>
+          <h2 className="mb-3 font-semibold">Indicação e histórico</h2>
+          <div className="space-y-3">
+            <IndicationsBlock
+              space={space}
+              workId={id}
+              title={work.title}
+              indications={data.indications}
+              onChange={refresh}
+            />
+            <PriorWatch space={space} workId={id} prior={data.prior} onChange={refresh} />
+            {!isTv && (
+              <MovieWatched space={space} workId={id} sessions={data.sessions} onChange={refresh} />
+            )}
+          </div>
+        </section>
 
         {isTv ? (
-          <SeriesBlock
-            space={space}
-            workId={id}
-            state={data.state}
-            events={data.events}
-            seasons={m?.seasons ?? []}
-            overview={m?.overview ?? work.overview}
-            onChange={refresh}
-          />
-        ) : (
           <>
             <Synopsis text={m?.overview ?? work.overview} />
-            <MovieWatched space={space} workId={id} sessions={data.sessions} onChange={refresh} />
+            <SeriesBlock
+              space={space}
+              workId={id}
+              state={data.state}
+              events={data.events}
+              seasons={m?.seasons ?? []}
+              onChange={refresh}
+            />
           </>
+        ) : (
+          <Synopsis text={m?.overview ?? work.overview} />
         )}
 
         {m && (
@@ -208,13 +223,6 @@ function WorkPage() {
           </section>
         )}
         {meta.error && <p className="text-xs text-muted-foreground">{meta.error.message}</p>}
-        <IndicationsBlock
-          space={space}
-          workId={id}
-          title={work.title}
-          indications={data.indications}
-          onChange={refresh}
-        />
         <section>
           <h2 className="mb-2 font-semibold">Posts relacionados</h2>
           <p className="text-xs text-muted-foreground">
@@ -299,33 +307,31 @@ function Comparison({
     setEditing(null);
   }
 
-  const Col = ({
-    label,
-    r,
-    s,
-    own,
-  }: {
+  const InterestPerson = ({ label, r, own }: {
     label: string;
     r: Reaction | undefined;
-    s: number | undefined;
     own: boolean;
   }) => (
-    <div className="flex-1 rounded-xl bg-secondary p-3">
+    <div className="min-w-0 flex-1 text-center">
       <p className="text-xs text-muted-foreground">{label}</p>
-      <div className="mt-2 flex items-center justify-between">
-        <button
-          disabled={!own}
-          onClick={() => setEditing("reaction")}
-          className="pressable -ml-2 flex min-h-11 min-w-11 items-center justify-center text-2xl"
-          aria-label="Reação"
-        >
-          {r ? REACTION_EMOJI[r] : "—"}
-        </button>
+      <button
+        disabled={!own}
+        onClick={() => setEditing("reaction")}
+        className="pressable mt-1 inline-flex min-h-11 min-w-11 items-center justify-center text-2xl"
+        aria-label={`${label}: interesse`}
+      >
+        {r ? REACTION_EMOJI[r] : "—"}
+      </button>
+    </div>
+  );
+  const ScorePerson = ({ label, s, own }: { label: string; s: number | undefined; own: boolean }) => (
+    <div className="min-w-0 flex-1 text-center">
+      <p className="text-xs text-muted-foreground">{label}</p>
         <button
           disabled={!own}
           onClick={() => setEditing("score")}
-          className="pressable -mr-2 flex min-h-11 min-w-11 items-center justify-center text-lg font-semibold"
-          aria-label="Nota"
+        className="pressable mt-1 inline-flex min-h-11 min-w-11 items-center justify-center text-lg font-semibold"
+        aria-label={`${label}: avaliação`}
         >
           {s !== undefined ? (
             formatScore(Number(s))
@@ -335,28 +341,20 @@ function Comparison({
             "—"
           )}
         </button>
-      </div>
     </div>
   );
 
   return (
-    <section className="rounded-2xl border border-border bg-card p-3">
-      <div className="flex gap-2">
-        <Col label="Você" r={mine?.reaction} s={myScore?.score} own />
-        <Col
-          label={space.partner ? firstName(space.partner.display_name) : "Parceiro (convide)"}
-          r={theirs?.reaction}
-          s={theirScore?.score}
-          own={false}
-        />
+    <section className="space-y-3">
+      <div className="rounded-xl border border-border bg-card p-3">
+        <h2 className="text-sm font-semibold">Interesse</h2>
+        <div className="mt-2 flex divide-x divide-border">
+          <InterestPerson label="Eu" r={mine?.reaction} own />
+          <InterestPerson label={space.partner ? firstName(space.partner.display_name) : "Parceiro"} r={theirs?.reaction} own={false} />
+        </div>
       </div>
-      <p className="mt-2 text-center text-xs text-muted-foreground">
-        {avg !== null
-          ? `Média do casal: ${formatScore(avg)}`
-          : "A média aparece quando os dois avaliarem."}
-      </p>
       {editing === "reaction" && (
-        <div className="mt-3 grid grid-cols-4 gap-2">
+        <div className="grid grid-cols-4 gap-2">
           {ALL_REACTIONS.map((r) => (
             <button
               key={r}
@@ -368,8 +366,20 @@ function Comparison({
           ))}
         </div>
       )}
+      <div className="rounded-xl border border-border bg-card p-3">
+        <div className="flex items-center justify-between gap-3">
+          <h2 className="text-sm font-semibold">Avaliação</h2>
+          <p className="text-xs text-muted-foreground">
+            {avg !== null ? `Média ${formatScore(avg)}` : "Média após os dois avaliarem"}
+          </p>
+        </div>
+        <div className="mt-2 flex divide-x divide-border">
+          <ScorePerson label="Eu" s={myScore?.score} own />
+          <ScorePerson label={space.partner ? firstName(space.partner.display_name) : "Parceiro"} s={theirScore?.score} own={false} />
+        </div>
+      </div>
       {editing === "score" && (
-        <div className="mt-3">
+        <div>
           <div className="grid grid-cols-7 gap-1.5">
             {SCORES.map((s) => (
               <button
@@ -488,7 +498,6 @@ function SeriesBlock({
   state,
   events,
   seasons,
-  overview,
   onChange,
 }: {
   space: SpaceInfo;
@@ -496,7 +505,6 @@ function SeriesBlock({
   state: { id: string; status: string } | null;
   events: Ev[];
   seasons: { seasonNumber: number; name: string; episodeCount: number }[];
-  overview: string | null;
   onChange: () => void;
 }) {
   const seenInit = new Set(events.map((e) => `${e.season_number}:${e.episode_number}`));
@@ -566,10 +574,11 @@ function SeriesBlock({
   }
 
   return (
-    <>
-      <section className="rounded-2xl border border-border bg-card p-4">
+    <section>
+      <h2 className="mb-3 font-semibold">Temporadas</h2>
+      <div className="rounded-xl border border-border bg-card p-4">
         <div className="flex items-center justify-between">
-          <h2 className="font-semibold">Progresso do casal</h2>
+          <h3 className="text-sm font-semibold">Progresso do casal</h3>
           <select
             value={state?.status ?? ""}
             onChange={(e) => writeState(e.target.value)}
@@ -593,13 +602,10 @@ function SeriesBlock({
           {seen.size} de {total || "?"} episódios ·{" "}
           {next ? `Próximo: T${next.s} E${next.e}` : total ? "Tudo em dia" : ""}
         </p>
-      </section>
-
-      <Synopsis text={overview} />
+      </div>
 
       {seasons.length > 0 && (
-        <section>
-          <h2 className="mb-3 font-semibold">Temporadas</h2>
+        <div className="mt-4">
           <div className="no-scrollbar -mx-4 flex gap-2 overflow-x-auto px-4">
             {seasons.map((s) => (
               <button
@@ -625,11 +631,9 @@ function SeriesBlock({
               const isNext = next?.s === ep.seasonNumber && next?.e === ep.episodeNumber;
               const img = tmdbImage(ep.stillPath, "w300");
               return (
-                <button
+                <article
                   key={ep.episodeNumber}
-                  onClick={() => toggle(ep.seasonNumber, ep.episodeNumber)}
-                  aria-label={`${done ? "Desmarcar" : "Marcar"} T${ep.seasonNumber}E${ep.episodeNumber}`}
-                  className={`pressable w-52 shrink-0 rounded-xl text-left ${isNext ? "ring-2 ring-primary ring-offset-2 ring-offset-background" : ""}`}
+                  className={`w-52 shrink-0 rounded-xl ${isNext ? "ring-2 ring-primary ring-offset-2 ring-offset-background" : ""}`}
                 >
                   <div className="relative aspect-video overflow-hidden rounded-xl bg-muted">
                     {isNext && (
@@ -645,11 +649,15 @@ function SeriesBlock({
                         className={`h-full w-full object-cover ${done ? "opacity-50" : ""}`}
                       />
                     )}
-                    <span
-                      className={`absolute right-2 top-2 flex h-7 w-7 items-center justify-center rounded-full transition-colors duration-150 ${done ? "bg-primary text-primary-foreground" : "border border-foreground/40 bg-background/60"}`}
+                    <button
+                      type="button"
+                      onClick={() => toggle(ep.seasonNumber, ep.episodeNumber)}
+                      aria-label={`${done ? "Desmarcar" : "Marcar"} T${ep.seasonNumber}E${ep.episodeNumber} como assistido`}
+                      aria-pressed={done}
+                      className={`pressable absolute right-1 top-1 flex h-11 w-11 items-center justify-center rounded-full transition-colors duration-150 ${done ? "bg-primary text-primary-foreground" : "border border-foreground/40 bg-background/80"}`}
                     >
                       {done && <Check className="h-3.5 w-3.5" />}
-                    </span>
+                    </button>
                   </div>
                   <p className="mt-1.5 line-clamp-1 text-xs font-semibold">
                     T{ep.seasonNumber}E{ep.episodeNumber} · {ep.name}
@@ -665,13 +673,13 @@ function SeriesBlock({
                       .join(" · ")}
                     {done ? " · Assistido" : ""}
                   </p>
-                </button>
+                </article>
               );
             })}
           </div>
-        </section>
+        </div>
       )}
-    </>
+    </section>
   );
 }
 
@@ -743,8 +751,8 @@ function IndicationsBlock({
   }
 
   return (
-    <section className="rounded-2xl border border-border bg-card p-4">
-      <h2 className="font-semibold">Indicações</h2>
+    <div className="rounded-xl border border-border bg-card p-4">
+      <h3 className="text-sm font-semibold">Indicações</h3>
       {indications.length === 0 ? (
         <p className="mt-1 text-xs text-muted-foreground">Ninguém indicou ainda.</p>
       ) : (
@@ -801,6 +809,6 @@ function IndicationsBlock({
           </button>
         </div>
       </AnimatedSheet>
-    </section>
+    </div>
   );
 }
