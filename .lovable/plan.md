@@ -1,107 +1,104 @@
-# Auditoria do Cinema Guide e plano de correção
+# Plano de execução — alinhamento visual, motion e UX
 
-## Como o teste foi feito
-- Entrei com a sua conta e abri Início, Biblioteca, Adicionar, Galeria, Sortear, Match, Configurações, 2 séries e 2 filmes, em telas de 390x844 e 412x915 (Android maior), com toque ativado.
-- Erros de console e de rede: nenhum nas duas telas.
-- Layout shift (CLS): de 0 a 0,004 em todas as telas, ou seja, bom.
-- Não deu para testar: login e onboarding do zero (já existe espaço criado) e qualquer coisa que dependa da parceira (ainda não há segunda conta).
+## Lote 1 — Movimento contínuo e navegação estável
+**Classificação:** Polimento agora  
+**Maior ganho visual por menor custo.**
 
-## Pontos que você levantou
+- **Objetivo:** eliminar o efeito de “tela piscando”, estabilizar visualmente a barra inferior e unificar movimentos curtos e naturais.
+- **Arquivos/componentes prováveis:** `src/components/app/AppShell.tsx`, `src/components/app/ui.tsx`, `src/styles.css`, layout autenticado em `src/routes/_authenticated/route.tsx` e sheets locais já existentes.
+- **Mudanças exatas:**
+  - remover a entrada de rota baseada em `opacity: 0` e substituir por continuidade sem flash, usando movimento discreto apenas no conteúdo quando apropriado;
+  - manter a BottomNav numa camada persistente do layout autenticado, preservando exatamente dimensões e aparência atuais;
+  - corrigir o histórico artificial do menu radial: fechar por Voltar/Escape sem deixar uma entrada extra após navegar para Galeria, Sorteio ou Match;
+  - definir primitives reutilizáveis para entrada e saída de sheets, garantindo que o conteúdo permaneça montado até terminar a saída;
+  - manter feedback de toque em 150–200 ms e sheets em até 220 ms, com comportamento praticamente instantâneo em `prefers-reduced-motion`;
+  - preservar safe area, alvos de aproximadamente 44 px e espaço reservado para a barra inferior.
+- **Riscos:** mudança do local da BottomNav pode afetar gates de autenticação/onboarding ou empilhamento de sheets; interceptação incorreta do Voltar pode prender navegação.
+- **Testes de aceitação:** navegar repetidamente pelas telas em 390×844 e 412×915 sem flash preto; barra não desmonta nem desloca; radial abre/fecha com stagger discreto; Escape e Voltar fecham o radial; após escolher um destino, Voltar retorna à tela anterior real; sheets animam entrada e saída; reduced-motion elimina movimentos perceptíveis; sem conteúdo atrás da barra.
+- **Não mexer em:** dimensões/aparência aprovadas da barra, regras de acesso, consultas, banco, conteúdo das telas ou lógica de Match.
+- **Custo relativo:** **baixo**.
 
-| Ponto | Resultado |
-|---|---|
-| Ícone de livro na Biblioteca e de foto na Galeria | Confirmado. Biblioteca usa `Library` (livros na estante), Galeria usa `Images` (fotos). |
-| Match mostra votos do parceiro e matches antes do fim | Confirmado, na tela e no banco. |
-| Match com ordem fixa e fluxo simples | Confirmado: mesma ordem nos dois aparelhos, sem lotes, sem meta, sem desfazer. |
-| Início básico | Confirmado. Além disso, ficou só em "Carregando…" por mais de 3,5 s numa carga a frio. |
-| Temporadas abaixo da Sinopse e acima do Elenco | Ordem correta (Progresso, Sinopse, Temporadas, Elenco). Os cards de episódio não têm resumo nem marcação de "próximo". |
+## Lote 2 — Match como pilha cenográfica
+**Classificação:** Polimento agora
 
----
+- **Objetivo:** dar continuidade física aos votos e uma revelação final temática, sem revelar candidatos futuros, quantidade restante ou atividade do parceiro.
+- **Arquivos/componentes prováveis:** `src/routes/_authenticated/match.tsx`, componentes locais extraídos da própria tela e `src/styles.css`; funções atuais de Match apenas se um ajuste mínimo de resposta for indispensável.
+- **Mudanças exatas:**
+  - substituir transições `page-enter`/fade dos candidatos por uma pilha visual de profundidade constante;
+  - usar atrás do card somente camadas cenográficas neutras, nunca poster, título ou dados de candidatos reais;
+  - no ❤️, retirar o card atual para a direita com rotação leve; no 👎, retirar para a esquerda; revelar o próximo poster real somente após o término da saída;
+  - bloquear voto duplo durante a transição e preservar undo apenas do último voto próprio;
+  - remover “Ver mais opções” e fazer a extensão adaptativa ocorrer automaticamente, sem comunicar lote, restante ou fim próximo;
+  - redesenhar apenas a apresentação do resultado fechado: “Vocês deram Match em N obras”, lista dos matches e escolha manual ou sorteio uniforme entre eles;
+  - manter os estados de sessão em andamento, continuar, abandonar e consentimento final já existentes.
+- **Riscos:** prefetch ou estado React pode revelar o próximo item antes da hora; animação interrompida pode duplicar voto; sorteio final precisa operar somente sobre o resultado já autorizado e fechado.
+- **Testes de aceitação:** screenshots e gravação curta em ambos os viewports; DOM e rede não expõem próximo candidato, votos/progresso do parceiro ou matches parciais; pilha mantém profundidade visual constante até o fim; votos animam nos lados corretos; próximo card aparece somente depois; toque repetido não cria voto duplicado; undo, retomada, abandono e resultado fechado continuam funcionando; teste de consentimento duplo somente com duas contas reais.
+- **Não mexer em:** sigilo backend/RPC, votos temporários, interesses permanentes, shuffle estável individual, sessão persistente, estados `open`/`abandoned`/`closed`, limpeza ao abandonar ou último resultado concluído. Nenhum dado secreto deve ser enviado ao cliente.
+- **Custo relativo:** **alto**.
 
-## A) Críticos: regras e segurança
+## Lote 3 — Home com hierarquia de central rápida
+**Classificação:** Polimento agora
 
-1. **Match revela o ritmo do parceiro e os matches ao vivo**
-   - Evidência: a tela mostra "Parceiro · n/total" e a lista de Matches durante a votação. A função do banco `match_status` devolve a contagem de votos de cada pessoa e os matches a qualquer momento.
-   - Área: `match.tsx`, função `private.match_status`.
-   - Impacto: quebra o sigilo, que é a regra central do Match.
-   - Mudança: o banco só revela matches quando a sessão estiver encerrada pelos dois. Durante a votação, não devolve nem contagem nem lista. Tirar da tela qualquer contagem do parceiro.
+- **Objetivo:** retirar a aparência de dashboard sem transformar a Home em catálogo de streaming.
+- **Arquivos/componentes prováveis:** `src/routes/_authenticated/index.tsx`, componentes locais da Home, `src/components/app/ui.tsx` e estilos/tokens existentes.
+- **Mudanças exatas:**
+  - tornar as ações Continuar, Não avaliados, Último Match e Importações mais legíveis e semanticamente coerentes;
+  - garantir navegação/ação real para o que parece interativo; manter Importações explicitamente “em breve” ou “não configurado” e sem ação falsa;
+  - dar mais presença a Continuar assistindo, com progresso, próximo episódio e Assistir na TV honestamente indisponível quando não configurado;
+  - apresentar novidades contextuais e poucas sugestões, evitando dois carrosséis genéricos de posters;
+  - manter densidade mobile, sem banners gigantes, cards aninhados ou mudanças nas fontes de dados.
+- **Riscos:** aumentar demais os blocos e empurrar conteúdo útil para baixo; criar affordance para destino inexistente; sugestões parecerem uma segunda Biblioteca.
+- **Testes de aceitação:** em ambos os viewports, primeira tela mostra cabeçalho, ações e parte do próximo conteúdo; todos os elementos com aparência clicável respondem ou estão claramente desabilitados; progresso não causa layout shift; Último Match mostra somente resultado `closed`; ausência de dados produz estados compactos; sem carrossel duplicado ou estética genérica de streaming.
+- **Não mexer em:** regras de dados da Home, Match, Importações, tracker, TV, recomendações ou criação de novas features.
+- **Custo relativo:** **médio**.
 
-2. **Encerramento unilateral**
-   - Evidência: um único toque em "Encerrar" fecha a sessão para o casal.
-   - Impacto: viola a regra "revelar só quando os dois aceitarem encerrar".
-   - Mudança: guardar o aceite de cada pessoa. A sessão só fecha e revela quando os dois tiverem aceitado. Iniciar outra sessão exige continuar ou abandonar a atual. O resultado mais recente substitui o anterior.
+## Lote 4 — Detalhes de filme e série orientados por conteúdo
+**Classificação:** Polimento agora
 
-3. **Ordem fixa, sem lotes, sem desfazer**
-   - Evidência: a lista de candidatos é gravada uma vez e percorrida na mesma ordem nos dois aparelhos.
-   - Mudança:
-     - ordem embaralhada por aparelho, com semente estável;
-     - lote inicial de cerca de 15 obras, meta de cerca de 3 matches e continuação variável, com a lógica no banco;
-     - desfazer apenas o último voto;
-     - votos ❤️ hoje / 👎 não hoje, e o card mostra só os dados da obra.
+- **Objetivo:** reaproximar os detalhes dos mockups aprovados e tornar comparação, temporadas e ações menos sujeitas a erro.
+- **Arquivos/componentes prováveis:** `src/routes/_authenticated/work.$id.tsx`, componentes locais de detalhes, `src/components/app/MediaCard.tsx`, `src/components/app/ui.tsx` e `src/styles.css`.
+- **Mudanças exatas:**
+  - filme: preservar hero/poster e reorganizar a leitura para metadados, ação principal, Interesse, Avaliação, indicação/histórico, Sinopse, Elenco e posts/fontes;
+  - manter Assistir na TV com hierarquia de ação principal, mas desabilitado e identificado como não configurado até o POC;
+  - substituir mini-perfis genéricos por duas comparações semânticas: Interesse e Avaliação, sempre Eu à esquerda e parceiro à direita;
+  - aplicar no elenco diretor primeiro, separador visual `|`, personagem em destaque e ator abaixo;
+  - série: manter Sinopse → Temporadas/progresso → Elenco, concentrando progresso dentro de Temporadas e abrindo a temporada do próximo episódio;
+  - separar claramente o controle de “assistido” do restante do card do episódio, evitando que tocar no card inteiro altere estado;
+  - preservar detalhes completos dos episódios e estados compartilhados já existentes.
+- **Riscos:** telas longas podem perder contexto ou criar sobreposição com a barra; controles de episódio podem regredir em acessibilidade; reordenação pode afetar estados locais de temporada.
+- **Testes de aceitação:** validar um filme e uma série nos dois viewports; ordem das seções correta; Eu sempre à esquerda; média somente quando ambos avaliaram; botão de TV claramente principal e indisponível; tocar no card de episódio não marca como assistido, apenas o controle dedicado o faz; temporada correta abre; rolagem, sticky/sheets e barra sem clipping.
+- **Não mexer em:** integrações de TV/tracker, regras de avaliação e interesse, histórico, dados de episódios, backend ou schema.
+- **Custo relativo:** **médio**.
 
-4. **Lista de e-mails autorizados não é aplicada no primeiro acesso**
-   - Evidência: o onboarding deixa qualquer conta Google criar um espaço novo (regras do banco: qualquer pessoa conectada pode criar um espaço).
-   - Impacto: o app deixa de ser privado ao casal.
-   - Mudança: só podem criar espaço as contas de uma lista de dono configurada, ou quem tiver convite. Quem não está na lista vê a tela "acesso não autorizado".
+## Lote 5 — Superfícies de escolha: Biblioteca, Descobrir, Galeria e Sorteio
+**Classificação:** Polimento agora, com evoluções funcionais posteriores explicitamente separadas
 
-5. **Qualquer membro pode apagar obras e dados compartilhados**
-   - Evidência: as regras de obras, indicações, sessões e episódios permitem apagar a qualquer membro.
-   - Mudança: restringir a exclusão a quem criou o item. Indicações: cada um só remove a sua.
+- **Objetivo:** diferenciar descoberta e escolha sem redesenhar o produto, corrigindo inconsistências pequenas e falhas de UX que podem perder a ação do usuário.
+- **Arquivos/componentes prováveis:** `src/routes/_authenticated/library.tsx`, `src/components/app/DiscoverTab.tsx`, `src/routes/_authenticated/add.tsx`, `src/routes/_authenticated/watch.gallery.tsx`, `src/routes/_authenticated/watch.dice.tsx`, `src/lib/catalog.functions.ts` e `src/lib/tmdb.server.ts`.
+- **Mudanças exatas — polimento agora:**
+  - preservar grid de duas colunas e linguagem visual da Biblioteca;
+  - Descobrir: manter estado anterior até confirmação da ação; em falha de indicar ou marcar como assistido, restaurar o card e mostrar erro recuperável;
+  - Descobrir: criar uma área/estado pequeno e explícito de dispensados, para restaurar diretamente o item escolhido sem depender da recomposição aleatória do feed;
+  - Galeria: ajustar hierarquia, cabeçalho e seleção para comunicar “modo de escolha”, mantendo filtros básicos e os mesmos dados;
+  - Sorteio: corrigir os rótulos para refletirem exatamente “ainda não assistido juntos”, “nenhum dos dois viu”, “rever juntos” e “qualquer”, sem alterar a ponderação;
+  - Adicionar/busca: alinhar promessa e comportamento — aceitar resultado `person` para buscar obras por ator/diretor, mas continuar adicionando somente obras TMDB validadas; manter busca tradicional, sem IA.
+- **Mudanças exatas — feature posterior:**
+  - unificação completa da busca local + TMDB, com ranking único e busca aprofundada por elenco/direção;
+  - personalização de Descobrir mais individual que a influência atual do casal;
+  - filtros avançados da Galeria;
+  - vibe, energia e duração no Sorteio;
+  - hub completo de Importações: share Android, URL, screenshot, texto, revisão e pilha de posters.
+- **Riscos:** resultados por pessoa podem multiplicar chamadas e duplicar obras; rollback otimista precisa evitar reaparecimento duplicado; restaurar dispensados não pode alterar reação nem dados do parceiro; mudança de rótulo do Sorteio deve permanecer coerente com o predicado real.
+- **Testes de aceitação:** em ambos os viewports, grid estável e sem overflow; simular falha de indicar e “Já assisti” e confirmar retorno do card sem duplicação; dispensar/restaurar reaparece de forma previsível; busca por ator/diretor retorna obras deduplicadas e permite adicionar pela lógica existente; Galeria é distinguível da Biblioteca sem nova feature; cada filtro do Sorteio é validado contra exemplos reais; console/rede limpos; typecheck e build aprovados.
+- **Não mexer em:** IA, filtros avançados, algoritmo de personalização, novas fontes de dados, Home, Match, backend de segurança, Importações, tracker ou TV. Não criar migração neste lote salvo se uma correção comprovadamente exigir persistência inexistente; a preferência é reutilizar a tabela atual de dispensas.
+- **Custo relativo:** **alto**.
 
-6. **Indicar de novo apaga e recria a indicação**
-   - Evidência: `addWork` exclui a indicação antiga. Isso perde a data original de autoria e contraria "preservar autoria e data".
-   - Mudança: manter o histórico (nova linha de indicação, sem apagar) e ajustar a lógica de "voltou para Indicações".
+## Ordem e custo geral
 
-7. **Sorteio fora da regra**
-   - Evidência: não repete-evita recusados na rodada, não distingue "sem resposta" de 😐 (os dois valem 1) e não tem a opção "nenhum viu / rever / qualquer".
-   - Área: `watch.dice.tsx`.
-   - Mudança: aplicar os pesos e opções definidos e excluir os recusados na mesma rodada.
+1. Lote 1 — baixo — maior retorno visual por crédito.
+2. Lote 2 — alto — linguagem central do Match, com validação rigorosa de sigilo.
+3. Lote 3 — médio — corrige a primeira impressão e a hierarquia diária.
+4. Lote 4 — médio — melhora leitura e reduz ações acidentais.
+5. Lote 5 — alto — reúne superfícies relacionadas, mas deve ser executado mantendo a fronteira explícita entre polimento atual e features posteriores.
 
-## B) Polimento visual, animações e fluidez
-
-1. **Ícones:** Biblioteca com ícone cinematográfico (claquete ou rolo de filme) e Galeria com film strip, em `AppShell.tsx`.
-2. **Menu radial:** a posição está ok, mas falta animação escalonada (stagger), giro pipoca → X, resposta ao toque (escala) e fechamento com Esc ou voltar. Respeitar prefers-reduced-motion, que hoje não é tratado em lugar nenhum.
-3. **Carregamento:** Início e demais telas mostram "Carregando…" em texto puro.
-   - Trocar por skeletons de cards e pôsteres, sem salto de layout.
-   - Acelerar a primeira carga: as consultas de espaço e de biblioteca rodam em sequência; dá para paralelizar e guardar cache.
-4. **Transições de rota:** não existem. Adicionar fade e slide curto (150–200 ms) entre telas e na abertura dos detalhes.
-5. **Sheets:** a escolha de reação em Adicionar e os editores de nota e reação abrem e fecham secos. Animar a subida e a descida da sheet e o fundo, e permitir arrastar para fechar.
-6. **Feedback de toque:** botões e cards não reagem ao toque. Adicionar estado pressionado (leve escala ou opacidade) em cards, pílulas e botões.
-7. **Alvos de toque abaixo de 40 px:**
-   - "Voltar" (20x20) em Adicionar e Configurações;
-   - "Buscar" (45x20);
-   - pílulas Todos/Filmes/Séries (cerca de 30 px de altura) em Biblioteca, Galeria e Sortear;
-   - abas da Biblioteca (36 px).
-   - Mudança: área mínima de 44 px.
-8. **Sobreposição no fim das telas:** o conteúdo do fim da página aparece por trás da barra inferior (visto no detalhe da série). Revisar o espaço inferior conforme a safe area e a altura real da barra.
-9. **Duplicações:** o estilo de pílula está copiado em 3 telas e o cabeçalho com Voltar em 2. Extrair `FilterPills` e `PageHeader` para uniformizar.
-10. **Início:** cards rápidos "Último Match" e "Importações" mostram "—" fixo. Ligar "Último Match" ao resultado revelado. Em "Continuar assistindo", adicionar barra de progresso, "Próximo TnEm" e o botão "Assistir na TV" (não configurado).
-
-## C) Funcionalidades ainda incompletas (sem inventar além das regras)
-
-1. **Detalhe de série:**
-   - cards de episódio com resumo curto e destaque "próximo";
-   - na barra de temporadas, abrir direto na temporada do próximo episódio.
-2. **Detalhe:** mostrar autoria e data da indicação, com o histórico de quem indicou.
-3. **Galeria:** filtros avançados (duração, ano, quem indicou, reações, histórico, notas).
-4. **Descobrir:** feed individual com ➕ (🔥/👍/😐), ✓ Já assisti e ✕ dispensar, este último só no feed de quem dispensou.
-5. **Importações:** sessões persistentes, pilha de pôsteres e validação no TMDB. Fica para uma etapa própria, depois dos blocos A e B.
-6. **Busca:** a da Biblioteca procura só por título. Incluir título original, atores e diretores.
-7. **TV e tracker:** seguem como "não configurado", conforme as regras.
-
-## Ordem de execução sugerida
-1. Bloco A, itens 1 a 3 (Match seguro), com as mudanças no banco e na tela.
-2. Bloco A, itens 4 a 7.
-3. Bloco B inteiro.
-4. Bloco C, itens 1 a 3 e 6; depois Descobrir; depois Importações.
-
-## Detalhes técnicos
-- Match:
-  - novas colunas ou tabela de aceite de encerramento por usuário (`match_close_acks`);
-  - `match_status` passa a devolver só o estado da própria pessoa até o fechamento conjunto, e os matches só com `status='closed'`;
-  - RPCs com SECURITY DEFINER no schema `private`: `match_next_batch` (lote adaptativo), `match_undo_last`, `match_close_ack`;
-  - embaralhamento na tela com semente `hash(session_id + user_id)`.
-- Allowlist: tabela `owner_allowlist` e trocar a policy `spaces_create` para exigir e-mail na lista; trigger ou policy em `space_members`.
-- DELETE: policies separadas por tabela, exigindo `created_by = auth.uid()` ou `indicated_by = auth.uid()`.
-- Animações: utilitários CSS em `styles.css` com `@media (prefers-reduced-motion)`; sheet reutilizável (vaul ou Drawer do shadcn).
-- Todas as migrações são aditivas, sem apagar dados.
+**Custo relativo total da rodada de polimento:** alto, porém parcelável; cada lote pode ser executado, validado e encerrado independentemente.
