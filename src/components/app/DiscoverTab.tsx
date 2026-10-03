@@ -1,4 +1,5 @@
 import { useState } from "react";
+import { createPortal } from "react-dom";
 import { useInfiniteQuery, useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { useServerFn } from "@tanstack/react-start";
 import { Check, Film, Plus, RotateCcw, Tv, X } from "lucide-react";
@@ -138,7 +139,11 @@ export function DiscoverTab({ space, kind }: { space: SpaceInfo; kind: "all" | "
               <div className="relative">
                 <Poster path={i.posterPath} title={i.title} />
                 <span className="absolute left-2 top-2 rounded-md bg-background/80 p-1 text-muted-foreground">
-                  {i.mediaType === "tv" ? <Tv className="h-3.5 w-3.5" /> : <Film className="h-3.5 w-3.5" />}
+                  {i.mediaType === "tv" ? (
+                    <Tv className="h-3.5 w-3.5" />
+                  ) : (
+                    <Film className="h-3.5 w-3.5" />
+                  )}
                 </span>
               </div>
               <p className="mt-2 line-clamp-1 text-sm font-semibold">{i.title}</p>
@@ -193,66 +198,73 @@ export function DiscoverTab({ space, kind }: { space: SpaceInfo; kind: "all" | "
         </button>
       )}
 
-      {sheet && (
-        <div
-          className="fade-enter fixed inset-0 z-[60] flex items-end bg-background/80"
-          onClick={() => setSheet(null)}
-        >
+      {sheet &&
+        createPortal(
           <div
-            role="dialog"
-            aria-modal="true"
-            aria-labelledby="discover-sheet-title"
-            className="sheet-enter mx-auto w-full max-w-md rounded-t-3xl border border-border bg-card p-5 pb-[max(env(safe-area-inset-bottom),24px)]"
-            onClick={(e) => e.stopPropagation()}
+            className="fade-enter fixed inset-0 z-[60] flex items-end bg-background/80"
+            onClick={() => setSheet(null)}
           >
-            <h2 id="discover-sheet-title" className="line-clamp-1 text-lg font-semibold">
-              {sheet.item.title}
-            </h2>
-            {sheet.mode === "react" ? (
-              <>
-                <p className="mt-1 text-sm text-muted-foreground">Qual é o seu interesse?</p>
-                <div className="mt-4 grid grid-cols-3 gap-2">
-                  {ADD_REACTIONS.map((r) => (
-                    <button
-                      key={r}
-                      onClick={() =>
-                        indicate.mutate({ i: sheet.item, reaction: r as "fire" | "like" | "neutral" })
-                      }
-                      className="pressable flex min-h-16 flex-col items-center justify-center rounded-xl border border-border"
-                    >
-                      <span className="text-2xl">{REACTION_EMOJI[r]}</span>
-                      <span className="text-[11px] text-muted-foreground">{REACTION_LABEL[r]}</span>
-                    </button>
-                  ))}
-                </div>
-              </>
-            ) : (
-              <>
-                <p className="mt-1 text-sm text-muted-foreground">
-                  Já assistiu antes? Dê uma nota, se quiser.
-                </p>
-                <div className="mt-4 grid grid-cols-7 gap-1.5">
-                  {SCORES.map((s) => (
-                    <button
-                      key={s}
-                      onClick={() => markSeen.mutate({ i: sheet.item, score: s })}
-                      className="pressable min-h-11 rounded-lg border border-border text-xs"
-                    >
-                      {formatScore(s)}
-                    </button>
-                  ))}
-                </div>
-                <button
-                  onClick={() => markSeen.mutate({ i: sheet.item, score: null })}
-                  className="pressable mt-3 min-h-11 w-full rounded-xl bg-secondary text-sm font-medium"
-                >
-                  Salvar sem nota
-                </button>
-              </>
-            )}
-          </div>
-        </div>
-      )}
+            <div
+              role="dialog"
+              aria-modal="true"
+              aria-labelledby="discover-sheet-title"
+              className="sheet-enter mx-auto w-full max-w-md rounded-t-3xl border border-border bg-card p-5 pb-[max(env(safe-area-inset-bottom),24px)]"
+              onClick={(e) => e.stopPropagation()}
+            >
+              <h2 id="discover-sheet-title" className="line-clamp-1 text-lg font-semibold">
+                {sheet.item.title}
+              </h2>
+              {sheet.mode === "react" ? (
+                <>
+                  <p className="mt-1 text-sm text-muted-foreground">Qual é o seu interesse?</p>
+                  <div className="mt-4 grid grid-cols-3 gap-2">
+                    {ADD_REACTIONS.map((r) => (
+                      <button
+                        key={r}
+                        onClick={() =>
+                          indicate.mutate({
+                            i: sheet.item,
+                            reaction: r as "fire" | "like" | "neutral",
+                          })
+                        }
+                        className="pressable flex min-h-16 flex-col items-center justify-center rounded-xl border border-border"
+                      >
+                        <span className="text-2xl">{REACTION_EMOJI[r]}</span>
+                        <span className="text-[11px] text-muted-foreground">
+                          {REACTION_LABEL[r]}
+                        </span>
+                      </button>
+                    ))}
+                  </div>
+                </>
+              ) : (
+                <>
+                  <p className="mt-1 text-sm text-muted-foreground">
+                    Já assistiu antes? Dê uma nota, se quiser.
+                  </p>
+                  <div className="mt-4 grid grid-cols-7 gap-1.5">
+                    {SCORES.map((s) => (
+                      <button
+                        key={s}
+                        onClick={() => markSeen.mutate({ i: sheet.item, score: s })}
+                        className="pressable min-h-11 rounded-lg border border-border text-xs"
+                      >
+                        {formatScore(s)}
+                      </button>
+                    ))}
+                  </div>
+                  <button
+                    onClick={() => markSeen.mutate({ i: sheet.item, score: null })}
+                    className="pressable mt-3 min-h-11 w-full rounded-xl bg-secondary text-sm font-medium"
+                  >
+                    Salvar sem nota
+                  </button>
+                </>
+              )}
+            </div>
+          </div>,
+          document.body,
+        )}
     </div>
   );
 }
