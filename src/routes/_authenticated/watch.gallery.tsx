@@ -4,7 +4,7 @@ import { Film, Tv } from "lucide-react";
 import { AppShell } from "@/components/app/AppShell";
 import { FilterPills, TogglePill } from "@/components/app/ui";
 import { EmptyState, Poster } from "@/components/app/MediaCard";
-import { REACTION_EMOJI, tmdbImage } from "@/lib/format";
+import { REACTION_EMOJI } from "@/lib/format";
 import { firstName, isIndicated, type LibraryWork, type SpaceInfo, useLibrary, useSpace } from "@/lib/space";
 
 export const Route = createFileRoute("/_authenticated/watch/gallery")({
