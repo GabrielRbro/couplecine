@@ -3,6 +3,7 @@ import { useMemo, useState } from "react";
 import { Plus, Search } from "lucide-react";
 import { AppShell } from "@/components/app/AppShell";
 import { EmptyState, MediaCard } from "@/components/app/MediaCard";
+import { DiscoverTab } from "@/components/app/DiscoverTab";
 import { FilterPills, PosterGridSkeleton } from "@/components/app/ui";
 import { isIndicated, isWatched, useLibrary, useSpace } from "@/lib/space";
 
@@ -92,12 +93,22 @@ function LibraryPage() {
         ))}
       </div>
       {tab === "disc" ? (
-        <div className="mt-6">
-          <EmptyState
-            title="Descobrir chega em breve"
-            text="Sugestões personalizadas com base nas reações de vocês."
-          />
-        </div>
+        <>
+          <div className="mt-4">
+            <FilterPills
+              options={
+                [
+                  ["all", "Todos"],
+                  ["movie", "Filmes"],
+                  ["tv", "Séries"],
+                ] as const
+              }
+              value={kind}
+              onChange={setKind}
+            />
+          </div>
+          <DiscoverTab space={space} kind={kind} />
+        </>
       ) : (
         <>
           <div className="mt-4 flex items-center gap-2">
