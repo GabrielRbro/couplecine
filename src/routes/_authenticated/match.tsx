@@ -10,7 +10,12 @@ import { supabase } from "@/integrations/supabase/client";
 import { firstName, isIndicated, useLibrary, useSpace } from "@/lib/space";
 
 export const Route = createFileRoute("/_authenticated/match")({
-  head: () => ({ meta: [{ title: "Match — AppCinema" }, { name: "description", content: "Votem em segredo e descubram o que os dois querem ver." }] }),
+  head: () => ({
+    meta: [
+      { title: "Match — AppCinema" },
+      { name: "description", content: "Votem em segredo e descubram o que os dois querem ver." },
+    ],
+  }),
   component: () => (
     <AppShell>
       <MatchPage />
@@ -47,7 +52,12 @@ function MatchPage() {
     queryKey: ["match-open", spaceId],
     enabled: !!spaceId,
     queryFn: async () => {
-      const { data } = await supabase.from("match_sessions").select("id, work_ids, created_at").eq("space_id", spaceId!).eq("status", "open").maybeSingle();
+      const { data } = await supabase
+        .from("match_sessions")
+        .select("id, work_ids, created_at")
+        .eq("space_id", spaceId!)
+        .eq("status", "open")
+        .maybeSingle();
       return data;
     },
   });
@@ -62,11 +72,25 @@ function MatchPage() {
       const { data: limit, error } = await supabase.rpc("match_join", { _session: sid! });
       if (error) throw error;
       const [{ data: votes }, { data: part }, { data: partnerWants }] = await Promise.all([
-        supabase.from("match_votes").select("work_id, created_at").eq("session_id", sid!).order("created_at"),
-        supabase.from("match_participants").select("close_requested").eq("session_id", sid!).maybeSingle(),
+        supabase
+          .from("match_votes")
+          .select("work_id, created_at")
+          .eq("session_id", sid!)
+          .order("created_at"),
+        supabase
+          .from("match_participants")
+          .select("close_requested")
+          .eq("session_id", sid!)
+          .maybeSingle(),
         supabase.rpc("match_partner_wants_close", { _session: sid! }),
       ]);
-      return { limit: limit ?? 0, voted: new Set((votes ?? []).map((v) => v.work_id)), lastVote: votes?.at(-1)?.work_id ?? null, iWant: !!part?.close_requested, partnerWants: !!partnerWants };
+      return {
+        limit: limit ?? 0,
+        voted: new Set((votes ?? []).map((v) => v.work_id)),
+        lastVote: votes?.at(-1)?.work_id ?? null,
+        iWant: !!part?.close_requested,
+        partnerWants: !!partnerWants,
+      };
     },
   });
 
@@ -74,7 +98,14 @@ function MatchPage() {
     queryKey: ["last-match", spaceId],
     enabled: !!spaceId,
     queryFn: async () => {
-      const { data } = await supabase.from("match_sessions").select("id, result_work_ids, closed_at").eq("space_id", spaceId!).eq("status", "closed").order("closed_at", { ascending: false }).limit(1).maybeSingle();
+      const { data } = await supabase
+        .from("match_sessions")
+        .select("id, result_work_ids, closed_at")
+        .eq("space_id", spaceId!)
+        .eq("status", "closed")
+        .order("closed_at", { ascending: false })
+        .limit(1)
+        .maybeSingle();
       return data;
     },
   });
@@ -89,7 +120,9 @@ function MatchPage() {
     mutationFn: async () => {
       const ids = works.filter(isIndicated).map((w) => w.id);
       if (ids.length < 2) throw new Error("Adicione pelo menos 2 indicações antes de começar.");
-      const { error } = await supabase.from("match_sessions").insert({ space_id: spaceId!, created_by: space!.userId, work_ids: ids });
+      const { error } = await supabase
+        .from("match_sessions")
+        .insert({ space_id: spaceId!, created_by: space!.userId, work_ids: ids });
       if (error) throw new Error("Já existe um Match em andamento.");
     },
     onSuccess: invalidate,
@@ -97,12 +130,18 @@ function MatchPage() {
   });
   const vote = useMutation({
     mutationFn: async ({ workId, liked }: { workId: string; liked: boolean }) => {
-      const { error } = await supabase.from("match_votes").insert({ session_id: sid!, user_id: space!.userId, work_id: workId, liked });
+      const { error } = await supabase
+        .from("match_votes")
+        .insert({ session_id: sid!, user_id: space!.userId, work_id: workId, liked });
       if (error) throw error;
     },
     onMutate: ({ workId }) => {
       // Optimistic: advance the deck immediately.
-      qc.setQueryData(["match-me", sid], (old: typeof me.data) => old && { ...old, voted: new Set(old.voted).add(workId), lastVote: workId });
+      qc.setQueryData(
+        ["match-me", sid],
+        (old: typeof me.data) =>
+          old && { ...old, voted: new Set(old.voted).add(workId), lastVote: workId },
+      );
     },
     onSettled: () => qc.invalidateQueries({ queryKey: ["match-me", sid] }),
     onError: () => toast.error("Não foi possível salvar o voto."),
@@ -123,7 +162,10 @@ function MatchPage() {
   });
   const requestClose = useMutation({
     mutationFn: async (want: boolean) => {
-      const { data, error } = await supabase.rpc("match_request_close", { _session: sid!, _want: want });
+      const { data, error } = await supabase.rpc("match_request_close", {
+        _session: sid!,
+        _want: want,
+      });
       if (error) throw error;
       return data;
     },
@@ -137,12 +179,21 @@ function MatchPage() {
       const { error } = await supabase.rpc("match_abandon", { _session: sid! });
       if (error) throw error;
     },
-    onSuccess: () => { toast("Match abandonado. Nada foi revelado."); invalidate(); },
+    onSuccess: () => {
+      toast("Match abandonado. Nada foi revelado.");
+      invalidate();
+    },
   });
 
   const byId = useMemo(() => new Map(works.map((w) => [w.id, w])), [works]);
   const deck = useMemo(
-    () => (open.data && space ? seededShuffle(open.data.work_ids.filter((id) => byId.has(id)), `${open.data.id}:${space.userId}`) : []),
+    () =>
+      open.data && space
+        ? seededShuffle(
+            open.data.work_ids.filter((id) => byId.has(id)),
+            `${open.data.id}:${space.userId}`,
+          )
+        : [],
     [open.data, space, byId],
   );
 
@@ -151,7 +202,9 @@ function MatchPage() {
   const header = (
     <>
       <h1 className="text-2xl font-semibold">Match</h1>
-      <p className="mt-1 text-sm text-muted-foreground">Cada um vota em segredo. O resultado só aparece quando os dois encerrarem.</p>
+      <p className="mt-1 text-sm text-muted-foreground">
+        Cada um vota em segredo. O resultado só aparece quando os dois encerrarem.
+      </p>
     </>
   );
 
@@ -186,10 +239,16 @@ function MatchPage() {
     return (
       <div className="px-4 pt-6">
         {header}
-        <button disabled={start.isPending} onClick={() => start.mutate()} className="pressable mt-6 flex min-h-14 w-full items-center justify-center gap-2 rounded-2xl bg-primary font-semibold text-primary-foreground disabled:opacity-50">
+        <button
+          disabled={start.isPending}
+          onClick={() => start.mutate()}
+          className="pressable mt-6 flex min-h-14 w-full items-center justify-center gap-2 rounded-2xl bg-primary font-semibold text-primary-foreground disabled:opacity-50"
+        >
           <Heart className="h-5 w-5" /> Começar Match
         </button>
-        <p className="mt-2 text-center text-xs text-muted-foreground">Usa as indicações ainda não assistidas.</p>
+        <p className="mt-2 text-center text-xs text-muted-foreground">
+          Usa as indicações ainda não assistidas.
+        </p>
         {lastResult}
       </div>
     );
@@ -205,44 +264,99 @@ function MatchPage() {
     <div className="px-4 pt-6">
       {header}
       {m.partnerWants && !m.iWant && (
-        <p className="fade-enter mt-4 rounded-xl border border-border bg-card p-3 text-sm">{partnerName} quer encerrar. Encerre também para ver o resultado.</p>
+        <p className="fade-enter mt-4 rounded-xl border border-border bg-card p-3 text-sm">
+          {partnerName} quer encerrar. Encerre também para ver o resultado.
+        </p>
       )}
 
       {current ? (
         <div key={current.id} className="page-enter mt-5">
-          <div className="mx-auto w-52"><Poster path={current.poster_path} title={current.title} /></div>
+          <div className="mx-auto w-52">
+            <Poster path={current.poster_path} title={current.title} />
+          </div>
           <p className="mt-3 text-center font-semibold">{current.title}</p>
           <p className="text-center text-xs text-muted-foreground">
-            {[current.media_type === "tv" ? "Série" : "Filme", current.release_year, current.genres.slice(0, 2).join(", ")].filter(Boolean).join(" · ")}
+            {[
+              current.media_type === "tv" ? "Série" : "Filme",
+              current.release_year,
+              current.genres.slice(0, 2).join(", "),
+            ]
+              .filter(Boolean)
+              .join(" · ")}
           </p>
           <div className="mt-5 flex items-center justify-center gap-6">
-            <button aria-label="Não hoje" disabled={vote.isPending} onClick={() => vote.mutate({ workId: current.id, liked: false })} className="pressable flex h-16 w-16 flex-col items-center justify-center rounded-full border border-border bg-card disabled:opacity-50">
+            <button
+              aria-label="Não hoje"
+              disabled={vote.isPending}
+              onClick={() => vote.mutate({ workId: current.id, liked: false })}
+              className="pressable flex h-16 w-16 flex-col items-center justify-center rounded-full border border-border bg-card disabled:opacity-50"
+            >
               <X className="h-6 w-6" />
             </button>
-            <button aria-label="Quero ver hoje" disabled={vote.isPending} onClick={() => vote.mutate({ workId: current.id, liked: true })} className="pressable flex h-16 w-16 items-center justify-center rounded-full bg-primary text-primary-foreground disabled:opacity-50">
+            <button
+              aria-label="Quero ver hoje"
+              disabled={vote.isPending}
+              onClick={() => vote.mutate({ workId: current.id, liked: true })}
+              className="pressable flex h-16 w-16 items-center justify-center rounded-full bg-primary text-primary-foreground disabled:opacity-50"
+            >
               <Heart className="h-6 w-6" />
             </button>
           </div>
-          <div className="mt-2 flex justify-center gap-10 text-[11px] text-muted-foreground"><span>👎 não hoje</span><span>❤️ hoje</span></div>
+          <div className="mt-2 flex justify-center gap-10 text-[11px] text-muted-foreground">
+            <span>👎 não hoje</span>
+            <span>❤️ hoje</span>
+          </div>
         </div>
       ) : canExtend ? (
         <div className="mt-6 text-center">
-          <button onClick={() => extend.mutate()} disabled={extend.isPending} className="pressable min-h-12 rounded-2xl bg-primary px-6 font-semibold text-primary-foreground">Ver mais opções</button>
+          <button
+            onClick={() => extend.mutate()}
+            disabled={extend.isPending}
+            className="pressable min-h-12 rounded-2xl bg-primary px-6 font-semibold text-primary-foreground"
+          >
+            Ver mais opções
+          </button>
         </div>
       ) : (
-        <div className="mt-5"><EmptyState title="Você votou em tudo por agora" text={space.partner ? "Quando quiser, peça para encerrar. O resultado aparece quando os dois encerrarem." : "Convide seu parceiro em Configurações para dar match."} /></div>
+        <div className="mt-5">
+          <EmptyState
+            title="Você votou em tudo por agora"
+            text={
+              space.partner
+                ? "Quando quiser, peça para encerrar. O resultado aparece quando os dois encerrarem."
+                : "Convide seu parceiro em Configurações para dar match."
+            }
+          />
+        </div>
       )}
 
       <div className="mt-6 grid grid-cols-2 gap-2">
-        <button onClick={() => undo.mutate()} disabled={!m.lastVote || undo.isPending} className="pressable flex min-h-11 items-center justify-center gap-1.5 rounded-xl border border-border text-sm disabled:opacity-40">
+        <button
+          onClick={() => undo.mutate()}
+          disabled={!m.lastVote || undo.isPending}
+          className="pressable flex min-h-11 items-center justify-center gap-1.5 rounded-xl border border-border text-sm disabled:opacity-40"
+        >
           <Undo2 className="h-4 w-4" /> Desfazer último
         </button>
-        <button onClick={() => requestClose.mutate(!m.iWant)} disabled={requestClose.isPending} className={`pressable min-h-11 rounded-xl text-sm ${m.iWant ? "border border-primary text-primary" : "bg-secondary"}`}>
+        <button
+          onClick={() => requestClose.mutate(!m.iWant)}
+          disabled={requestClose.isPending}
+          className={`pressable min-h-11 rounded-xl text-sm ${m.iWant ? "border border-primary text-primary" : "bg-secondary"}`}
+        >
           {m.iWant ? "Aguardando o outro…" : "Encerrar"}
         </button>
       </div>
-      {deckDone && !canExtend && !m.iWant && <p className="mt-2 text-center text-xs text-muted-foreground">Encerrar é necessário dos dois lados.</p>}
-      <button onClick={() => confirm("Abandonar este Match? Os votos não serão revelados.") && abandon.mutate()} className="pressable mt-6 min-h-11 w-full rounded-xl text-sm text-muted-foreground">
+      {deckDone && !canExtend && !m.iWant && (
+        <p className="mt-2 text-center text-xs text-muted-foreground">
+          Encerrar é necessário dos dois lados.
+        </p>
+      )}
+      <button
+        onClick={() =>
+          confirm("Abandonar este Match? Os votos não serão revelados.") && abandon.mutate()
+        }
+        className="pressable mt-6 min-h-11 w-full rounded-xl text-sm text-muted-foreground"
+      >
         Abandonar este Match
       </button>
       {lastResult}

@@ -9,11 +9,25 @@ import { AppShell } from "@/components/app/AppShell";
 import { Poster } from "@/components/app/MediaCard";
 import { supabase } from "@/integrations/supabase/client";
 import { getSeasonEpisodes, getWorkDetails } from "@/lib/catalog.functions";
-import { ALL_REACTIONS, formatDate, formatRuntime, formatScore, REACTION_EMOJI, SERIES_STATUS_LABEL, tmdbImage, type Reaction } from "@/lib/format";
+import {
+  ALL_REACTIONS,
+  formatDate,
+  formatRuntime,
+  formatScore,
+  REACTION_EMOJI,
+  SERIES_STATUS_LABEL,
+  tmdbImage,
+  type Reaction,
+} from "@/lib/format";
 import { firstName, useSpace, type SpaceInfo } from "@/lib/space";
 
 export const Route = createFileRoute("/_authenticated/work/$id")({
-  head: () => ({ meta: [{ title: "Detalhes — AppCinema" }, { name: "description", content: "Detalhes, reações e notas do casal." }] }),
+  head: () => ({
+    meta: [
+      { title: "Detalhes — AppCinema" },
+      { name: "description", content: "Detalhes, reações e notas do casal." },
+    ],
+  }),
   component: () => (
     <AppShell skeleton={<DetailSkeleton />}>
       <WorkPage />
@@ -33,12 +47,32 @@ function useWork(id: string) {
         supabase.from("ratings").select("user_id, score").eq("work_id", id),
         supabase.from("prior_watch_status").select("user_id, watched").eq("work_id", id),
         supabase.from("series_states").select("*").eq("work_id", id).maybeSingle(),
-        supabase.from("watch_events").select("id, season_number, episode_number, watched_at").eq("work_id", id),
-        supabase.from("joint_watch_sessions").select("id, watched_at").eq("work_id", id).order("watched_at", { ascending: false }),
-        supabase.from("indications").select("id, indicated_by, created_at, renewed_at").eq("work_id", id).order("created_at"),
+        supabase
+          .from("watch_events")
+          .select("id, season_number, episode_number, watched_at")
+          .eq("work_id", id),
+        supabase
+          .from("joint_watch_sessions")
+          .select("id, watched_at")
+          .eq("work_id", id)
+          .order("watched_at", { ascending: false }),
+        supabase
+          .from("indications")
+          .select("id, indicated_by, created_at, renewed_at")
+          .eq("work_id", id)
+          .order("created_at"),
       ]);
       if (!w.data) throw new Error("Obra não encontrada");
-      return { work: w.data, interests: i.data ?? [], ratings: r.data ?? [], prior: p.data ?? [], state: s.data, events: e.data ?? [], sessions: j.data ?? [], indications: n.data ?? [] };
+      return {
+        work: w.data,
+        interests: i.data ?? [],
+        ratings: r.data ?? [],
+        prior: p.data ?? [],
+        state: s.data,
+        events: e.data ?? [],
+        sessions: j.data ?? [],
+        indications: n.data ?? [],
+      };
     },
   });
 }
@@ -49,9 +83,16 @@ function WorkPage() {
   const { data: space } = useSpace();
   const { data, isLoading, error } = useWork(id);
   const details = useServerFn(getWorkDetails);
-  const meta = useQuery({ queryKey: ["meta", id], queryFn: () => details({ data: { workId: id } }), staleTime: 3600_000 });
+  const meta = useQuery({
+    queryKey: ["meta", id],
+    queryFn: () => details({ data: { workId: id } }),
+    staleTime: 3600_000,
+  });
   const qc = useQueryClient();
-  const refresh = () => { qc.invalidateQueries({ queryKey: ["work", id] }); qc.invalidateQueries({ queryKey: ["library"] }); };
+  const refresh = () => {
+    qc.invalidateQueries({ queryKey: ["work", id] });
+    qc.invalidateQueries({ queryKey: ["library"] });
+  };
 
   if (isLoading || !space) return <DetailSkeleton />;
   if (error || !data) return <p className="p-6 text-sm text-destructive">Obra não encontrada.</p>;
@@ -62,31 +103,77 @@ function WorkPage() {
   return (
     <div>
       <div className="relative h-44 overflow-hidden">
-        {tmdbImage(work.backdrop_path, "w780") && <img src={tmdbImage(work.backdrop_path, "w780")!} alt="" className="h-full w-full object-cover opacity-40" />}
+        {tmdbImage(work.backdrop_path, "w780") && (
+          <img
+            src={tmdbImage(work.backdrop_path, "w780")!}
+            alt=""
+            className="h-full w-full object-cover opacity-40"
+          />
+        )}
         <div className="absolute inset-0 bg-gradient-to-b from-transparent to-background" />
-        <button onClick={() => router.history.back()} aria-label="Voltar" className="pressable hit absolute left-4 top-4 flex h-10 w-10 items-center justify-center rounded-full bg-background/70"><ArrowLeft className="h-5 w-5" /></button>
+        <button
+          onClick={() => router.history.back()}
+          aria-label="Voltar"
+          className="pressable hit absolute left-4 top-4 flex h-10 w-10 items-center justify-center rounded-full bg-background/70"
+        >
+          <ArrowLeft className="h-5 w-5" />
+        </button>
       </div>
       <div className="-mt-24 relative flex gap-4 px-4">
-        <div className="w-28 shrink-0"><Poster path={work.poster_path} title={work.title} /></div>
+        <div className="w-28 shrink-0">
+          <Poster path={work.poster_path} title={work.title} />
+        </div>
         <div className="min-w-0 self-end">
           <h1 className="text-xl font-semibold leading-tight">{work.title}</h1>
-          {work.original_title && work.original_title !== work.title && <p className="text-xs text-muted-foreground">{work.original_title}</p>}
+          {work.original_title && work.original_title !== work.title && (
+            <p className="text-xs text-muted-foreground">{work.original_title}</p>
+          )}
           <p className="mt-1 text-xs text-muted-foreground">
-            {[isTv ? "Série" : "Filme", work.release_year, isTv && m?.seasonCount ? `${m.seasonCount} temp.` : formatRuntime(work.runtime_minutes)].filter(Boolean).join(" · ")}
+            {[
+              isTv ? "Série" : "Filme",
+              work.release_year,
+              isTv && m?.seasonCount
+                ? `${m.seasonCount} temp.`
+                : formatRuntime(work.runtime_minutes),
+            ]
+              .filter(Boolean)
+              .join(" · ")}
           </p>
-          {work.genres.length > 0 && <p className="mt-1 line-clamp-1 text-xs text-muted-foreground">{work.genres.join(", ")}</p>}
-          <button disabled className="mt-2 inline-flex items-center gap-1.5 rounded-lg border border-border px-2.5 py-1 text-xs text-muted-foreground" title="Envio para a TV não configurado">
+          {work.genres.length > 0 && (
+            <p className="mt-1 line-clamp-1 text-xs text-muted-foreground">
+              {work.genres.join(", ")}
+            </p>
+          )}
+          <button
+            disabled
+            className="mt-2 inline-flex items-center gap-1.5 rounded-lg border border-border px-2.5 py-1 text-xs text-muted-foreground"
+            title="Envio para a TV não configurado"
+          >
             <Tv className="h-3.5 w-3.5" /> TV · não configurado
           </button>
         </div>
       </div>
 
       <div className="space-y-6 px-4 pt-6">
-        <Comparison space={space} workId={id} interests={data.interests as { user_id: string; reaction: Reaction }[]} ratings={data.ratings} onChange={refresh} />
+        <Comparison
+          space={space}
+          workId={id}
+          interests={data.interests as { user_id: string; reaction: Reaction }[]}
+          ratings={data.ratings}
+          onChange={refresh}
+        />
         <PriorWatch space={space} workId={id} prior={data.prior} onChange={refresh} />
 
         {isTv ? (
-          <SeriesBlock space={space} workId={id} state={data.state} events={data.events} seasons={m?.seasons ?? []} overview={m?.overview ?? work.overview} onChange={refresh} />
+          <SeriesBlock
+            space={space}
+            workId={id}
+            state={data.state}
+            events={data.events}
+            seasons={m?.seasons ?? []}
+            overview={m?.overview ?? work.overview}
+            onChange={refresh}
+          />
         ) : (
           <>
             <Synopsis text={m?.overview ?? work.overview} />
@@ -100,19 +187,38 @@ function WorkPage() {
             <div className="no-scrollbar -mx-4 flex items-start gap-3 overflow-x-auto px-4">
               {m.crewLead && (
                 <>
-                  <Person name={m.crewLead.name} top={m.crewLead.role} path={m.crewLead.profilePath} />
+                  <Person
+                    name={m.crewLead.name}
+                    top={m.crewLead.role}
+                    path={m.crewLead.profilePath}
+                  />
                   <div className="h-24 w-px shrink-0 self-center bg-border" />
                 </>
               )}
-              {m.cast.map((c) => <Person key={c.name + c.character} top={c.character} name={c.name} path={c.profilePath} />)}
+              {m.cast.map((c) => (
+                <Person
+                  key={c.name + c.character}
+                  top={c.character}
+                  name={c.name}
+                  path={c.profilePath}
+                />
+              ))}
             </div>
           </section>
         )}
         {meta.error && <p className="text-xs text-muted-foreground">{meta.error.message}</p>}
-        <IndicationsBlock space={space} workId={id} title={work.title} indications={data.indications} onChange={refresh} />
+        <IndicationsBlock
+          space={space}
+          workId={id}
+          title={work.title}
+          indications={data.indications}
+          onChange={refresh}
+        />
         <section>
           <h2 className="mb-2 font-semibold">Posts relacionados</h2>
-          <p className="text-xs text-muted-foreground">Importação de posts chega numa próxima fase.</p>
+          <p className="text-xs text-muted-foreground">
+            Importação de posts chega numa próxima fase.
+          </p>
         </section>
       </div>
     </div>
@@ -123,7 +229,9 @@ function Synopsis({ text }: { text: string | null }) {
   return (
     <section>
       <h2 className="mb-2 font-semibold">Sinopse</h2>
-      <p className="text-sm leading-relaxed text-muted-foreground">{text || "Sem sinopse disponível."}</p>
+      <p className="text-sm leading-relaxed text-muted-foreground">
+        {text || "Sem sinopse disponível."}
+      </p>
     </section>
   );
 }
@@ -132,15 +240,29 @@ function Person({ top, name, path }: { top: string; name: string; path: string |
   const src = tmdbImage(path, "w185");
   return (
     <div className="w-20 shrink-0 text-center">
-      {src ? <img src={src} alt={name} className="mx-auto h-20 w-20 rounded-full object-cover" /> : <div className="mx-auto h-20 w-20 rounded-full bg-muted" />}
+      {src ? (
+        <img src={src} alt={name} className="mx-auto h-20 w-20 rounded-full object-cover" />
+      ) : (
+        <div className="mx-auto h-20 w-20 rounded-full bg-muted" />
+      )}
       <p className="mt-1.5 line-clamp-2 text-xs font-semibold">{top}</p>
       <p className="line-clamp-1 text-[11px] text-muted-foreground">{name}</p>
     </div>
   );
 }
 
-function Comparison({ space, workId, interests, ratings, onChange }: {
-  space: SpaceInfo; workId: string; interests: { user_id: string; reaction: Reaction }[]; ratings: { user_id: string; score: number }[]; onChange: () => void;
+function Comparison({
+  space,
+  workId,
+  interests,
+  ratings,
+  onChange,
+}: {
+  space: SpaceInfo;
+  workId: string;
+  interests: { user_id: string; reaction: Reaction }[];
+  ratings: { user_id: string; score: number }[];
+  onChange: () => void;
 }) {
   const [editing, setEditing] = useState<"reaction" | "score" | null>(null);
   const mine = interests.find((i) => i.user_id === space.userId);
@@ -151,24 +273,67 @@ function Comparison({ space, workId, interests, ratings, onChange }: {
   const avg = myScore && theirScore ? (Number(myScore.score) + Number(theirScore.score)) / 2 : null;
 
   async function setReaction(reaction: Reaction) {
-    const { error } = await supabase.from("interests").upsert({ work_id: workId, user_id: space.userId, reaction }, { onConflict: "user_id,work_id" });
-    if (error) toast.error("Não foi possível salvar."); else onChange();
+    const { error } = await supabase
+      .from("interests")
+      .upsert(
+        { work_id: workId, user_id: space.userId, reaction },
+        { onConflict: "user_id,work_id" },
+      );
+    if (error) toast.error("Não foi possível salvar.");
+    else onChange();
     setEditing(null);
   }
   async function setScore(score: number | null) {
-    const { error } = score === null
-      ? await supabase.from("ratings").delete().eq("work_id", workId).eq("user_id", space.userId)
-      : await supabase.from("ratings").upsert({ work_id: workId, user_id: space.userId, score }, { onConflict: "user_id,work_id" });
-    if (error) toast.error("Não foi possível salvar."); else onChange();
+    const { error } =
+      score === null
+        ? await supabase.from("ratings").delete().eq("work_id", workId).eq("user_id", space.userId)
+        : await supabase
+            .from("ratings")
+            .upsert(
+              { work_id: workId, user_id: space.userId, score },
+              { onConflict: "user_id,work_id" },
+            );
+    if (error) toast.error("Não foi possível salvar.");
+    else onChange();
     setEditing(null);
   }
 
-  const Col = ({ label, r, s, own }: { label: string; r: Reaction | undefined; s: number | undefined; own: boolean }) => (
+  const Col = ({
+    label,
+    r,
+    s,
+    own,
+  }: {
+    label: string;
+    r: Reaction | undefined;
+    s: number | undefined;
+    own: boolean;
+  }) => (
     <div className="flex-1 rounded-xl bg-secondary p-3">
       <p className="text-xs text-muted-foreground">{label}</p>
       <div className="mt-2 flex items-center justify-between">
-        <button disabled={!own} onClick={() => setEditing("reaction")} className="text-2xl" aria-label="Reação">{r ? REACTION_EMOJI[r] : "—"}</button>
-        <button disabled={!own} onClick={() => setEditing("score")} className="text-lg font-semibold" aria-label="Nota">{s !== undefined ? formatScore(Number(s)) : own ? <span className="text-xs text-primary">Dar nota</span> : "—"}</button>
+        <button
+          disabled={!own}
+          onClick={() => setEditing("reaction")}
+          className="text-2xl"
+          aria-label="Reação"
+        >
+          {r ? REACTION_EMOJI[r] : "—"}
+        </button>
+        <button
+          disabled={!own}
+          onClick={() => setEditing("score")}
+          className="text-lg font-semibold"
+          aria-label="Nota"
+        >
+          {s !== undefined ? (
+            formatScore(Number(s))
+          ) : own ? (
+            <span className="text-xs text-primary">Dar nota</span>
+          ) : (
+            "—"
+          )}
+        </button>
       </div>
     </div>
   );
@@ -177,13 +342,28 @@ function Comparison({ space, workId, interests, ratings, onChange }: {
     <section className="rounded-2xl border border-border bg-card p-3">
       <div className="flex gap-2">
         <Col label="Você" r={mine?.reaction} s={myScore?.score} own />
-        <Col label={space.partner ? firstName(space.partner.display_name) : "Parceiro (convide)"} r={theirs?.reaction} s={theirScore?.score} own={false} />
+        <Col
+          label={space.partner ? firstName(space.partner.display_name) : "Parceiro (convide)"}
+          r={theirs?.reaction}
+          s={theirScore?.score}
+          own={false}
+        />
       </div>
-      <p className="mt-2 text-center text-xs text-muted-foreground">{avg !== null ? `Média do casal: ${formatScore(avg)}` : "A média aparece quando os dois avaliarem."}</p>
+      <p className="mt-2 text-center text-xs text-muted-foreground">
+        {avg !== null
+          ? `Média do casal: ${formatScore(avg)}`
+          : "A média aparece quando os dois avaliarem."}
+      </p>
       {editing === "reaction" && (
         <div className="mt-3 grid grid-cols-4 gap-2">
           {ALL_REACTIONS.map((r) => (
-            <button key={r} onClick={() => setReaction(r)} className={`rounded-xl border py-2 text-2xl ${mine?.reaction === r ? "border-primary" : "border-border"}`}>{REACTION_EMOJI[r]}</button>
+            <button
+              key={r}
+              onClick={() => setReaction(r)}
+              className={`rounded-xl border py-2 text-2xl ${mine?.reaction === r ? "border-primary" : "border-border"}`}
+            >
+              {REACTION_EMOJI[r]}
+            </button>
           ))}
         </div>
       )}
@@ -191,51 +371,108 @@ function Comparison({ space, workId, interests, ratings, onChange }: {
         <div className="mt-3">
           <div className="grid grid-cols-7 gap-1.5">
             {SCORES.map((s) => (
-              <button key={s} onClick={() => setScore(s)} className={`rounded-lg border py-1.5 text-xs ${Number(myScore?.score) === s ? "border-primary bg-accent" : "border-border"}`}>{formatScore(s)}</button>
+              <button
+                key={s}
+                onClick={() => setScore(s)}
+                className={`rounded-lg border py-1.5 text-xs ${Number(myScore?.score) === s ? "border-primary bg-accent" : "border-border"}`}
+              >
+                {formatScore(s)}
+              </button>
             ))}
           </div>
-          {myScore && <button onClick={() => setScore(null)} className="mt-2 text-xs text-muted-foreground underline">Remover minha nota</button>}
+          {myScore && (
+            <button
+              onClick={() => setScore(null)}
+              className="mt-2 text-xs text-muted-foreground underline"
+            >
+              Remover minha nota
+            </button>
+          )}
         </div>
       )}
     </section>
   );
 }
 
-function PriorWatch({ space, workId, prior, onChange }: { space: SpaceInfo; workId: string; prior: { user_id: string; watched: boolean }[]; onChange: () => void }) {
+function PriorWatch({
+  space,
+  workId,
+  prior,
+  onChange,
+}: {
+  space: SpaceInfo;
+  workId: string;
+  prior: { user_id: string; watched: boolean }[];
+  onChange: () => void;
+}) {
   const mine = prior.find((p) => p.user_id === space.userId)?.watched ?? false;
   const theirs = prior.find((p) => p.user_id === space.partner?.id)?.watched ?? false;
   async function toggle() {
-    const { error } = await supabase.from("prior_watch_status").upsert({ work_id: workId, user_id: space.userId, watched: !mine }, { onConflict: "user_id,work_id" });
-    if (error) toast.error("Não foi possível salvar."); else onChange();
+    const { error } = await supabase
+      .from("prior_watch_status")
+      .upsert(
+        { work_id: workId, user_id: space.userId, watched: !mine },
+        { onConflict: "user_id,work_id" },
+      );
+    if (error) toast.error("Não foi possível salvar.");
+    else onChange();
   }
   return (
     <div className="flex items-center justify-between text-sm">
-      <button onClick={toggle} className={`inline-flex items-center gap-1.5 rounded-full border px-3 py-1.5 text-xs ${mine ? "border-primary text-primary" : "border-border text-muted-foreground"}`}>
+      <button
+        onClick={toggle}
+        className={`inline-flex items-center gap-1.5 rounded-full border px-3 py-1.5 text-xs ${mine ? "border-primary text-primary" : "border-border text-muted-foreground"}`}
+      >
         {mine && <Check className="h-3.5 w-3.5" />} Eu já assisti antes
       </button>
-      {theirs && <span className="text-xs text-muted-foreground">{firstName(space.partner?.display_name)} já assistiu antes</span>}
+      {theirs && (
+        <span className="text-xs text-muted-foreground">
+          {firstName(space.partner?.display_name)} já assistiu antes
+        </span>
+      )}
     </div>
   );
 }
 
-function MovieWatched({ space, workId, sessions, onChange }: { space: SpaceInfo; workId: string; sessions: { id: string; watched_at: string }[]; onChange: () => void }) {
+function MovieWatched({
+  space,
+  workId,
+  sessions,
+  onChange,
+}: {
+  space: SpaceInfo;
+  workId: string;
+  sessions: { id: string; watched_at: string }[];
+  onChange: () => void;
+}) {
   const mark = useMutation({
     mutationFn: async () => {
-      const { error } = await supabase.from("joint_watch_sessions").insert({ space_id: space.spaceId!, work_id: workId, created_by: space.userId });
+      const { error } = await supabase
+        .from("joint_watch_sessions")
+        .insert({ space_id: space.spaceId!, work_id: workId, created_by: space.userId });
       if (error) throw error;
     },
-    onSuccess: () => { toast.success("Marcado como assistido juntos"); onChange(); },
+    onSuccess: () => {
+      toast.success("Marcado como assistido juntos");
+      onChange();
+    },
     onError: () => toast.error("Não foi possível salvar."),
   });
   return (
     <section className="rounded-2xl border border-border bg-card p-4">
       <h2 className="font-semibold">Assistido juntos</h2>
       {sessions.length > 0 ? (
-        <p className="mt-1 text-xs text-muted-foreground">{sessions.map((s) => formatDate(s.watched_at)).join(" · ")}</p>
+        <p className="mt-1 text-xs text-muted-foreground">
+          {sessions.map((s) => formatDate(s.watched_at)).join(" · ")}
+        </p>
       ) : (
         <p className="mt-1 text-xs text-muted-foreground">Ainda não assistiram juntos.</p>
       )}
-      <button onClick={() => mark.mutate()} disabled={mark.isPending} className="mt-3 w-full rounded-xl bg-primary py-2.5 text-sm font-semibold text-primary-foreground">
+      <button
+        onClick={() => mark.mutate()}
+        disabled={mark.isPending}
+        className="mt-3 w-full rounded-xl bg-primary py-2.5 text-sm font-semibold text-primary-foreground"
+      >
         {sessions.length > 0 ? "Assistimos de novo" : "Assistimos juntos"}
       </button>
     </section>
@@ -244,32 +481,67 @@ function MovieWatched({ space, workId, sessions, onChange }: { space: SpaceInfo;
 
 type Ev = { id: string; season_number: number | null; episode_number: number | null };
 
-function SeriesBlock({ space, workId, state, events, seasons, overview, onChange }: {
-  space: SpaceInfo; workId: string; state: { id: string; status: string } | null; events: Ev[];
-  seasons: { seasonNumber: number; name: string; episodeCount: number }[]; overview: string | null; onChange: () => void;
+function SeriesBlock({
+  space,
+  workId,
+  state,
+  events,
+  seasons,
+  overview,
+  onChange,
+}: {
+  space: SpaceInfo;
+  workId: string;
+  state: { id: string; status: string } | null;
+  events: Ev[];
+  seasons: { seasonNumber: number; name: string; episodeCount: number }[];
+  overview: string | null;
+  onChange: () => void;
 }) {
   const seenInit = new Set(events.map((e) => `${e.season_number}:${e.episode_number}`));
   let firstNext = 1;
-  outer: for (const s of seasons) for (let e = 1; e <= s.episodeCount; e++) if (!seenInit.has(`${s.seasonNumber}:${e}`)) { firstNext = s.seasonNumber; break outer; }
+  outer: for (const s of seasons)
+    for (let e = 1; e <= s.episodeCount; e++)
+      if (!seenInit.has(`${s.seasonNumber}:${e}`)) {
+        firstNext = s.seasonNumber;
+        break outer;
+      }
   const [season, setSeason] = useState<number | null>(null);
   const activeSeason = season ?? (seasons.length ? firstNext : 1);
   const fetchSeason = useServerFn(getSeasonEpisodes);
-  const eps = useQuery({ queryKey: ["season", workId, activeSeason], queryFn: () => fetchSeason({ data: { workId, season: activeSeason } }), staleTime: 3600_000, enabled: seasons.length > 0 });
+  const eps = useQuery({
+    queryKey: ["season", workId, activeSeason],
+    queryFn: () => fetchSeason({ data: { workId, season: activeSeason } }),
+    staleTime: 3600_000,
+    enabled: seasons.length > 0,
+  });
   const seen = new Set(events.map((e) => `${e.season_number}:${e.episode_number}`));
   const total = seasons.reduce((a, s) => a + s.episodeCount, 0);
 
   let next: { s: number; e: number } | null = null;
   for (const s of seasons) {
-    for (let e = 1; e <= s.episodeCount; e++) if (!seen.has(`${s.seasonNumber}:${e}`)) { next = { s: s.seasonNumber, e }; break; }
+    for (let e = 1; e <= s.episodeCount; e++)
+      if (!seen.has(`${s.seasonNumber}:${e}`)) {
+        next = { s: s.seasonNumber, e };
+        break;
+      }
     if (next) break;
   }
 
   async function writeState(status: string) {
-    const payload = { status: status as "watching", next_season: next?.s ?? null, next_episode: next?.e ?? null, updated_by: space.userId };
+    const payload = {
+      status: status as "watching",
+      next_season: next?.s ?? null,
+      next_episode: next?.e ?? null,
+      updated_by: space.userId,
+    };
     const { error } = state
       ? await supabase.from("series_states").update(payload).eq("id", state.id)
-      : await supabase.from("series_states").insert({ ...payload, space_id: space.spaceId!, work_id: workId });
-    if (error) toast.error("Não foi possível salvar o status."); else onChange();
+      : await supabase
+          .from("series_states")
+          .insert({ ...payload, space_id: space.spaceId!, work_id: workId });
+    if (error) toast.error("Não foi possível salvar o status.");
+    else onChange();
   }
 
   async function toggle(s: number, e: number) {
@@ -277,9 +549,19 @@ function SeriesBlock({ space, workId, state, events, seasons, overview, onChange
     const existing = events.find((x) => `${x.season_number}:${x.episode_number}` === key);
     const { error } = existing
       ? await supabase.from("watch_events").delete().eq("id", existing.id)
-      : await supabase.from("watch_events").insert({ space_id: space.spaceId!, work_id: workId, season_number: s, episode_number: e, created_by: space.userId });
-    if (error) { toast.error("Não foi possível salvar."); return; }
-    if (!state) await writeState("watching"); else onChange();
+      : await supabase.from("watch_events").insert({
+          space_id: space.spaceId!,
+          work_id: workId,
+          season_number: s,
+          episode_number: e,
+          created_by: space.userId,
+        });
+    if (error) {
+      toast.error("Não foi possível salvar.");
+      return;
+    }
+    if (!state) await writeState("watching");
+    else onChange();
   }
 
   return (
@@ -287,16 +569,28 @@ function SeriesBlock({ space, workId, state, events, seasons, overview, onChange
       <section className="rounded-2xl border border-border bg-card p-4">
         <div className="flex items-center justify-between">
           <h2 className="font-semibold">Progresso do casal</h2>
-          <select value={state?.status ?? ""} onChange={(e) => writeState(e.target.value)} className="rounded-lg border border-border bg-secondary px-2 py-1 text-xs">
+          <select
+            value={state?.status ?? ""}
+            onChange={(e) => writeState(e.target.value)}
+            className="rounded-lg border border-border bg-secondary px-2 py-1 text-xs"
+          >
             {!state && <option value="">Não iniciada</option>}
-            {Object.entries(SERIES_STATUS_LABEL).map(([k, v]) => <option key={k} value={k}>{v}</option>)}
+            {Object.entries(SERIES_STATUS_LABEL).map(([k, v]) => (
+              <option key={k} value={k}>
+                {v}
+              </option>
+            ))}
           </select>
         </div>
         <div className="mt-3 h-1.5 overflow-hidden rounded-full bg-muted">
-          <div className="h-full bg-primary" style={{ width: total ? `${Math.min(100, (seen.size / total) * 100)}%` : "0%" }} />
+          <div
+            className="h-full bg-primary"
+            style={{ width: total ? `${Math.min(100, (seen.size / total) * 100)}%` : "0%" }}
+          />
         </div>
         <p className="mt-2 text-xs text-muted-foreground">
-          {seen.size} de {total || "?"} episódios · {next ? `Próximo: T${next.s} E${next.e}` : total ? "Tudo em dia" : ""}
+          {seen.size} de {total || "?"} episódios ·{" "}
+          {next ? `Próximo: T${next.s} E${next.e}` : total ? "Tudo em dia" : ""}
         </p>
       </section>
 
@@ -307,29 +601,69 @@ function SeriesBlock({ space, workId, state, events, seasons, overview, onChange
           <h2 className="mb-3 font-semibold">Temporadas</h2>
           <div className="no-scrollbar -mx-4 flex gap-2 overflow-x-auto px-4">
             {seasons.map((s) => (
-              <button key={s.seasonNumber} onClick={() => setSeason(s.seasonNumber)} className={`hit pressable shrink-0 rounded-full px-3.5 py-1.5 text-xs font-medium ${activeSeason === s.seasonNumber ? "bg-primary text-primary-foreground" : "border border-border text-muted-foreground"}`}>
+              <button
+                key={s.seasonNumber}
+                onClick={() => setSeason(s.seasonNumber)}
+                className={`hit pressable shrink-0 rounded-full px-3.5 py-1.5 text-xs font-medium ${activeSeason === s.seasonNumber ? "bg-primary text-primary-foreground" : "border border-border text-muted-foreground"}`}
+              >
                 T{s.seasonNumber}
               </button>
             ))}
           </div>
           <div className="no-scrollbar -mx-4 mt-3 flex gap-3 overflow-x-auto px-4">
-            {eps.isLoading && Array.from({ length: 3 }, (_, i) => <div key={i} className="w-52 shrink-0"><div className="skeleton aspect-video w-full rounded-xl" /><div className="skeleton mt-2 h-3 w-3/4" /><div className="skeleton mt-1.5 h-3 w-full" /></div>)}
+            {eps.isLoading &&
+              Array.from({ length: 3 }, (_, i) => (
+                <div key={i} className="w-52 shrink-0">
+                  <div className="skeleton aspect-video w-full rounded-xl" />
+                  <div className="skeleton mt-2 h-3 w-3/4" />
+                  <div className="skeleton mt-1.5 h-3 w-full" />
+                </div>
+              ))}
             {eps.data?.map((ep) => {
               const done = seen.has(`${ep.seasonNumber}:${ep.episodeNumber}`);
               const isNext = next?.s === ep.seasonNumber && next?.e === ep.episodeNumber;
               const img = tmdbImage(ep.stillPath, "w300");
               return (
-                <button key={ep.episodeNumber} onClick={() => toggle(ep.seasonNumber, ep.episodeNumber)} aria-label={`${done ? "Desmarcar" : "Marcar"} T${ep.seasonNumber}E${ep.episodeNumber}`} className={`pressable w-52 shrink-0 rounded-xl text-left ${isNext ? "ring-2 ring-primary ring-offset-2 ring-offset-background" : ""}`}>
+                <button
+                  key={ep.episodeNumber}
+                  onClick={() => toggle(ep.seasonNumber, ep.episodeNumber)}
+                  aria-label={`${done ? "Desmarcar" : "Marcar"} T${ep.seasonNumber}E${ep.episodeNumber}`}
+                  className={`pressable w-52 shrink-0 rounded-xl text-left ${isNext ? "ring-2 ring-primary ring-offset-2 ring-offset-background" : ""}`}
+                >
                   <div className="relative aspect-video overflow-hidden rounded-xl bg-muted">
-                    {isNext && <span className="absolute left-2 top-2 rounded-md bg-primary px-1.5 py-0.5 text-[10px] font-semibold text-primary-foreground">Próximo</span>}
-                    {img && <img src={img} alt="" loading="lazy" className={`h-full w-full object-cover ${done ? "opacity-50" : ""}`} />}
-                    <span className={`absolute right-2 top-2 flex h-7 w-7 items-center justify-center rounded-full transition-colors duration-150 ${done ? "bg-primary text-primary-foreground" : "border border-foreground/40 bg-background/60"}`}>
+                    {isNext && (
+                      <span className="absolute left-2 top-2 rounded-md bg-primary px-1.5 py-0.5 text-[10px] font-semibold text-primary-foreground">
+                        Próximo
+                      </span>
+                    )}
+                    {img && (
+                      <img
+                        src={img}
+                        alt=""
+                        loading="lazy"
+                        className={`h-full w-full object-cover ${done ? "opacity-50" : ""}`}
+                      />
+                    )}
+                    <span
+                      className={`absolute right-2 top-2 flex h-7 w-7 items-center justify-center rounded-full transition-colors duration-150 ${done ? "bg-primary text-primary-foreground" : "border border-foreground/40 bg-background/60"}`}
+                    >
                       {done && <Check className="h-3.5 w-3.5" />}
                     </span>
                   </div>
-                  <p className="mt-1.5 line-clamp-1 text-xs font-semibold">T{ep.seasonNumber}E{ep.episodeNumber} · {ep.name}</p>
-                  {ep.overview && <p className="mt-0.5 line-clamp-2 text-[11px] leading-snug text-muted-foreground">{ep.overview}</p>}
-                  <p className="mt-0.5 text-[11px] text-muted-foreground">{[formatRuntime(ep.runtimeMinutes), formatDate(ep.airDate)].filter(Boolean).join(" · ")}{done ? " · Assistido" : ""}</p>
+                  <p className="mt-1.5 line-clamp-1 text-xs font-semibold">
+                    T{ep.seasonNumber}E{ep.episodeNumber} · {ep.name}
+                  </p>
+                  {ep.overview && (
+                    <p className="mt-0.5 line-clamp-2 text-[11px] leading-snug text-muted-foreground">
+                      {ep.overview}
+                    </p>
+                  )}
+                  <p className="mt-0.5 text-[11px] text-muted-foreground">
+                    {[formatRuntime(ep.runtimeMinutes), formatDate(ep.airDate)]
+                      .filter(Boolean)
+                      .join(" · ")}
+                    {done ? " · Assistido" : ""}
+                  </p>
                 </button>
               );
             })}
@@ -342,31 +676,62 @@ function SeriesBlock({ space, workId, state, events, seasons, overview, onChange
 
 type Ind = { id: string; indicated_by: string; created_at: string; renewed_at: string | null };
 
-function IndicationsBlock({ space, workId, title, indications, onChange }: { space: SpaceInfo; workId: string; title: string; indications: Ind[]; onChange: () => void }) {
+function IndicationsBlock({
+  space,
+  workId,
+  title,
+  indications,
+  onChange,
+}: {
+  space: SpaceInfo;
+  workId: string;
+  title: string;
+  indications: Ind[];
+  onChange: () => void;
+}) {
   const navigate = useNavigate();
   const qc = useQueryClient();
   const [confirming, setConfirming] = useState(false);
   const timer = useRef<ReturnType<typeof setTimeout> | null>(null);
-  useEffect(() => () => { if (timer.current) clearTimeout(timer.current); }, []);
+  useEffect(
+    () => () => {
+      if (timer.current) clearTimeout(timer.current);
+    },
+    [],
+  );
   const mine = indications.find((i) => i.indicated_by === space.userId);
-  const nameOf = (id: string) => (id === space.userId ? "Você" : firstName(space.partner?.display_name));
+  const nameOf = (id: string) =>
+    id === space.userId ? "Você" : firstName(space.partner?.display_name);
 
   async function removeMine() {
     if (!mine) return;
     const { error } = await supabase.from("indications").delete().eq("id", mine.id);
-    if (error) toast.error("Não foi possível remover."); else { toast.success("Sua indicação foi removida"); onChange(); }
+    if (error) toast.error("Não foi possível remover.");
+    else {
+      toast.success("Sua indicação foi removida");
+      onChange();
+    }
   }
 
   // Delayed delete: the work disappears from lists right away, and is only deleted after the undo window.
   function deleteWork() {
     setConfirming(false);
     const prev = qc.getQueriesData({ queryKey: ["library"] });
-    qc.setQueriesData({ queryKey: ["library"] }, (old: unknown) => (Array.isArray(old) ? old.filter((w: { id: string }) => w.id !== workId) : old));
+    qc.setQueriesData({ queryKey: ["library"] }, (old: unknown) =>
+      Array.isArray(old) ? old.filter((w: { id: string }) => w.id !== workId) : old,
+    );
     navigate({ to: "/library" });
     let undone = false;
     toast(`"${title}" excluída`, {
       duration: 6000,
-      action: { label: "Desfazer", onClick: () => { undone = true; if (timer.current) clearTimeout(timer.current); prev.forEach(([k, v]) => qc.setQueryData(k, v)); } },
+      action: {
+        label: "Desfazer",
+        onClick: () => {
+          undone = true;
+          if (timer.current) clearTimeout(timer.current);
+          prev.forEach(([k, v]) => qc.setQueryData(k, v));
+        },
+      },
     });
     timer.current = setTimeout(async () => {
       if (undone) return;
@@ -384,24 +749,61 @@ function IndicationsBlock({ space, workId, title, indications, onChange }: { spa
       ) : (
         <ul className="mt-1 space-y-0.5 text-xs text-muted-foreground">
           {indications.map((i) => (
-            <li key={i.id}>{nameOf(i.indicated_by)} indicou em {formatDate(i.created_at)}{i.renewed_at ? ` · reindicou em ${formatDate(i.renewed_at)}` : ""}</li>
+            <li key={i.id}>
+              {nameOf(i.indicated_by)} indicou em {formatDate(i.created_at)}
+              {i.renewed_at ? ` · reindicou em ${formatDate(i.renewed_at)}` : ""}
+            </li>
           ))}
         </ul>
       )}
       <div className="mt-3 flex gap-2">
-        {mine && <button onClick={removeMine} className="pressable min-h-11 flex-1 rounded-xl border border-border text-xs">Remover minha indicação</button>}
-        <button onClick={() => setConfirming(true)} className="pressable flex min-h-11 flex-1 items-center justify-center gap-1.5 rounded-xl border border-destructive/40 text-xs text-destructive">
+        {mine && (
+          <button
+            onClick={removeMine}
+            className="pressable min-h-11 flex-1 rounded-xl border border-border text-xs"
+          >
+            Remover minha indicação
+          </button>
+        )}
+        <button
+          onClick={() => setConfirming(true)}
+          className="pressable flex min-h-11 flex-1 items-center justify-center gap-1.5 rounded-xl border border-destructive/40 text-xs text-destructive"
+        >
           <Trash2 className="h-3.5 w-3.5" /> Excluir obra
         </button>
       </div>
       {confirming && (
-        <div className="fade-enter fixed inset-0 z-[60] flex items-end bg-background/80" onClick={() => setConfirming(false)}>
-          <div role="dialog" aria-modal="true" aria-labelledby="del-title" className="sheet-enter mx-auto w-full max-w-md rounded-t-3xl border border-border bg-card p-5 pb-[max(env(safe-area-inset-bottom),24px)]" onClick={(e) => e.stopPropagation()}>
-            <h3 id="del-title" className="text-lg font-semibold">Excluir "{title}"?</h3>
-            <p className="mt-2 text-sm text-muted-foreground">A obra sai da biblioteca dos dois, junto com reações, notas, indicações, episódios e sessões assistidas. Você terá alguns segundos para desfazer.</p>
+        <div
+          className="fade-enter fixed inset-0 z-[60] flex items-end bg-background/80"
+          onClick={() => setConfirming(false)}
+        >
+          <div
+            role="dialog"
+            aria-modal="true"
+            aria-labelledby="del-title"
+            className="sheet-enter mx-auto w-full max-w-md rounded-t-3xl border border-border bg-card p-5 pb-[max(env(safe-area-inset-bottom),24px)]"
+            onClick={(e) => e.stopPropagation()}
+          >
+            <h3 id="del-title" className="text-lg font-semibold">
+              Excluir "{title}"?
+            </h3>
+            <p className="mt-2 text-sm text-muted-foreground">
+              A obra sai da biblioteca dos dois, junto com reações, notas, indicações, episódios e
+              sessões assistidas. Você terá alguns segundos para desfazer.
+            </p>
             <div className="mt-5 grid grid-cols-2 gap-2">
-              <button onClick={() => setConfirming(false)} className="pressable min-h-12 rounded-xl border border-border text-sm">Cancelar</button>
-              <button onClick={deleteWork} className="pressable min-h-12 rounded-xl bg-destructive text-sm font-semibold text-destructive-foreground">Excluir para os dois</button>
+              <button
+                onClick={() => setConfirming(false)}
+                className="pressable min-h-12 rounded-xl border border-border text-sm"
+              >
+                Cancelar
+              </button>
+              <button
+                onClick={deleteWork}
+                className="pressable min-h-12 rounded-xl bg-destructive text-sm font-semibold text-destructive-foreground"
+              >
+                Excluir para os dois
+              </button>
             </div>
           </div>
         </div>

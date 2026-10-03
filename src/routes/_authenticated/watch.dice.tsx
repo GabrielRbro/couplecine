@@ -5,10 +5,22 @@ import { AppShell } from "@/components/app/AppShell";
 import { EmptyState, Poster } from "@/components/app/MediaCard";
 import { FilterPills, TogglePill } from "@/components/app/ui";
 import type { Reaction } from "@/lib/format";
-import { isIndicated, isWatched, useLibrary, useSpace, type LibraryWork, type SpaceInfo } from "@/lib/space";
+import {
+  isIndicated,
+  isWatched,
+  useLibrary,
+  useSpace,
+  type LibraryWork,
+  type SpaceInfo,
+} from "@/lib/space";
 
 export const Route = createFileRoute("/_authenticated/watch/dice")({
-  head: () => ({ meta: [{ title: "Sortear — AppCinema" }, { name: "description", content: "Sorteio ponderado pelas reações do casal." }] }),
+  head: () => ({
+    meta: [
+      { title: "Sortear — AppCinema" },
+      { name: "description", content: "Sorteio ponderado pelas reações do casal." },
+    ],
+  }),
   component: () => (
     <AppShell>
       <DicePage />
@@ -59,10 +71,16 @@ function DicePage() {
     let choice = pool[pool.length - 1] ?? null;
     for (const w of pool) {
       r -= weightOf(w, space, includeDislike);
-      if (r <= 0) { choice = w; break; }
+      if (r <= 0) {
+        choice = w;
+        break;
+      }
     }
     setRolling(true);
-    setTimeout(() => { setPicked(choice); setRolling(false); }, 180);
+    setTimeout(() => {
+      setPicked(choice);
+      setRolling(false);
+    }, 180);
   };
   const decline = () => {
     if (!picked) return;
@@ -73,20 +91,54 @@ function DicePage() {
   return (
     <div className="px-4 pt-6">
       <h1 className="text-2xl font-semibold">Sortear</h1>
-      <p className="mt-1 text-sm text-muted-foreground">🔥 pesa mais. 👎 fica de fora, a menos que vocês incluam.</p>
+      <p className="mt-1 text-sm text-muted-foreground">
+        🔥 pesa mais. 👎 fica de fora, a menos que vocês incluam.
+      </p>
       <div className="no-scrollbar -mx-4 mt-4 flex gap-2 overflow-x-auto px-4 py-1">
-        <FilterPills options={[["all", "Todos"], ["movie", "Filmes"], ["tv", "Séries"]] as const} value={kind} onChange={setKind} />
+        <FilterPills
+          options={
+            [
+              ["all", "Todos"],
+              ["movie", "Filmes"],
+              ["tv", "Séries"],
+            ] as const
+          }
+          value={kind}
+          onChange={setKind}
+        />
       </div>
       <div className="no-scrollbar -mx-4 mt-2 flex gap-2 overflow-x-auto px-4 py-1">
-        <FilterPills options={[["fresh", "Nenhum viu"], ["rewatch", "Rever"], ["any", "Qualquer"]] as const} value={history} onChange={setHistory} />
-        <TogglePill on={includeDislike} onClick={() => setIncludeDislike((v) => !v)}>Incluir 👎</TogglePill>
+        <FilterPills
+          options={
+            [
+              ["fresh", "Nenhum viu"],
+              ["rewatch", "Rever"],
+              ["any", "Qualquer"],
+            ] as const
+          }
+          value={history}
+          onChange={setHistory}
+        />
+        <TogglePill on={includeDislike} onClick={() => setIncludeDislike((v) => !v)}>
+          Incluir 👎
+        </TogglePill>
       </div>
 
       {pool.length === 0 && !picked ? (
         <div className="mt-6">
-          <EmptyState title="Nada para sortear" text={declined.size ? "Vocês recusaram tudo nesta rodada." : "Ajuste os filtros ou adicione indicações."} />
+          <EmptyState
+            title="Nada para sortear"
+            text={
+              declined.size
+                ? "Vocês recusaram tudo nesta rodada."
+                : "Ajuste os filtros ou adicione indicações."
+            }
+          />
           {declined.size > 0 && (
-            <button onClick={() => setDeclined(new Set())} className="pressable mt-3 flex min-h-11 w-full items-center justify-center gap-2 rounded-xl border border-border text-sm">
+            <button
+              onClick={() => setDeclined(new Set())}
+              className="pressable mt-3 flex min-h-11 w-full items-center justify-center gap-2 rounded-xl border border-border text-sm"
+            >
               <RotateCcw className="h-4 w-4" /> Nova rodada
             </button>
           )}
@@ -95,7 +147,12 @@ function DicePage() {
         <>
           <div className="mx-auto mt-6 w-44" style={{ minHeight: picked ? undefined : 0 }}>
             {picked && (
-              <Link key={picked.id} to="/work/$id" params={{ id: picked.id }} className={`pressable block transition-[opacity,transform] duration-200 ${rolling ? "scale-95 opacity-0" : "fade-enter"}`}>
+              <Link
+                key={picked.id}
+                to="/work/$id"
+                params={{ id: picked.id }}
+                className={`pressable block transition-[opacity,transform] duration-200 ${rolling ? "scale-95 opacity-0" : "fade-enter"}`}
+              >
                 <Poster path={picked.poster_path} title={picked.title} />
                 <p className="mt-2 text-center font-semibold">{picked.title}</p>
                 <p className="text-center text-xs text-muted-foreground">Toque para ver detalhes</p>
@@ -104,15 +161,29 @@ function DicePage() {
           </div>
           <div className="mt-6 flex gap-2">
             {picked && (
-              <button onClick={decline} aria-label="Recusar nesta rodada" className="pressable flex min-h-14 items-center justify-center gap-1.5 rounded-2xl border border-border px-4 text-sm">
+              <button
+                onClick={decline}
+                aria-label="Recusar nesta rodada"
+                className="pressable flex min-h-14 items-center justify-center gap-1.5 rounded-2xl border border-border px-4 text-sm"
+              >
                 <X className="h-4 w-4" /> Hoje não
               </button>
             )}
-            <button onClick={roll} disabled={pool.length === 0} className="pressable flex min-h-14 flex-1 items-center justify-center gap-2 rounded-2xl bg-primary font-semibold text-primary-foreground disabled:opacity-50">
-              <Dices className={`h-5 w-5 transition-transform duration-200 ${rolling ? "rotate-180" : ""}`} /> {picked ? "Sortear de novo" : "Sortear"}
+            <button
+              onClick={roll}
+              disabled={pool.length === 0}
+              className="pressable flex min-h-14 flex-1 items-center justify-center gap-2 rounded-2xl bg-primary font-semibold text-primary-foreground disabled:opacity-50"
+            >
+              <Dices
+                className={`h-5 w-5 transition-transform duration-200 ${rolling ? "rotate-180" : ""}`}
+              />{" "}
+              {picked ? "Sortear de novo" : "Sortear"}
             </button>
           </div>
-          <p className="mt-2 text-center text-xs text-muted-foreground">{pool.length} obras no sorteio{declined.size ? ` · ${declined.size} recusadas nesta rodada` : ""}</p>
+          <p className="mt-2 text-center text-xs text-muted-foreground">
+            {pool.length} obras no sorteio
+            {declined.size ? ` · ${declined.size} recusadas nesta rodada` : ""}
+          </p>
         </>
       )}
     </div>

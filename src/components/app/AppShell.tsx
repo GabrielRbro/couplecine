@@ -11,7 +11,10 @@ function PageGate({ children, skeleton }: { children: ReactNode; skeleton?: Reac
     if (data && !data.spaceId) navigate({ to: "/onboarding", replace: true });
   }, [data, navigate]);
   if (isLoading || (data && !data.spaceId)) return <>{skeleton ?? <HomeSkeleton />}</>;
-  if (error) return <div className="p-6 text-sm text-destructive">Não foi possível carregar seu espaço.</div>;
+  if (error)
+    return (
+      <div className="p-6 text-sm text-destructive">Não foi possível carregar seu espaço.</div>
+    );
   return <>{children}</>;
 }
 
@@ -81,7 +84,9 @@ export function BottomNav() {
                 tabIndex={open ? 0 : -1}
                 aria-hidden={!open}
                 style={{
-                  transform: open ? `translate(${item.x}px, ${item.y}px) scale(1)` : "translate(0, 8px) scale(0.6)",
+                  transform: open
+                    ? `translate(${item.x}px, ${item.y}px) scale(1)`
+                    : "translate(0, 8px) scale(0.6)",
                   transitionDelay: open ? `${i * 35}ms` : "0ms",
                 }}
                 className={`absolute bottom-6 flex flex-col items-center gap-1 transition-[transform,opacity] duration-200 ease-[cubic-bezier(0.22,1,0.36,1)] ${open ? "opacity-100" : "pointer-events-none opacity-0"}`}
@@ -99,13 +104,22 @@ export function BottomNav() {
               className="pressable -mt-7 mb-2 flex flex-col items-center gap-1"
             >
               <span className="relative flex h-14 w-14 items-center justify-center rounded-full border-4 border-background bg-primary text-primary-foreground shadow-lg">
-                <Popcorn className={`absolute h-6 w-6 transition-all duration-200 ${open ? "rotate-90 scale-50 opacity-0" : "opacity-100"}`} strokeWidth={1.8} />
-                <X className={`absolute h-6 w-6 transition-all duration-200 ${open ? "opacity-100" : "-rotate-90 scale-50 opacity-0"}`} />
+                <Popcorn
+                  className={`absolute h-6 w-6 transition-all duration-200 ${open ? "rotate-90 scale-50 opacity-0" : "opacity-100"}`}
+                  strokeWidth={1.8}
+                />
+                <X
+                  className={`absolute h-6 w-6 transition-all duration-200 ${open ? "opacity-100" : "-rotate-90 scale-50 opacity-0"}`}
+                />
               </span>
               <span className="text-[11px] font-medium text-foreground">Assistir</span>
             </button>
           </div>
-          <Link to="/library" className={tab(path.startsWith("/library"))} onClick={() => open && close(false)}>
+          <Link
+            to="/library"
+            className={tab(path.startsWith("/library"))}
+            onClick={() => open && close(false)}
+          >
             <Clapperboard className="h-5 w-5" /> Biblioteca
           </Link>
         </div>

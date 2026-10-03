@@ -28,10 +28,22 @@ export function useSpace() {
       };
       // Profiles RLS only returns me + partner, so both queries can run in parallel.
       const [{ data: m }, { data: profiles }] = await Promise.all([
-        supabase.from("space_members").select("space_id").eq("user_id", user.id).limit(1).maybeSingle(),
+        supabase
+          .from("space_members")
+          .select("space_id")
+          .eq("user_id", user.id)
+          .limit(1)
+          .maybeSingle(),
         supabase.from("profiles").select("id, display_name, avatar_url"),
       ]);
-      if (!m) return { userId: user.id, email: user.email ?? "", spaceId: null, me: fallback, partner: null };
+      if (!m)
+        return {
+          userId: user.id,
+          email: user.email ?? "",
+          spaceId: null,
+          me: fallback,
+          partner: null,
+        };
       const me = profiles?.find((p) => p.id === user.id) ?? fallback;
       const partner = profiles?.find((p) => p.id !== user.id) ?? null;
       return { userId: user.id, email: user.email ?? "", spaceId: m.space_id, me, partner };
@@ -99,14 +111,34 @@ export function isWatched(w: LibraryWork) {
 /** Shown in Indicações: never watched, series in progress, or re-indicated after the last watch. */
 export function isIndicated(w: LibraryWork) {
   if (!isWatched(w) || w.series_states[0]?.status === "watching") return true;
-  const last = (xs: { watched_at?: string; created_at?: string }[], k: "watched_at" | "created_at") =>
+  const last = (
+    xs: { watched_at?: string; created_at?: string }[],
+    k: "watched_at" | "created_at",
+  ) =>
     xs.reduce((m, x) => Math.max(m, new Date((x as Record<string, string>)[k] ?? 0).getTime()), 0);
-  const ind = w.indications.reduce((mx, i) => Math.max(mx, new Date(i.renewed_at ?? i.created_at).getTime(), new Date(i.created_at).getTime()), 0);
-  return ind > Math.max(last(w.joint_watch_sessions, "watched_at"), last(w.watch_events, "watched_at"));
+  const ind = w.indications.reduce(
+    (mx, i) =>
+      Math.max(
+        mx,
+        new Date(i.renewed_at ?? i.created_at).getTime(),
+        new Date(i.created_at).getTime(),
+      ),
+    0,
+  );
+  return (
+    ind > Math.max(last(w.joint_watch_sessions, "watched_at"), last(w.watch_events, "watched_at"))
+  );
 }
 
 export function seriesProgress(w: LibraryWork) {
-  const total = (w.work_metadata_cache[0]?.seasons ?? []).reduce((a, s) => a + (s.episodeCount ?? 0), 0);
+  const total = (w.work_metadata_cache[0]?.seasons ?? []).reduce(
+    (a, s) => a + (s.episodeCount ?? 0),
+    0,
+  );
   const st = w.series_states[0];
-  return { seen: w.watch_events.length, total, next: st?.next_season && st?.next_episode ? `T${st.next_season}E${st.next_episode}` : null };
+  return {
+    seen: w.watch_events.length,
+    total,
+    next: st?.next_season && st?.next_episode ? `T${st.next_season}E${st.next_episode}` : null,
+  };
 }
