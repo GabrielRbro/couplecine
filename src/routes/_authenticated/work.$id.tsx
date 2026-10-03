@@ -315,7 +315,7 @@ function Comparison({
         <button
           disabled={!own}
           onClick={() => setEditing("reaction")}
-          className="hit pressable text-2xl"
+          className="pressable -ml-2 flex min-h-11 min-w-11 items-center justify-center text-2xl"
           aria-label="Reação"
         >
           {r ? REACTION_EMOJI[r] : "—"}
@@ -323,7 +323,7 @@ function Comparison({
         <button
           disabled={!own}
           onClick={() => setEditing("score")}
-          className="hit pressable text-lg font-semibold"
+          className="pressable -mr-2 flex min-h-11 min-w-11 items-center justify-center text-lg font-semibold"
           aria-label="Nota"
         >
           {s !== undefined ? (
