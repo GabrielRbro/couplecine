@@ -141,21 +141,6 @@
   &:active { transform: scale(0.96); opacity: 0.85; }
 }
 
-@utility page-enter {
-  animation: page-enter var(--dur-base) var(--ease-out) both;
-}
-@keyframes page-enter {
-  from { opacity: 0; transform: translateY(6px); }
-  to { opacity: 1; transform: none; }
-}
-
-@utility sheet-enter {
-  animation: sheet-enter 220ms var(--ease-out) both;
-}
-@keyframes sheet-enter {
-  from { transform: translateY(100%); }
-  to { transform: none; }
-}
 @utility fade-enter {
   animation: fade-enter var(--dur-base) var(--ease-out) both;
 }
