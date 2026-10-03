@@ -1,7 +1,7 @@
 import { createFileRoute, Link } from "@tanstack/react-router";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
-import { useMemo, useState } from "react";
-import { AlertTriangle, Heart, Play, Undo2, X } from "lucide-react";
+import { useEffect, useMemo, useRef, useState } from "react";
+import { AlertTriangle, Dices, Heart, Play, Undo2, X } from "lucide-react";
 import { toast } from "sonner";
 import { AnimatedSheet } from "@/components/app/AnimatedSheet";
 import { AppShell } from "@/components/app/AppShell";
@@ -50,6 +50,12 @@ function MatchPage() {
   const spaceId = space?.spaceId;
   const [resumedSessionId, setResumedSessionId] = useState<string | null>(null);
   const [confirmingAbandon, setConfirmingAbandon] = useState(false);
+  const [cardExit, setCardExit] = useState<{
+    work: (typeof works)[number];
+    direction: "left" | "right";
+  } | null>(null);
+  const [pickedResultId, setPickedResultId] = useState<string | null>(null);
+  const attemptedExtensions = useRef(new Set<string>());
 
   const open = useQuery({
     queryKey: ["match-open", spaceId],
@@ -221,6 +227,42 @@ function MatchPage() {
     [open.data, space, byId],
   );
 
+  const matchState = me.data;
+  const visibleDeck = deck.slice(0, matchState?.limit ?? 0);
+  const nextWorkId = matchState
+    ? visibleDeck.find((id) => !matchState.voted.has(id))
+    : undefined;
+  const currentWork = nextWorkId ? (byId.get(nextWorkId) ?? null) : null;
+  const deckDone = Boolean(matchState) && !currentWork;
+  const canRequestExtension =
+    Boolean(matchState) && deckDone && (matchState?.limit ?? 0) < deck.length;
+  const extensionKey = sid && matchState ? `${sid}:${matchState.limit}` : null;
+  const extensionAttempted = extensionKey
+    ? attemptedExtensions.current.has(extensionKey)
+    : false;
+
+  useEffect(() => {
+    if (!canRequestExtension || !extensionKey || extensionAttempted || extend.isPending) return;
+    attemptedExtensions.current.add(extensionKey);
+    extend.mutate();
+  }, [canRequestExtension, extensionAttempted, extensionKey, extend]);
+
+  const castVote = async (liked: boolean) => {
+    if (!currentWork || cardExit || vote.isPending) return;
+    const direction = liked ? "right" : "left";
+    setCardExit({ work: currentWork, direction });
+    const reduceMotion = window.matchMedia("(prefers-reduced-motion: reduce)").matches;
+    const exitFinished = new Promise((resolve) => window.setTimeout(resolve, reduceMotion ? 1 : 210));
+    try {
+      await Promise.all([
+        vote.mutateAsync({ workId: currentWork.id, liked }),
+        exitFinished,
+      ]);
+    } finally {
+      setCardExit(null);
+    }
+  };
+
   if (!space) return null;
   const partnerName = space.partner ? firstName(space.partner.display_name) : "seu parceiro";
   const header = (
@@ -235,20 +277,48 @@ function MatchPage() {
   const results = (last.data?.result_work_ids ?? [])
     .map((id) => byId.get(id))
     .filter((work): work is NonNullable<typeof work> => Boolean(work));
+  const pickRandomResult = () => {
+    if (results.length === 0) return;
+    const selected = results[Math.floor(Math.random() * results.length)];
+    setPickedResultId(selected?.id ?? null);
+  };
   const lastResult = last.data && (
-    <section className="mt-8">
-      <h2 className="mb-3 text-base font-semibold">Último resultado</h2>
+    <section className="mt-8 border-t border-border pt-6">
+      <p className="text-xs font-medium uppercase text-primary">Último resultado</p>
+      <h2 className="mt-1 text-xl font-semibold">
+        Vocês deram Match em {results.length} {results.length === 1 ? "obra" : "obras"}
+      </h2>
       {results.length === 0 ? (
-        <p className="text-sm text-muted-foreground">Nenhuma obra em comum no último Match.</p>
+        <p className="mt-2 text-sm text-muted-foreground">Nenhuma obra em comum desta vez.</p>
       ) : (
-        <div className="grid grid-cols-3 gap-3">
-          {results.map((w) => (
-            <Link key={w.id} to="/work/$id" params={{ id: w.id }} className="pressable">
-              <Poster path={w.poster_path} title={w.title} />
-              <p className="mt-1 line-clamp-1 text-xs font-medium">{w.title}</p>
-            </Link>
-          ))}
-        </div>
+        <>
+          <p className="mt-1 text-sm text-muted-foreground">Escolham uma obra ou deixem a sorte decidir.</p>
+          <div className="mt-4 grid grid-cols-3 gap-3">
+            {results.map((w) => (
+              <Link
+                key={w.id}
+                to="/work/$id"
+                params={{ id: w.id }}
+                className={`pressable rounded-xl ${pickedResultId === w.id ? "ring-2 ring-primary ring-offset-2 ring-offset-background" : ""}`}
+              >
+                <Poster path={w.poster_path} title={w.title} />
+                <p className="mt-1 line-clamp-2 text-xs font-medium">{w.title}</p>
+              </Link>
+            ))}
+          </div>
+          <button
+            type="button"
+            onClick={pickRandomResult}
+            className="pressable mt-4 flex min-h-11 w-full items-center justify-center gap-2 rounded-xl border border-border bg-secondary text-sm font-semibold"
+          >
+            <Dices className="h-4 w-4" /> Sortear entre os matches
+          </button>
+          {pickedResultId && (
+            <p className="fade-enter mt-3 text-center text-sm font-medium" aria-live="polite">
+              A sorte escolheu {byId.get(pickedResultId)?.title}
+            </p>
+          )}
+        </>
       )}
     </section>
   );
@@ -354,11 +424,7 @@ function MatchPage() {
     return <div className="px-4 pt-6 text-sm text-destructive">Não foi possível retomar este Match.</div>;
   }
   const m = me.data;
-  const myDeck = deck.slice(0, m.limit);
-  const next = myDeck.find((id) => !m.voted.has(id));
-  const current = next ? (byId.get(next) ?? null) : null;
-  const deckDone = !current;
-  const canExtend = deckDone && m.limit < deck.length;
+  const displayedWork = cardExit?.work ?? currentWork;
 
   return (
     <div className="px-4 pt-6">
@@ -369,17 +435,26 @@ function MatchPage() {
         </p>
       )}
 
-      {current ? (
-        <div key={current.id} className="page-enter mt-5">
-          <div className="mx-auto w-52">
-            <Poster path={current.poster_path} title={current.title} />
+      {displayedWork ? (
+        <div className="mt-5">
+          <div className="match-stack mx-auto" aria-live="polite">
+            <div className="match-stack-back match-stack-back-far" aria-hidden="true" />
+            <div className="match-stack-back match-stack-back-near" aria-hidden="true" />
+            <div
+              key={displayedWork.id}
+              data-match-card={displayedWork.id}
+              data-exit-direction={cardExit?.direction}
+              className={`match-stack-current ${cardExit?.direction === "left" ? "match-card-exit-left" : cardExit?.direction === "right" ? "match-card-exit-right" : "match-card-arrive"}`}
+            >
+              <Poster path={displayedWork.poster_path} title={displayedWork.title} />
+            </div>
           </div>
-          <p className="mt-3 text-center font-semibold">{current.title}</p>
+          <p className="mt-4 text-center font-semibold">{displayedWork.title}</p>
           <p className="text-center text-xs text-muted-foreground">
             {[
-              current.media_type === "tv" ? "Série" : "Filme",
-              current.release_year,
-              current.genres.slice(0, 2).join(", "),
+              displayedWork.media_type === "tv" ? "Série" : "Filme",
+              displayedWork.release_year,
+              displayedWork.genres.slice(0, 2).join(", "),
             ]
               .filter(Boolean)
               .join(" · ")}
@@ -387,16 +462,16 @@ function MatchPage() {
           <div className="mt-5 flex items-center justify-center gap-6">
             <button
               aria-label="Não hoje"
-              disabled={vote.isPending}
-              onClick={() => vote.mutate({ workId: current.id, liked: false })}
+              disabled={Boolean(cardExit) || vote.isPending}
+              onClick={() => castVote(false)}
               className="pressable flex h-16 w-16 flex-col items-center justify-center rounded-full border border-border bg-card disabled:opacity-50"
             >
               <X className="h-6 w-6" />
             </button>
             <button
               aria-label="Quero ver hoje"
-              disabled={vote.isPending}
-              onClick={() => vote.mutate({ workId: current.id, liked: true })}
+              disabled={Boolean(cardExit) || vote.isPending}
+              onClick={() => castVote(true)}
               className="pressable flex h-16 w-16 items-center justify-center rounded-full bg-primary text-primary-foreground disabled:opacity-50"
             >
               <Heart className="h-6 w-6" />
@@ -407,15 +482,9 @@ function MatchPage() {
             <span>❤️ hoje</span>
           </div>
         </div>
-      ) : canExtend ? (
-        <div className="mt-6 text-center">
-          <button
-            onClick={() => extend.mutate()}
-            disabled={extend.isPending}
-            className="pressable min-h-12 rounded-2xl bg-primary px-6 font-semibold text-primary-foreground"
-          >
-            Ver mais opções
-          </button>
+      ) : canRequestExtension && (!extensionAttempted || extend.isPending) ? (
+        <div className="mt-6" aria-label="Preparando mais opções">
+          <Sk className="mx-auto aspect-[2/3] w-52 rounded-xl" />
         </div>
       ) : (
         <div className="mt-5">
@@ -446,7 +515,7 @@ function MatchPage() {
           {m.iWant ? "Aguardando o outro…" : "Encerrar"}
         </button>
       </div>
-      {deckDone && !canExtend && !m.iWant && (
+      {deckDone && !canRequestExtension && !m.iWant && (
         <p className="mt-2 text-center text-xs text-muted-foreground">
           Encerrar é necessário dos dois lados.
         </p>
