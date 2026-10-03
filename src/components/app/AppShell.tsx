@@ -1,5 +1,5 @@
 import { Link, useNavigate, useRouterState } from "@tanstack/react-router";
-import { useEffect, useState, type ReactNode } from "react";
+import { useEffect, useRef, useState, type MouseEvent, type ReactNode } from "react";
 import { Clapperboard, Dices, Film, Heart, Home, Popcorn, X } from "lucide-react";
 import { useSpace } from "@/lib/space";
 import { HomeSkeleton } from "./ui";
@@ -19,13 +19,9 @@ function PageGate({ children, skeleton }: { children: ReactNode; skeleton?: Reac
 }
 
 export function AppShell({ children, skeleton }: { children: ReactNode; skeleton?: ReactNode }) {
-  const path = useRouterState({ select: (s) => s.location.pathname });
   return (
     <div className="mx-auto min-h-screen max-w-md" style={{ paddingBottom: "var(--nav-space)" }}>
-      <div key={path} className="page-enter">
-        <PageGate skeleton={skeleton}>{children}</PageGate>
-      </div>
-      <BottomNav />
+      <PageGate skeleton={skeleton}>{children}</PageGate>
     </div>
   );
 }
@@ -40,12 +36,21 @@ const RADIAL = [
 export function BottomNav() {
   const [open, setOpen] = useState(false);
   const path = useRouterState({ select: (s) => s.location.pathname });
+  const navigate = useNavigate();
+  const pendingPath = useRef<(typeof RADIAL)[number]["to"] | null>(null);
 
   // Close on Escape and on browser/Android back.
   useEffect(() => {
     if (!open) return;
-    const onKey = (e: KeyboardEvent) => e.key === "Escape" && setOpen(false);
-    const onPop = () => setOpen(false);
+    const onKey = (e: KeyboardEvent) => {
+      if (e.key === "Escape" && window.history.state?.radial) window.history.back();
+    };
+    const onPop = () => {
+      setOpen(false);
+      const destination = pendingPath.current;
+      pendingPath.current = null;
+      if (destination) navigate({ to: destination });
+    };
     window.history.pushState({ radial: true }, "");
     window.addEventListener("keydown", onKey);
     window.addEventListener("popstate", onPop);
@@ -53,11 +58,18 @@ export function BottomNav() {
       window.removeEventListener("keydown", onKey);
       window.removeEventListener("popstate", onPop);
     };
-  }, [open]);
+  }, [navigate, open]);
 
   const close = (viaBack = true) => {
     if (viaBack && window.history.state?.radial) window.history.back();
     else setOpen(false);
+  };
+
+  const chooseRadial = (event: MouseEvent<HTMLAnchorElement>, to: (typeof RADIAL)[number]["to"]) => {
+    if (!open || !window.history.state?.radial) return;
+    event.preventDefault();
+    pendingPath.current = to;
+    window.history.back();
   };
 
   const tab = (active: boolean) =>
@@ -80,7 +92,7 @@ export function BottomNav() {
               <Link
                 key={item.to}
                 to={item.to}
-                onClick={() => setOpen(false)}
+                onClick={(event) => chooseRadial(event, item.to)}
                 tabIndex={open ? 0 : -1}
                 aria-hidden={!open}
                 style={{

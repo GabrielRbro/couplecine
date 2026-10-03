@@ -4,6 +4,7 @@ import { useServerFn } from "@tanstack/react-start";
 import { useEffect, useState } from "react";
 import { ArrowLeft, Search } from "lucide-react";
 import { toast } from "sonner";
+import { AnimatedSheet } from "@/components/app/AnimatedSheet";
 import { AppShell } from "@/components/app/AppShell";
 import { Poster } from "@/components/app/MediaCard";
 import { addWork, searchCatalog } from "@/lib/catalog.functions";
@@ -125,17 +126,14 @@ function AddPage() {
         )}
       </div>
 
-      {picked && (
-        <div
-          className="fade-enter fixed inset-0 z-[60] flex items-end bg-background/80"
-          onClick={() => !a.isPending && setPicked(null)}
-        >
-          <div
-            role="dialog"
-            aria-modal="true"
-            className="sheet-enter mx-auto w-full max-w-md rounded-t-3xl border border-border bg-card p-5 pb-[max(env(safe-area-inset-bottom),32px)]"
-            onClick={(e) => e.stopPropagation()}
-          >
+      <AnimatedSheet
+        open={Boolean(picked)}
+        onClose={() => setPicked(null)}
+        closeDisabled={a.isPending}
+        panelClassName="pb-[max(env(safe-area-inset-bottom),32px)]"
+      >
+        {picked && (
+          <>
             <p className="text-xs text-muted-foreground">Qual sua vontade de ver?</p>
             <h2 className="mt-1 text-lg font-semibold">{picked.title}</h2>
             <div className="mt-5 grid grid-cols-3 gap-2">
@@ -156,9 +154,9 @@ function AddPage() {
             <p className="mt-4 text-center text-xs text-muted-foreground">
               A escolha já salva a indicação.
             </p>
-          </div>
-        </div>
-      )}
+          </>
+        )}
+      </AnimatedSheet>
     </div>
   );
 }

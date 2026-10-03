@@ -1,9 +1,9 @@
 import { useState } from "react";
-import { createPortal } from "react-dom";
 import { useInfiniteQuery, useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { useServerFn } from "@tanstack/react-start";
 import { Check, Film, Plus, RotateCcw, Tv, X } from "lucide-react";
 import { toast } from "sonner";
+import { AnimatedSheet } from "@/components/app/AnimatedSheet";
 import { EmptyState, Poster } from "@/components/app/MediaCard";
 import { PosterGridSkeleton } from "@/components/app/ui";
 import { supabase } from "@/integrations/supabase/client";
@@ -198,19 +198,14 @@ export function DiscoverTab({ space, kind }: { space: SpaceInfo; kind: "all" | "
         </button>
       )}
 
-      {sheet &&
-        createPortal(
-          <div
-            className="fade-enter fixed inset-0 z-[60] flex items-end bg-background/80"
-            onClick={() => setSheet(null)}
-          >
-            <div
-              role="dialog"
-              aria-modal="true"
-              aria-labelledby="discover-sheet-title"
-              className="sheet-enter mx-auto w-full max-w-md rounded-t-3xl border border-border bg-card p-5 pb-[max(env(safe-area-inset-bottom),24px)]"
-              onClick={(e) => e.stopPropagation()}
-            >
+      <AnimatedSheet
+        open={Boolean(sheet)}
+        onClose={() => setSheet(null)}
+        labelledBy="discover-sheet-title"
+        panelClassName="pb-[max(env(safe-area-inset-bottom),24px)]"
+      >
+        {sheet && (
+          <>
               <h2 id="discover-sheet-title" className="line-clamp-1 text-lg font-semibold">
                 {sheet.item.title}
               </h2>
@@ -261,10 +256,9 @@ export function DiscoverTab({ space, kind }: { space: SpaceInfo; kind: "all" | "
                   </button>
                 </>
               )}
-            </div>
-          </div>,
-          document.body,
+          </>
         )}
+      </AnimatedSheet>
     </div>
   );
 }
