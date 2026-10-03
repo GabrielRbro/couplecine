@@ -8,6 +8,13 @@
       "when": 1791032582045,
       "tag": "0000_discard_votes_when_match_abandoned",
       "breakpoints": true
+    },
+    {
+      "idx": 1,
+      "version": "7",
+      "when": 1791039078984,
+      "tag": "0001_match_join_open_only",
+      "breakpoints": true
     }
   ]
 }
