@@ -444,7 +444,7 @@ function MatchPage() {
               key={displayedWork.id}
               data-match-card={displayedWork.id}
               data-exit-direction={cardExit?.direction}
-              className={`match-stack-current ${cardExit ? `match-card-exit-${cardExit.direction}` : "match-card-arrive"}`}
+              className={`match-stack-current ${cardExit?.direction === "left" ? "match-card-exit-left" : cardExit?.direction === "right" ? "match-card-exit-right" : "match-card-arrive"}`}
             >
               <Poster path={displayedWork.poster_path} title={displayedWork.title} />
             </div>
