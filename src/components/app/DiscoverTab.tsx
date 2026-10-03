@@ -138,7 +138,7 @@ export function DiscoverTab({ space, kind }: { space: SpaceInfo; kind: "all" | "
   };
   const rollbackRemove = (
     i: Item,
-    context: { wasGone: boolean; restoredItem?: Item; previousSheet: SheetState } | undefined,
+    context: { wasGone: boolean; restoredItem: Item | undefined; previousSheet: SheetState } | undefined,
   ) => {
     if (!context?.wasGone) show(i);
     if (context?.restoredItem)
