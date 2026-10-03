@@ -2,6 +2,7 @@
 
 - [x] Lote 1 aprovado: movimento contínuo, BottomNav persistente, histórico radial correto e sheets com saída suave
 - [x] Lote 2 aprovado: Match com pilha cenográfica, voto direcional e resultado fechado temático
+- [x] Lote 3 aprovado: Home como central rápida, ações coerentes e conteúdo contextual
 
 - [ ] A. Match secreto: RPCs no backend, ordem por usuário, desfazer, encerramento com os dois, continuar/abandonar, lote adaptativo, último resultado
 - [ ] B. Acesso: só o dono cria espaço; revisar RLS individual; excluir obra com confirmação + desfazer; cada um remove só a própria indicação
