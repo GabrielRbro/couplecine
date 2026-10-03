@@ -5,6 +5,7 @@ import { useEffect, useRef, useState } from "react";
 import { ArrowLeft, Check, Trash2, Tv } from "lucide-react";
 import { DetailSkeleton } from "@/components/app/ui";
 import { toast } from "sonner";
+import { AnimatedSheet } from "@/components/app/AnimatedSheet";
 import { AppShell } from "@/components/app/AppShell";
 import { Poster } from "@/components/app/MediaCard";
 import { supabase } from "@/integrations/supabase/client";
@@ -772,42 +773,34 @@ function IndicationsBlock({
           <Trash2 className="h-3.5 w-3.5" /> Excluir obra
         </button>
       </div>
-      {confirming && (
-        <div
-          className="fade-enter fixed inset-0 z-[60] flex items-end bg-background/80"
-          onClick={() => setConfirming(false)}
-        >
-          <div
-            role="dialog"
-            aria-modal="true"
-            aria-labelledby="del-title"
-            className="sheet-enter mx-auto w-full max-w-md rounded-t-3xl border border-border bg-card p-5 pb-[max(env(safe-area-inset-bottom),24px)]"
-            onClick={(e) => e.stopPropagation()}
+      <AnimatedSheet
+        open={confirming}
+        onClose={() => setConfirming(false)}
+        labelledBy="del-title"
+        panelClassName="pb-[max(env(safe-area-inset-bottom),24px)]"
+      >
+        <h3 id="del-title" className="text-lg font-semibold">
+          Excluir "{title}"?
+        </h3>
+        <p className="mt-2 text-sm text-muted-foreground">
+          A obra sai da biblioteca dos dois, junto com reações, notas, indicações, episódios e
+          sessões assistidas. Você terá alguns segundos para desfazer.
+        </p>
+        <div className="mt-5 grid grid-cols-2 gap-2">
+          <button
+            onClick={() => setConfirming(false)}
+            className="pressable min-h-12 rounded-xl border border-border text-sm"
           >
-            <h3 id="del-title" className="text-lg font-semibold">
-              Excluir "{title}"?
-            </h3>
-            <p className="mt-2 text-sm text-muted-foreground">
-              A obra sai da biblioteca dos dois, junto com reações, notas, indicações, episódios e
-              sessões assistidas. Você terá alguns segundos para desfazer.
-            </p>
-            <div className="mt-5 grid grid-cols-2 gap-2">
-              <button
-                onClick={() => setConfirming(false)}
-                className="pressable min-h-12 rounded-xl border border-border text-sm"
-              >
-                Cancelar
-              </button>
-              <button
-                onClick={deleteWork}
-                className="pressable min-h-12 rounded-xl bg-destructive text-sm font-semibold text-destructive-foreground"
-              >
-                Excluir para os dois
-              </button>
-            </div>
-          </div>
+            Cancelar
+          </button>
+          <button
+            onClick={deleteWork}
+            className="pressable min-h-12 rounded-xl bg-destructive text-sm font-semibold text-destructive-foreground"
+          >
+            Excluir para os dois
+          </button>
         </div>
-      )}
+      </AnimatedSheet>
     </section>
   );
 }

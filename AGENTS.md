@@ -14,3 +14,4 @@
 - Ordinary reads/writes go directly through the browser client with RLS scoped by space membership — fewer moving parts.
 - Indication activity is bumped by a DB trigger, never by reaction/rating edits — product rule for Indicações ordering.
 - Descobrir dismissals live in `discover_dismissals` (per user, RLS own) and never create a 👎 interest — dismissing only hides from that user's feed.
+- Authenticated app chrome lives in the `_authenticated` layout so the BottomNav persists across route changes; route pages render only their content shell.
