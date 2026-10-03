@@ -54,6 +54,7 @@ function MatchPage() {
     queryKey: ["match-open", spaceId],
     enabled: !!spaceId,
     queryFn: async () => {
+      if (!spaceId) return null;
       const { data } = await supabase
         .from("match_sessions")
         .select("id, work_ids, created_at, created_by")
@@ -102,6 +103,7 @@ function MatchPage() {
     queryKey: ["last-match", spaceId],
     enabled: !!spaceId,
     queryFn: async () => {
+      if (!spaceId) return null;
       const { data } = await supabase
         .from("match_sessions")
         .select("id, result_work_ids, closed_at")
@@ -242,6 +244,46 @@ function MatchPage() {
     </section>
   );
 
+  const abandonSheet = confirmingAbandon && (
+    <div
+      className="fade-enter fixed inset-0 z-[60] flex items-end bg-background/80"
+      onClick={() => !abandon.isPending && setConfirmingAbandon(false)}
+    >
+      <div
+        role="alertdialog"
+        aria-modal="true"
+        aria-labelledby="abandon-title"
+        className="sheet-enter mx-auto w-full max-w-md rounded-t-3xl border border-border bg-card p-5 pb-[max(env(safe-area-inset-bottom),24px)]"
+        onClick={(event) => event.stopPropagation()}
+      >
+        <AlertTriangle className="h-6 w-6 text-destructive" />
+        <h2 id="abandon-title" className="mt-3 text-lg font-semibold">
+          Abandonar este Match?
+        </h2>
+        <p className="mt-1 text-sm leading-relaxed text-muted-foreground">
+          Os votos temporários desta sessão serão descartados. O último resultado concluído
+          continuará salvo.
+        </p>
+        <div className="mt-5 grid grid-cols-2 gap-2">
+          <button
+            disabled={abandon.isPending}
+            onClick={() => setConfirmingAbandon(false)}
+            className="pressable min-h-12 rounded-xl border border-border text-sm font-medium"
+          >
+            Cancelar
+          </button>
+          <button
+            disabled={abandon.isPending}
+            onClick={() => abandon.mutate()}
+            className="pressable min-h-12 rounded-xl bg-destructive text-sm font-semibold text-destructive-foreground disabled:opacity-50"
+          >
+            Abandonar
+          </button>
+        </div>
+      </div>
+    </div>
+  );
+
   if (open.isLoading || (hasResumed && !me.data && !me.error))
     return (
       <div className="px-4 pt-6">
@@ -266,7 +308,7 @@ function MatchPage() {
               : "Seus votos e sua posição foram salvos. Continue de onde parou quando quiser."}
           </p>
           <button
-            onClick={() => setResumedSessionId(open.data.id)}
+            onClick={() => setResumedSessionId(open.data?.id ?? null)}
             className="pressable mt-5 flex min-h-14 w-full items-center justify-center gap-2 rounded-2xl bg-primary font-semibold text-primary-foreground"
           >
             <Play className="h-5 w-5" /> Continuar Match
@@ -280,45 +322,7 @@ function MatchPage() {
         </section>
         {lastResult}
 
-        {confirmingAbandon && (
-          <div
-            className="fade-enter fixed inset-0 z-[60] flex items-end bg-background/80"
-            onClick={() => !abandon.isPending && setConfirmingAbandon(false)}
-          >
-            <div
-              role="alertdialog"
-              aria-modal="true"
-              aria-labelledby="abandon-title"
-              className="sheet-enter mx-auto w-full max-w-md rounded-t-3xl border border-border bg-card p-5 pb-[max(env(safe-area-inset-bottom),24px)]"
-              onClick={(event) => event.stopPropagation()}
-            >
-              <AlertTriangle className="h-6 w-6 text-destructive" />
-              <h2 id="abandon-title" className="mt-3 text-lg font-semibold">
-                Abandonar este Match?
-              </h2>
-              <p className="mt-1 text-sm leading-relaxed text-muted-foreground">
-                Os votos temporários desta sessão serão descartados. O último resultado concluído
-                continuará salvo.
-              </p>
-              <div className="mt-5 grid grid-cols-2 gap-2">
-                <button
-                  disabled={abandon.isPending}
-                  onClick={() => setConfirmingAbandon(false)}
-                  className="pressable min-h-12 rounded-xl border border-border text-sm font-medium"
-                >
-                  Cancelar
-                </button>
-                <button
-                  disabled={abandon.isPending}
-                  onClick={() => abandon.mutate()}
-                  className="pressable min-h-12 rounded-xl bg-destructive text-sm font-semibold text-destructive-foreground disabled:opacity-50"
-                >
-                  Abandonar
-                </button>
-              </div>
-            </div>
-          </div>
-        )}
+        {abandonSheet}
       </div>
     );
   }
@@ -449,44 +453,7 @@ function MatchPage() {
         Abandonar este Match
       </button>
       {lastResult}
-      {confirmingAbandon && (
-        <div
-          className="fade-enter fixed inset-0 z-[60] flex items-end bg-background/80"
-          onClick={() => !abandon.isPending && setConfirmingAbandon(false)}
-        >
-          <div
-            role="alertdialog"
-            aria-modal="true"
-            aria-labelledby="active-abandon-title"
-            className="sheet-enter mx-auto w-full max-w-md rounded-t-3xl border border-border bg-card p-5 pb-[max(env(safe-area-inset-bottom),24px)]"
-            onClick={(event) => event.stopPropagation()}
-          >
-            <AlertTriangle className="h-6 w-6 text-destructive" />
-            <h2 id="active-abandon-title" className="mt-3 text-lg font-semibold">
-              Abandonar este Match?
-            </h2>
-            <p className="mt-1 text-sm text-muted-foreground">
-              Todos os votos temporários desta sessão serão descartados.
-            </p>
-            <div className="mt-5 grid grid-cols-2 gap-2">
-              <button
-                disabled={abandon.isPending}
-                onClick={() => setConfirmingAbandon(false)}
-                className="pressable min-h-12 rounded-xl border border-border text-sm font-medium"
-              >
-                Cancelar
-              </button>
-              <button
-                disabled={abandon.isPending}
-                onClick={() => abandon.mutate()}
-                className="pressable min-h-12 rounded-xl bg-destructive text-sm font-semibold text-destructive-foreground disabled:opacity-50"
-              >
-                Abandonar
-              </button>
-            </div>
-          </div>
-        </div>
-      )}
+      {abandonSheet}
     </div>
   );
 }
