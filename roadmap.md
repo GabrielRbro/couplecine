@@ -5,6 +5,7 @@
 - [x] Lote 3 aprovado: Home como central rápida, ações coerentes e conteúdo contextual
 - [x] Lote 4 aprovado: detalhes de filme e série com hierarquia, comparação e episódios seguros
 - [x] Microetapa 5A: rollback seguro e restauração individual previsível em Descobrir
+- [x] Microetapa 5B: quatro semânticas de histórico e resultado físico leve no Sorteio
 
 - [ ] A. Match secreto: RPCs no backend, ordem por usuário, desfazer, encerramento com os dois, continuar/abandonar, lote adaptativo, último resultado
 - [ ] B. Acesso: só o dono cria espaço; revisar RLS individual; excluir obra com confirmação + desfazer; cada um remove só a própria indicação
