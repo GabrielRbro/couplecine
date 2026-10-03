@@ -515,7 +515,7 @@ function MatchPage() {
           {m.iWant ? "Aguardando o outro…" : "Encerrar"}
         </button>
       </div>
-      {deckDone && !canExtend && !m.iWant && (
+      {deckDone && !canRequestExtension && !m.iWant && (
         <p className="mt-2 text-center text-xs text-muted-foreground">
           Encerrar é necessário dos dois lados.
         </p>
