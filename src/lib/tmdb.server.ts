@@ -62,6 +62,7 @@ export async function searchMulti(query: string): Promise<TmdbSearchItem[]> {
       const credits = await call(`/person/${personId}/combined_credits`);
       const cast = Array.isArray(credits["cast"]) ? (credits["cast"] as Json[]) : [];
       const crew = Array.isArray(credits["crew"]) ? (credits["crew"] as Json[]) : [];
+      const knownFor = Array.isArray(item["known_for"]) ? (item["known_for"] as Json[]) : [];
       const department = String(item["known_for_department"] ?? "");
       const relevant =
         department === "Directing"
@@ -70,9 +71,8 @@ export async function searchMulti(query: string): Promise<TmdbSearchItem[]> {
             ? cast
             : [...cast, ...crew.filter((credit) => credit["job"] === "Director")];
 
-      return relevant
+      return [...knownFor, ...relevant]
         .filter((credit) => credit["adult"] !== true)
-        .sort((a, b) => Number(b["popularity"] ?? 0) - Number(a["popularity"] ?? 0))
         .map((credit) => mapListItem(credit))
         .filter((credit): credit is TmdbSearchItem => Boolean(credit))
         .slice(0, 12);
