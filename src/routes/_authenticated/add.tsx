@@ -52,7 +52,7 @@ function AddPage() {
   return (
     <div className="px-4 pt-6">
       <div className="flex items-center gap-3">
-        <Link to="/" aria-label="Voltar"><ArrowLeft className="h-5 w-5" /></Link>
+        <Link to="/" aria-label="Voltar" className="pressable -ml-2 flex h-11 w-11 items-center justify-center rounded-full"><ArrowLeft className="h-5 w-5" /></Link>
         <h1 className="text-xl font-semibold">Adicionar obra</h1>
       </div>
       <form
@@ -61,13 +61,13 @@ function AddPage() {
       >
         <Search className="h-4 w-4 text-muted-foreground" />
         <input autoFocus value={q} onChange={(e) => setQ(e.target.value)} placeholder="Título, ator ou diretor" className="w-full bg-transparent py-3 text-sm outline-none" />
-        <button className="text-sm font-medium text-primary">Buscar</button>
+        <button className="pressable min-h-11 px-1 text-sm font-medium text-primary">Buscar</button>
       </form>
-      {s.isPending && !s.data && <p className="mt-6 text-sm text-muted-foreground">Buscando…</p>}
+      {s.isPending && !s.data && <div className="mt-4 space-y-2">{[0, 1, 2].map((i) => <div key={i} className="skeleton h-[88px] rounded-xl" />)}</div>}
       {s.error && <p className="mt-6 text-sm text-destructive">{s.error.message}</p>}
       <div className="mt-4 space-y-2">
         {s.data?.map((r) => (
-          <button key={`${r.mediaType}-${r.tmdbId}`} onClick={() => setPicked(r)} className="flex w-full items-center gap-3 rounded-xl border border-border bg-card p-2 text-left">
+          <button key={`${r.mediaType}-${r.tmdbId}`} onClick={() => setPicked(r)} className="pressable flex w-full items-center gap-3 rounded-xl border border-border bg-card p-2 text-left">
             <div className="w-12 shrink-0"><Poster path={r.posterPath} title={r.title} className="rounded-lg" /></div>
             <div className="min-w-0 flex-1">
               <p className="line-clamp-1 font-medium">{r.title}</p>
@@ -79,13 +79,13 @@ function AddPage() {
       </div>
 
       {picked && (
-        <div className="fixed inset-0 z-[60] flex items-end bg-background/80" onClick={() => !a.isPending && setPicked(null)}>
-          <div className="mx-auto w-full max-w-md rounded-t-3xl border border-border bg-card p-5 pb-8" onClick={(e) => e.stopPropagation()}>
+        <div className="fade-enter fixed inset-0 z-[60] flex items-end bg-background/80" onClick={() => !a.isPending && setPicked(null)}>
+          <div role="dialog" aria-modal="true" className="sheet-enter mx-auto w-full max-w-md rounded-t-3xl border border-border bg-card p-5 pb-[max(env(safe-area-inset-bottom),32px)]" onClick={(e) => e.stopPropagation()}>
             <p className="text-xs text-muted-foreground">Qual sua vontade de ver?</p>
             <h2 className="mt-1 text-lg font-semibold">{picked.title}</h2>
             <div className="mt-5 grid grid-cols-3 gap-2">
               {ADD_REACTIONS.map((r) => (
-                <button key={r} disabled={a.isPending} onClick={() => a.mutate(r)} className="rounded-2xl border border-border bg-secondary py-4 disabled:opacity-50">
+                <button key={r} disabled={a.isPending} onClick={() => a.mutate(r)} className="pressable rounded-2xl border border-border bg-secondary py-4 disabled:opacity-50">
                   <span className="text-2xl">{REACTION_EMOJI[r]}</span>
                   <span className="mt-1 block text-xs text-muted-foreground">{REACTION_LABEL[r]}</span>
                 </button>

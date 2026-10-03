@@ -30,6 +30,11 @@ function Onboarding() {
     },
   });
 
+  const canCreate = useQuery({
+    queryKey: ["can-create-space"],
+    queryFn: async () => (await supabase.rpc("can_create_space")).data === true,
+  });
+
   async function done() {
     await qc.invalidateQueries({ queryKey: ["space"] });
     navigate({ to: "/", replace: true });
@@ -61,6 +66,13 @@ function Onboarding() {
         <>
           <p className="mt-2 text-muted-foreground">Você foi convidado para um espaço de casal.</p>
           <button onClick={join} disabled={busy} className="mt-8 rounded-xl bg-primary px-4 py-3 font-semibold text-primary-foreground">Entrar no espaço</button>
+        </>
+      ) : invite.isLoading || canCreate.isLoading ? (
+        <div className="mt-6 space-y-3"><div className="skeleton h-4 w-3/4" /><div className="skeleton h-12 w-full rounded-xl" /></div>
+      ) : !canCreate.data ? (
+        <>
+          <p className="mt-2 text-muted-foreground">Este app é privado. Sua conta ({space?.email}) não tem convite.</p>
+          <button onClick={async () => { await supabase.auth.signOut(); navigate({ to: "/auth", replace: true }); }} className="pressable mt-8 min-h-12 rounded-xl border border-border px-4 font-medium">Sair</button>
         </>
       ) : (
         <>

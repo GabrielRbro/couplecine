@@ -1,8 +1,9 @@
-import { createFileRoute, Link, useRouter } from "@tanstack/react-router";
+import { createFileRoute, Link, useNavigate, useRouter } from "@tanstack/react-router";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { useServerFn } from "@tanstack/react-start";
-import { useState } from "react";
-import { ArrowLeft, Check, Tv } from "lucide-react";
+import { useEffect, useRef, useState } from "react";
+import { ArrowLeft, Check, Trash2, Tv } from "lucide-react";
+import { DetailSkeleton } from "@/components/app/ui";
 import { toast } from "sonner";
 import { AppShell } from "@/components/app/AppShell";
 import { Poster } from "@/components/app/MediaCard";
@@ -14,7 +15,7 @@ import { firstName, useSpace, type SpaceInfo } from "@/lib/space";
 export const Route = createFileRoute("/_authenticated/work/$id")({
   head: () => ({ meta: [{ title: "Detalhes — AppCinema" }, { name: "description", content: "Detalhes, reações e notas do casal." }] }),
   component: () => (
-    <AppShell>
+    <AppShell skeleton={<DetailSkeleton />}>
       <WorkPage />
     </AppShell>
   ),
@@ -26,7 +27,7 @@ function useWork(id: string) {
   return useQuery({
     queryKey: ["work", id],
     queryFn: async () => {
-      const [w, i, r, p, s, e, j] = await Promise.all([
+      const [w, i, r, p, s, e, j, n] = await Promise.all([
         supabase.from("works").select("*").eq("id", id).maybeSingle(),
         supabase.from("interests").select("user_id, reaction").eq("work_id", id),
         supabase.from("ratings").select("user_id, score").eq("work_id", id),
@@ -34,9 +35,10 @@ function useWork(id: string) {
         supabase.from("series_states").select("*").eq("work_id", id).maybeSingle(),
         supabase.from("watch_events").select("id, season_number, episode_number, watched_at").eq("work_id", id),
         supabase.from("joint_watch_sessions").select("id, watched_at").eq("work_id", id).order("watched_at", { ascending: false }),
+        supabase.from("indications").select("id, indicated_by, created_at, renewed_at").eq("work_id", id).order("created_at"),
       ]);
       if (!w.data) throw new Error("Obra não encontrada");
-      return { work: w.data, interests: i.data ?? [], ratings: r.data ?? [], prior: p.data ?? [], state: s.data, events: e.data ?? [], sessions: j.data ?? [] };
+      return { work: w.data, interests: i.data ?? [], ratings: r.data ?? [], prior: p.data ?? [], state: s.data, events: e.data ?? [], sessions: j.data ?? [], indications: n.data ?? [] };
     },
   });
 }
@@ -51,7 +53,7 @@ function WorkPage() {
   const qc = useQueryClient();
   const refresh = () => { qc.invalidateQueries({ queryKey: ["work", id] }); qc.invalidateQueries({ queryKey: ["library"] }); };
 
-  if (isLoading || !space) return <p className="p-6 text-sm text-muted-foreground">Carregando…</p>;
+  if (isLoading || !space) return <DetailSkeleton />;
   if (error || !data) return <p className="p-6 text-sm text-destructive">Obra não encontrada.</p>;
   const { work } = data;
   const m = meta.data;
@@ -62,7 +64,7 @@ function WorkPage() {
       <div className="relative h-44 overflow-hidden">
         {tmdbImage(work.backdrop_path, "w780") && <img src={tmdbImage(work.backdrop_path, "w780")!} alt="" className="h-full w-full object-cover opacity-40" />}
         <div className="absolute inset-0 bg-gradient-to-b from-transparent to-background" />
-        <button onClick={() => router.history.back()} aria-label="Voltar" className="absolute left-4 top-4 flex h-9 w-9 items-center justify-center rounded-full bg-background/70"><ArrowLeft className="h-5 w-5" /></button>
+        <button onClick={() => router.history.back()} aria-label="Voltar" className="pressable hit absolute left-4 top-4 flex h-10 w-10 items-center justify-center rounded-full bg-background/70"><ArrowLeft className="h-5 w-5" /></button>
       </div>
       <div className="-mt-24 relative flex gap-4 px-4">
         <div className="w-28 shrink-0"><Poster path={work.poster_path} title={work.title} /></div>
@@ -107,6 +109,7 @@ function WorkPage() {
           </section>
         )}
         {meta.error && <p className="text-xs text-muted-foreground">{meta.error.message}</p>}
+        <IndicationsBlock space={space} workId={id} title={work.title} indications={data.indications} onChange={refresh} />
         <section>
           <h2 className="mb-2 font-semibold">Posts relacionados</h2>
           <p className="text-xs text-muted-foreground">Importação de posts chega numa próxima fase.</p>
@@ -245,9 +248,13 @@ function SeriesBlock({ space, workId, state, events, seasons, overview, onChange
   space: SpaceInfo; workId: string; state: { id: string; status: string } | null; events: Ev[];
   seasons: { seasonNumber: number; name: string; episodeCount: number }[]; overview: string | null; onChange: () => void;
 }) {
-  const [season, setSeason] = useState(1);
+  const seenInit = new Set(events.map((e) => `${e.season_number}:${e.episode_number}`));
+  let firstNext = 1;
+  outer: for (const s of seasons) for (let e = 1; e <= s.episodeCount; e++) if (!seenInit.has(`${s.seasonNumber}:${e}`)) { firstNext = s.seasonNumber; break outer; }
+  const [season, setSeason] = useState<number | null>(null);
+  const activeSeason = season ?? (seasons.length ? firstNext : 1);
   const fetchSeason = useServerFn(getSeasonEpisodes);
-  const eps = useQuery({ queryKey: ["season", workId, season], queryFn: () => fetchSeason({ data: { workId, season } }), staleTime: 3600_000, enabled: seasons.length > 0 });
+  const eps = useQuery({ queryKey: ["season", workId, activeSeason], queryFn: () => fetchSeason({ data: { workId, season: activeSeason } }), staleTime: 3600_000, enabled: seasons.length > 0 });
   const seen = new Set(events.map((e) => `${e.season_number}:${e.episode_number}`));
   const total = seasons.reduce((a, s) => a + s.episodeCount, 0);
 
@@ -300,33 +307,105 @@ function SeriesBlock({ space, workId, state, events, seasons, overview, onChange
           <h2 className="mb-3 font-semibold">Temporadas</h2>
           <div className="no-scrollbar -mx-4 flex gap-2 overflow-x-auto px-4">
             {seasons.map((s) => (
-              <button key={s.seasonNumber} onClick={() => setSeason(s.seasonNumber)} className={`shrink-0 rounded-full px-3 py-1.5 text-xs font-medium ${season === s.seasonNumber ? "bg-primary text-primary-foreground" : "border border-border text-muted-foreground"}`}>
+              <button key={s.seasonNumber} onClick={() => setSeason(s.seasonNumber)} className={`hit pressable shrink-0 rounded-full px-3.5 py-1.5 text-xs font-medium ${activeSeason === s.seasonNumber ? "bg-primary text-primary-foreground" : "border border-border text-muted-foreground"}`}>
                 T{s.seasonNumber}
               </button>
             ))}
           </div>
           <div className="no-scrollbar -mx-4 mt-3 flex gap-3 overflow-x-auto px-4">
-            {eps.isLoading && <p className="text-xs text-muted-foreground">Carregando episódios…</p>}
+            {eps.isLoading && Array.from({ length: 3 }, (_, i) => <div key={i} className="w-52 shrink-0"><div className="skeleton aspect-video w-full rounded-xl" /><div className="skeleton mt-2 h-3 w-3/4" /><div className="skeleton mt-1.5 h-3 w-full" /></div>)}
             {eps.data?.map((ep) => {
               const done = seen.has(`${ep.seasonNumber}:${ep.episodeNumber}`);
+              const isNext = next?.s === ep.seasonNumber && next?.e === ep.episodeNumber;
               const img = tmdbImage(ep.stillPath, "w300");
               return (
-                <button key={ep.episodeNumber} onClick={() => toggle(ep.seasonNumber, ep.episodeNumber)} className="w-44 shrink-0 text-left">
+                <button key={ep.episodeNumber} onClick={() => toggle(ep.seasonNumber, ep.episodeNumber)} aria-label={`${done ? "Desmarcar" : "Marcar"} T${ep.seasonNumber}E${ep.episodeNumber}`} className={`pressable w-52 shrink-0 rounded-xl text-left ${isNext ? "ring-2 ring-primary ring-offset-2 ring-offset-background" : ""}`}>
                   <div className="relative aspect-video overflow-hidden rounded-xl bg-muted">
+                    {isNext && <span className="absolute left-2 top-2 rounded-md bg-primary px-1.5 py-0.5 text-[10px] font-semibold text-primary-foreground">Próximo</span>}
                     {img && <img src={img} alt="" loading="lazy" className={`h-full w-full object-cover ${done ? "opacity-50" : ""}`} />}
-                    <span className={`absolute right-2 top-2 flex h-6 w-6 items-center justify-center rounded-full ${done ? "bg-primary text-primary-foreground" : "border border-foreground/40 bg-background/60"}`}>
+                    <span className={`absolute right-2 top-2 flex h-7 w-7 items-center justify-center rounded-full transition-colors duration-150 ${done ? "bg-primary text-primary-foreground" : "border border-foreground/40 bg-background/60"}`}>
                       {done && <Check className="h-3.5 w-3.5" />}
                     </span>
                   </div>
-                  <p className="mt-1.5 line-clamp-1 text-xs font-medium">E{ep.episodeNumber} · {ep.name}</p>
-                  <p className="text-[11px] text-muted-foreground">{formatRuntime(ep.runtimeMinutes) ?? formatDate(ep.airDate) ?? ""}</p>
+                  <p className="mt-1.5 line-clamp-1 text-xs font-semibold">T{ep.seasonNumber}E{ep.episodeNumber} · {ep.name}</p>
+                  {ep.overview && <p className="mt-0.5 line-clamp-2 text-[11px] leading-snug text-muted-foreground">{ep.overview}</p>}
+                  <p className="mt-0.5 text-[11px] text-muted-foreground">{[formatRuntime(ep.runtimeMinutes), formatDate(ep.airDate)].filter(Boolean).join(" · ")}{done ? " · Assistido" : ""}</p>
                 </button>
               );
             })}
           </div>
         </section>
       )}
-      <Link to="/library" className="hidden" />
     </>
+  );
+}
+
+type Ind = { id: string; indicated_by: string; created_at: string; renewed_at: string | null };
+
+function IndicationsBlock({ space, workId, title, indications, onChange }: { space: SpaceInfo; workId: string; title: string; indications: Ind[]; onChange: () => void }) {
+  const navigate = useNavigate();
+  const qc = useQueryClient();
+  const [confirming, setConfirming] = useState(false);
+  const timer = useRef<ReturnType<typeof setTimeout> | null>(null);
+  useEffect(() => () => { if (timer.current) clearTimeout(timer.current); }, []);
+  const mine = indications.find((i) => i.indicated_by === space.userId);
+  const nameOf = (id: string) => (id === space.userId ? "Você" : firstName(space.partner?.display_name));
+
+  async function removeMine() {
+    if (!mine) return;
+    const { error } = await supabase.from("indications").delete().eq("id", mine.id);
+    if (error) toast.error("Não foi possível remover."); else { toast.success("Sua indicação foi removida"); onChange(); }
+  }
+
+  // Delayed delete: the work disappears from lists right away, and is only deleted after the undo window.
+  function deleteWork() {
+    setConfirming(false);
+    const prev = qc.getQueriesData({ queryKey: ["library"] });
+    qc.setQueriesData({ queryKey: ["library"] }, (old: unknown) => (Array.isArray(old) ? old.filter((w: { id: string }) => w.id !== workId) : old));
+    navigate({ to: "/library" });
+    let undone = false;
+    toast(`"${title}" excluída`, {
+      duration: 6000,
+      action: { label: "Desfazer", onClick: () => { undone = true; if (timer.current) clearTimeout(timer.current); prev.forEach(([k, v]) => qc.setQueryData(k, v)); } },
+    });
+    timer.current = setTimeout(async () => {
+      if (undone) return;
+      const { error } = await supabase.from("works").delete().eq("id", workId);
+      if (error) toast.error("Não foi possível excluir a obra.");
+      qc.invalidateQueries({ queryKey: ["library"] });
+    }, 6000);
+  }
+
+  return (
+    <section className="rounded-2xl border border-border bg-card p-4">
+      <h2 className="font-semibold">Indicações</h2>
+      {indications.length === 0 ? (
+        <p className="mt-1 text-xs text-muted-foreground">Ninguém indicou ainda.</p>
+      ) : (
+        <ul className="mt-1 space-y-0.5 text-xs text-muted-foreground">
+          {indications.map((i) => (
+            <li key={i.id}>{nameOf(i.indicated_by)} indicou em {formatDate(i.created_at)}{i.renewed_at ? ` · reindicou em ${formatDate(i.renewed_at)}` : ""}</li>
+          ))}
+        </ul>
+      )}
+      <div className="mt-3 flex gap-2">
+        {mine && <button onClick={removeMine} className="pressable min-h-11 flex-1 rounded-xl border border-border text-xs">Remover minha indicação</button>}
+        <button onClick={() => setConfirming(true)} className="pressable flex min-h-11 flex-1 items-center justify-center gap-1.5 rounded-xl border border-destructive/40 text-xs text-destructive">
+          <Trash2 className="h-3.5 w-3.5" /> Excluir obra
+        </button>
+      </div>
+      {confirming && (
+        <div className="fade-enter fixed inset-0 z-[60] flex items-end bg-background/80" onClick={() => setConfirming(false)}>
+          <div role="dialog" aria-modal="true" aria-labelledby="del-title" className="sheet-enter mx-auto w-full max-w-md rounded-t-3xl border border-border bg-card p-5 pb-[max(env(safe-area-inset-bottom),24px)]" onClick={(e) => e.stopPropagation()}>
+            <h3 id="del-title" className="text-lg font-semibold">Excluir "{title}"?</h3>
+            <p className="mt-2 text-sm text-muted-foreground">A obra sai da biblioteca dos dois, junto com reações, notas, indicações, episódios e sessões assistidas. Você terá alguns segundos para desfazer.</p>
+            <div className="mt-5 grid grid-cols-2 gap-2">
+              <button onClick={() => setConfirming(false)} className="pressable min-h-12 rounded-xl border border-border text-sm">Cancelar</button>
+              <button onClick={deleteWork} className="pressable min-h-12 rounded-xl bg-destructive text-sm font-semibold text-destructive-foreground">Excluir para os dois</button>
+            </div>
+          </div>
+        </div>
+      )}
+    </section>
   );
 }

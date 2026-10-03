@@ -50,7 +50,7 @@ function SettingsPage() {
   return (
     <div className="space-y-6 px-4 pt-6">
       <div className="flex items-center gap-3">
-        <Link to="/" aria-label="Voltar"><ArrowLeft className="h-5 w-5" /></Link>
+        <Link to="/" aria-label="Voltar" className="pressable -ml-2 flex h-11 w-11 items-center justify-center rounded-full"><ArrowLeft className="h-5 w-5" /></Link>
         <h1 className="text-xl font-semibold">Configurações</h1>
       </div>
 
