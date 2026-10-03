@@ -69,7 +69,7 @@ export type LibraryWork = {
   ratings: { user_id: string; score: number }[];
   indications: { indicated_by: string; created_at: string; renewed_at: string | null }[];
   joint_watch_sessions: { id: string; watched_at: string }[];
-  watch_events: { id: string; watched_at: string }[];
+  watch_events: { id: string; watched_at: string; season_number: number | null; episode_number: number | null }[];
   series_states: { status: string; next_season: number | null; next_episode: number | null }[];
   work_metadata_cache: { seasons: { episodeCount: number }[] | null }[];
 };
@@ -83,7 +83,7 @@ export function useLibrary(spaceId: string | null | undefined) {
       const { data, error } = await supabase
         .from("works")
         .select(
-          "id, title, original_title, media_type, poster_path, release_year, activity_at, created_at, genres, interests(user_id, reaction), ratings(user_id, score), indications(indicated_by, created_at, renewed_at), joint_watch_sessions(id, watched_at), watch_events(id, watched_at), series_states(status, next_season, next_episode), work_metadata_cache(seasons:payload->seasons)",
+          "id, title, original_title, media_type, poster_path, release_year, activity_at, created_at, genres, interests(user_id, reaction), ratings(user_id, score), indications(indicated_by, created_at, renewed_at), joint_watch_sessions(id, watched_at), watch_events(id, watched_at, season_number, episode_number), series_states(status, next_season, next_episode), work_metadata_cache(seasons:payload->seasons)",
         )
         .eq("space_id", spaceId!)
         .order("activity_at", { ascending: false });

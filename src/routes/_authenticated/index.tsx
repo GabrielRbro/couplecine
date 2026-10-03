@@ -71,7 +71,7 @@ function Home() {
         .select("result_work_ids, closed_at")
         .eq("space_id", space!.spaceId!)
         .eq("status", "closed")
-        .order("closed_at", { ascending: false })
+        .not("closed_at", "is", null).order("closed_at", { ascending: false })
         .limit(1)
         .maybeSingle();
       return data;
