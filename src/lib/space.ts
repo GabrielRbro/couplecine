@@ -110,6 +110,8 @@ export function isWatched(w: LibraryWork) {
 
 /** Shown in Indicações: never watched, series in progress, or re-indicated after the last watch. */
 export function isIndicated(w: LibraryWork) {
+  // Works saved only as "Já assisti" (Descobrir) have no indication and never appear here.
+  if (w.indications.length === 0) return false;
   if (!isWatched(w) || w.series_states[0]?.status === "watching") return true;
   const last = (
     xs: { watched_at?: string; created_at?: string }[],
