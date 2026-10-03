@@ -164,3 +164,52 @@ export async function fetchSeason(tmdbId: number, seasonNumber: number): Promise
     airDate: str(episode["air_date"]),
   }));
 }
+
+function mapListItem(item: Json, fallback?: "movie" | "tv"): TmdbSearchItem | null {
+  const t = item["media_type"] ?? fallback;
+  if (t !== "movie" && t !== "tv") return null;
+  const tv = t === "tv";
+  return {
+    mediaType: t,
+    tmdbId: Number(item["id"]),
+    title: String(item[tv ? "name" : "title"] ?? "Sem título"),
+    originalTitle: str(item[tv ? "original_name" : "original_title"]),
+    posterPath: str(item["poster_path"]),
+    backdropPath: str(item["backdrop_path"]),
+    year: year(item[tv ? "first_air_date" : "release_date"]),
+    overview: str(item["overview"]),
+  };
+}
+
+async function list(path: string, page: number, fallback?: "movie" | "tv") {
+  const data = await call(path, { page: String(page) });
+  const results = Array.isArray(data["results"]) ? (data["results"] as Json[]) : [];
+  return results.map((r) => mapListItem(r, fallback)).filter((x): x is TmdbSearchItem => !!x);
+}
+
+/** Recommendations from a few seed works, interleaved with trending as fallback. */
+export async function discoverFeed(
+  seeds: { mediaType: "movie" | "tv"; tmdbId: number }[],
+  page: number,
+): Promise<TmdbSearchItem[]> {
+  const lists = await Promise.all([
+    ...seeds.map((s) =>
+      list(`/${s.mediaType}/${s.tmdbId}/recommendations`, page, s.mediaType).catch(() => []),
+    ),
+    list("/trending/all/week", page),
+  ]);
+  const out: TmdbSearchItem[] = [];
+  const seen = new Set<string>();
+  const max = Math.max(0, ...lists.map((l) => l.length));
+  for (let i = 0; i < max; i++)
+    for (const l of lists) {
+      const it = l[i];
+      if (!it) continue;
+      const k = `${it.mediaType}:${it.tmdbId}`;
+      if (!seen.has(k)) {
+        seen.add(k);
+        out.push(it);
+      }
+    }
+  return out;
+}
