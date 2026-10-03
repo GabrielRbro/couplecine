@@ -128,6 +128,7 @@ export type Database = {
           created_at: string
           id: string
           indicated_by: string
+          renewed_at: string | null
           space_id: string
           work_id: string
         }
@@ -135,6 +136,7 @@ export type Database = {
           created_at?: string
           id?: string
           indicated_by: string
+          renewed_at?: string | null
           space_id: string
           work_id: string
         }
@@ -142,6 +144,7 @@ export type Database = {
           created_at?: string
           id?: string
           indicated_by?: string
+          renewed_at?: string | null
           space_id?: string
           work_id?: string
         }
@@ -269,27 +272,65 @@ export type Database = {
           },
         ]
       }
+      match_participants: {
+        Row: {
+          card_limit: number
+          close_requested: boolean
+          extended_after_goal: boolean
+          session_id: string
+          user_id: string
+        }
+        Insert: {
+          card_limit: number
+          close_requested?: boolean
+          extended_after_goal?: boolean
+          session_id: string
+          user_id: string
+        }
+        Update: {
+          card_limit?: number
+          close_requested?: boolean
+          extended_after_goal?: boolean
+          session_id?: string
+          user_id?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "match_participants_session_id_fkey"
+            columns: ["session_id"]
+            isOneToOne: false
+            referencedRelation: "match_sessions"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
       match_sessions: {
         Row: {
+          closed_at: string | null
           created_at: string
           created_by: string
           id: string
+          result_work_ids: string[] | null
           space_id: string
           status: string
           work_ids: string[]
         }
         Insert: {
+          closed_at?: string | null
           created_at?: string
           created_by: string
           id?: string
+          result_work_ids?: string[] | null
           space_id: string
           status?: string
           work_ids?: string[]
         }
         Update: {
+          closed_at?: string | null
           created_at?: string
           created_by?: string
           id?: string
+          result_work_ids?: string[] | null
           space_id?: string
           status?: string
           work_ids?: string[]
@@ -811,14 +852,19 @@ export type Database = {
       [_ in never]: never
     }
     Functions: {
-      match_status: {
+      can_create_space: { Args: never; Returns: boolean }
+      match_abandon: { Args: { _session: string }; Returns: undefined }
+      match_extend: { Args: { _session: string }; Returns: number }
+      match_join: { Args: { _session: string }; Returns: number }
+      match_partner_wants_close: {
         Args: { _session: string }
-        Returns: {
-          matches: string[]
-          user_id: string
-          voted: number
-        }[]
+        Returns: boolean
       }
+      match_request_close: {
+        Args: { _session: string; _want: boolean }
+        Returns: string
+      }
+      match_undo: { Args: { _session: string }; Returns: string }
     }
     Enums: {
       interest_reaction: "fire" | "like" | "neutral" | "dislike"
