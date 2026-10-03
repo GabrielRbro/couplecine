@@ -87,11 +87,9 @@ export const addWork = createServerFn({ method: "POST" })
       .eq("work_id", workId)
       .eq("indicated_by", userId)
       .maybeSingle();
-    // Re-indicating (e.g. after watching) creates a fresh indication so the work returns to Indicações.
-    if (mine) await supabase.from("indications").delete().eq("id", mine.id);
-    {
-      await supabase.from("indications").insert({ space_id: data.spaceId, work_id: workId, indicated_by: userId });
-    }
+    // One active indication per person: re-indicating renews it (keeps original author/date) and bumps activity via trigger.
+    if (mine) await supabase.from("indications").update({ renewed_at: new Date().toISOString() }).eq("id", mine.id);
+    else await supabase.from("indications").insert({ space_id: data.spaceId, work_id: workId, indicated_by: userId });
     const { error: ie } = await supabase
       .from("interests")
       .upsert({ work_id: workId, user_id: userId, reaction: data.reaction }, { onConflict: "user_id,work_id" });

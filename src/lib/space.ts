@@ -15,26 +15,23 @@ export type SpaceInfo = {
 export function useSpace() {
   return useQuery({
     queryKey: ["space"],
-    staleTime: 60_000,
+    staleTime: 5 * 60_000,
     queryFn: async (): Promise<SpaceInfo> => {
-      const { data: auth } = await supabase.auth.getUser();
-      const user = auth.user;
+      // getSession reads the local session (no network); RLS still validates every query.
+      const { data: sess } = await supabase.auth.getSession();
+      const user = sess.session?.user;
       if (!user) throw new Error("Sessão expirada");
       const fallback: Person = {
         id: user.id,
         display_name: (user.user_metadata?.["full_name"] as string) ?? user.email ?? "Você",
         avatar_url: (user.user_metadata?.["avatar_url"] as string) ?? null,
       };
-      const { data: m } = await supabase
-        .from("space_members")
-        .select("space_id")
-        .eq("user_id", user.id)
-        .limit(1)
-        .maybeSingle();
+      // Profiles RLS only returns me + partner, so both queries can run in parallel.
+      const [{ data: m }, { data: profiles }] = await Promise.all([
+        supabase.from("space_members").select("space_id").eq("user_id", user.id).limit(1).maybeSingle(),
+        supabase.from("profiles").select("id, display_name, avatar_url"),
+      ]);
       if (!m) return { userId: user.id, email: user.email ?? "", spaceId: null, me: fallback, partner: null };
-      const { data: members } = await supabase.from("space_members").select("user_id").eq("space_id", m.space_id);
-      const ids = (members ?? []).map((x) => x.user_id);
-      const { data: profiles } = await supabase.from("profiles").select("id, display_name, avatar_url").in("id", ids);
       const me = profiles?.find((p) => p.id === user.id) ?? fallback;
       const partner = profiles?.find((p) => p.id !== user.id) ?? null;
       return { userId: user.id, email: user.email ?? "", spaceId: m.space_id, me, partner };
@@ -58,21 +55,23 @@ export type LibraryWork = {
   genres: string[];
   interests: { user_id: string; reaction: Reaction }[];
   ratings: { user_id: string; score: number }[];
-  indications: { indicated_by: string; created_at: string }[];
+  indications: { indicated_by: string; created_at: string; renewed_at: string | null }[];
   joint_watch_sessions: { id: string; watched_at: string }[];
   watch_events: { id: string; watched_at: string }[];
-  series_states: { status: string }[];
+  series_states: { status: string; next_season: number | null; next_episode: number | null }[];
+  work_metadata_cache: { seasons: { episodeCount: number }[] | null }[];
 };
 
 export function useLibrary(spaceId: string | null | undefined) {
   return useQuery({
     queryKey: ["library", spaceId],
     enabled: !!spaceId,
+    staleTime: 30_000,
     queryFn: async (): Promise<LibraryWork[]> => {
       const { data, error } = await supabase
         .from("works")
         .select(
-          "id, title, original_title, media_type, poster_path, release_year, activity_at, created_at, genres, interests(user_id, reaction), ratings(user_id, score), indications(indicated_by, created_at), joint_watch_sessions(id, watched_at), watch_events(id, watched_at), series_states(status)",
+          "id, title, original_title, media_type, poster_path, release_year, activity_at, created_at, genres, interests(user_id, reaction), ratings(user_id, score), indications(indicated_by, created_at, renewed_at), joint_watch_sessions(id, watched_at), watch_events(id, watched_at), series_states(status, next_season, next_episode), work_metadata_cache(seasons:payload->seasons)",
         )
         .eq("space_id", spaceId!)
         .order("activity_at", { ascending: false });
@@ -87,6 +86,7 @@ export function useLibrary(spaceId: string | null | undefined) {
         joint_watch_sessions: arr(w["joint_watch_sessions"]),
         watch_events: arr(w["watch_events"]),
         series_states: arr(w["series_states"]),
+        work_metadata_cache: arr(w["work_metadata_cache"]),
       })) as unknown as LibraryWork[];
     },
   });
@@ -101,5 +101,12 @@ export function isIndicated(w: LibraryWork) {
   if (!isWatched(w) || w.series_states[0]?.status === "watching") return true;
   const last = (xs: { watched_at?: string; created_at?: string }[], k: "watched_at" | "created_at") =>
     xs.reduce((m, x) => Math.max(m, new Date((x as Record<string, string>)[k] ?? 0).getTime()), 0);
-  return last(w.indications, "created_at") > Math.max(last(w.joint_watch_sessions, "watched_at"), last(w.watch_events, "watched_at"));
+  const ind = w.indications.reduce((mx, i) => Math.max(mx, new Date(i.renewed_at ?? i.created_at).getTime(), new Date(i.created_at).getTime()), 0);
+  return ind > Math.max(last(w.joint_watch_sessions, "watched_at"), last(w.watch_events, "watched_at"));
+}
+
+export function seriesProgress(w: LibraryWork) {
+  const total = (w.work_metadata_cache[0]?.seasons ?? []).reduce((a, s) => a + (s.episodeCount ?? 0), 0);
+  const st = w.series_states[0];
+  return { seen: w.watch_events.length, total, next: st?.next_season && st?.next_episode ? `T${st.next_season}E${st.next_episode}` : null };
 }
