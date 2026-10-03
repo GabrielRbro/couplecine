@@ -1,7 +1,7 @@
 import { createFileRoute, Link } from "@tanstack/react-router";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
-import { useMemo } from "react";
-import { Heart, Undo2, X } from "lucide-react";
+import { useMemo, useState } from "react";
+import { AlertTriangle, Heart, Play, Undo2, X } from "lucide-react";
 import { toast } from "sonner";
 import { AppShell } from "@/components/app/AppShell";
 import { EmptyState, Poster } from "@/components/app/MediaCard";
@@ -47,6 +47,8 @@ function MatchPage() {
   const { data: works = [] } = useLibrary(space?.spaceId);
   const qc = useQueryClient();
   const spaceId = space?.spaceId;
+  const [resumedSessionId, setResumedSessionId] = useState<string | null>(null);
+  const [confirmingAbandon, setConfirmingAbandon] = useState(false);
 
   const open = useQuery({
     queryKey: ["match-open", spaceId],
@@ -54,35 +56,37 @@ function MatchPage() {
     queryFn: async () => {
       const { data } = await supabase
         .from("match_sessions")
-        .select("id, work_ids, created_at")
-        .eq("space_id", spaceId!)
+        .select("id, work_ids, created_at, created_by")
+        .eq("space_id", spaceId)
         .eq("status", "open")
         .maybeSingle();
       return data;
     },
   });
   const sid = open.data?.id;
+  const hasResumed = !!sid && resumedSessionId === sid;
 
   // Everything below returns only *my* data, plus a boolean "partner asked to close".
   const me = useQuery({
     queryKey: ["match-me", sid],
-    enabled: !!sid,
+    enabled: !!sid && hasResumed,
     refetchInterval: 5000,
     queryFn: async () => {
-      const { data: limit, error } = await supabase.rpc("match_join", { _session: sid! });
+      if (!sid) throw new Error("Sessão indisponível.");
+      const { data: limit, error } = await supabase.rpc("match_join", { _session: sid });
       if (error) throw error;
       const [{ data: votes }, { data: part }, { data: partnerWants }] = await Promise.all([
         supabase
           .from("match_votes")
           .select("work_id, created_at")
-          .eq("session_id", sid!)
+          .eq("session_id", sid)
           .order("created_at"),
         supabase
           .from("match_participants")
           .select("close_requested")
-          .eq("session_id", sid!)
+          .eq("session_id", sid)
           .maybeSingle(),
-        supabase.rpc("match_partner_wants_close", { _session: sid! }),
+        supabase.rpc("match_partner_wants_close", { _session: sid }),
       ]);
       return {
         limit: limit ?? 0,
@@ -101,7 +105,7 @@ function MatchPage() {
       const { data } = await supabase
         .from("match_sessions")
         .select("id, result_work_ids, closed_at")
-        .eq("space_id", spaceId!)
+        .eq("space_id", spaceId)
         .eq("status", "closed")
         .not("closed_at", "is", null).order("closed_at", { ascending: false })
         .limit(1)
@@ -120,9 +124,10 @@ function MatchPage() {
     mutationFn: async () => {
       const ids = works.filter(isIndicated).map((w) => w.id);
       if (ids.length < 2) throw new Error("Adicione pelo menos 2 indicações antes de começar.");
+      if (!spaceId || !space) throw new Error("Espaço indisponível.");
       const { error } = await supabase
         .from("match_sessions")
-        .insert({ space_id: spaceId!, created_by: space!.userId, work_ids: ids });
+        .insert({ space_id: spaceId, created_by: space.userId, work_ids: ids });
       if (error) throw new Error("Já existe um Match em andamento.");
     },
     onSuccess: invalidate,
@@ -130,9 +135,10 @@ function MatchPage() {
   });
   const vote = useMutation({
     mutationFn: async ({ workId, liked }: { workId: string; liked: boolean }) => {
+      if (!sid || !space) throw new Error("Sessão indisponível.");
       const { error } = await supabase
         .from("match_votes")
-        .insert({ session_id: sid!, user_id: space!.userId, work_id: workId, liked });
+        .insert({ session_id: sid, user_id: space.userId, work_id: workId, liked });
       if (error) throw error;
     },
     onMutate: ({ workId }) => {
@@ -148,22 +154,25 @@ function MatchPage() {
   });
   const undo = useMutation({
     mutationFn: async () => {
-      const { error } = await supabase.rpc("match_undo", { _session: sid! });
+      if (!sid) throw new Error("Sessão indisponível.");
+      const { error } = await supabase.rpc("match_undo", { _session: sid });
       if (error) throw error;
     },
     onSuccess: () => qc.invalidateQueries({ queryKey: ["match-me", sid] }),
   });
   const extend = useMutation({
     mutationFn: async () => {
-      const { error } = await supabase.rpc("match_extend", { _session: sid! });
+      if (!sid) throw new Error("Sessão indisponível.");
+      const { error } = await supabase.rpc("match_extend", { _session: sid });
       if (error) throw error;
     },
     onSuccess: () => qc.invalidateQueries({ queryKey: ["match-me", sid] }),
   });
   const requestClose = useMutation({
     mutationFn: async (want: boolean) => {
+      if (!sid) throw new Error("Sessão indisponível.");
       const { data, error } = await supabase.rpc("match_request_close", {
-        _session: sid!,
+        _session: sid,
         _want: want,
       });
       if (error) throw error;
@@ -176,13 +185,17 @@ function MatchPage() {
   });
   const abandon = useMutation({
     mutationFn: async () => {
-      const { error } = await supabase.rpc("match_abandon", { _session: sid! });
+      if (!sid) throw new Error("Sessão indisponível.");
+      const { error } = await supabase.rpc("match_abandon", { _session: sid });
       if (error) throw error;
     },
     onSuccess: () => {
+      setConfirmingAbandon(false);
+      setResumedSessionId(null);
       toast("Match abandonado. Nada foi revelado.");
       invalidate();
     },
+    onError: () => toast.error("Não foi possível abandonar este Match."),
   });
 
   const byId = useMemo(() => new Map(works.map((w) => [w.id, w])), [works]);
@@ -208,7 +221,9 @@ function MatchPage() {
     </>
   );
 
-  const results = (last.data?.result_work_ids ?? []).map((id) => byId.get(id)).filter(Boolean);
+  const results = (last.data?.result_work_ids ?? [])
+    .map((id) => byId.get(id))
+    .filter((work): work is NonNullable<typeof work> => Boolean(work));
   const lastResult = last.data && (
     <section className="mt-8">
       <h2 className="mb-3 text-base font-semibold">Último resultado</h2>
@@ -217,9 +232,9 @@ function MatchPage() {
       ) : (
         <div className="grid grid-cols-3 gap-3">
           {results.map((w) => (
-            <Link key={w!.id} to="/work/$id" params={{ id: w!.id }} className="pressable">
-              <Poster path={w!.poster_path} title={w!.title} />
-              <p className="mt-1 line-clamp-1 text-xs font-medium">{w!.title}</p>
+            <Link key={w.id} to="/work/$id" params={{ id: w.id }} className="pressable">
+              <Poster path={w.poster_path} title={w.title} />
+              <p className="mt-1 line-clamp-1 text-xs font-medium">{w.title}</p>
             </Link>
           ))}
         </div>
@@ -227,13 +242,86 @@ function MatchPage() {
     </section>
   );
 
-  if (open.isLoading || (sid && !me.data))
+  if (open.isLoading || (hasResumed && !me.data && !me.error))
     return (
       <div className="px-4 pt-6">
         {header}
         <Sk className="mx-auto mt-6 aspect-[2/3] w-52 rounded-xl" />
       </div>
     );
+
+  if (open.data && !hasResumed) {
+    const createdByPartner = open.data.created_by !== space.userId;
+    return (
+      <div className="px-4 pt-6">
+        {header}
+        <section className="fade-enter mt-6 rounded-2xl border border-border bg-card p-5">
+          <div className="flex h-11 w-11 items-center justify-center rounded-full bg-secondary text-primary">
+            <Heart className="h-5 w-5" />
+          </div>
+          <h2 className="mt-4 text-lg font-semibold">Match em andamento</h2>
+          <p className="mt-1 text-sm leading-relaxed text-muted-foreground">
+            {createdByPartner
+              ? `${partnerName} iniciou este Match. Seus votos continuam privados até vocês dois encerrarem.`
+              : "Seus votos e sua posição foram salvos. Continue de onde parou quando quiser."}
+          </p>
+          <button
+            onClick={() => setResumedSessionId(open.data.id)}
+            className="pressable mt-5 flex min-h-14 w-full items-center justify-center gap-2 rounded-2xl bg-primary font-semibold text-primary-foreground"
+          >
+            <Play className="h-5 w-5" /> Continuar Match
+          </button>
+          <button
+            onClick={() => setConfirmingAbandon(true)}
+            className="pressable mt-2 min-h-12 w-full rounded-xl text-sm text-muted-foreground"
+          >
+            Abandonar Match
+          </button>
+        </section>
+        {lastResult}
+
+        {confirmingAbandon && (
+          <div
+            className="fade-enter fixed inset-0 z-[60] flex items-end bg-background/80"
+            onClick={() => !abandon.isPending && setConfirmingAbandon(false)}
+          >
+            <div
+              role="alertdialog"
+              aria-modal="true"
+              aria-labelledby="abandon-title"
+              className="sheet-enter mx-auto w-full max-w-md rounded-t-3xl border border-border bg-card p-5 pb-[max(env(safe-area-inset-bottom),24px)]"
+              onClick={(event) => event.stopPropagation()}
+            >
+              <AlertTriangle className="h-6 w-6 text-destructive" />
+              <h2 id="abandon-title" className="mt-3 text-lg font-semibold">
+                Abandonar este Match?
+              </h2>
+              <p className="mt-1 text-sm leading-relaxed text-muted-foreground">
+                Os votos temporários desta sessão serão descartados. O último resultado concluído
+                continuará salvo.
+              </p>
+              <div className="mt-5 grid grid-cols-2 gap-2">
+                <button
+                  disabled={abandon.isPending}
+                  onClick={() => setConfirmingAbandon(false)}
+                  className="pressable min-h-12 rounded-xl border border-border text-sm font-medium"
+                >
+                  Cancelar
+                </button>
+                <button
+                  disabled={abandon.isPending}
+                  onClick={() => abandon.mutate()}
+                  className="pressable min-h-12 rounded-xl bg-destructive text-sm font-semibold text-destructive-foreground disabled:opacity-50"
+                >
+                  Abandonar
+                </button>
+              </div>
+            </div>
+          </div>
+        )}
+      </div>
+    );
+  }
 
   if (!open.data)
     return (
@@ -253,10 +341,13 @@ function MatchPage() {
       </div>
     );
 
-  const m = me.data!;
+  if (!me.data) {
+    return <div className="px-4 pt-6 text-sm text-destructive">Não foi possível retomar este Match.</div>;
+  }
+  const m = me.data;
   const myDeck = deck.slice(0, m.limit);
   const next = myDeck.find((id) => !m.voted.has(id));
-  const current = next ? byId.get(next)! : null;
+  const current = next ? (byId.get(next) ?? null) : null;
   const deckDone = !current;
   const canExtend = deckDone && m.limit < deck.length;
 
@@ -352,14 +443,50 @@ function MatchPage() {
         </p>
       )}
       <button
-        onClick={() =>
-          confirm("Abandonar este Match? Os votos não serão revelados.") && abandon.mutate()
-        }
+        onClick={() => setConfirmingAbandon(true)}
         className="pressable mt-6 min-h-11 w-full rounded-xl text-sm text-muted-foreground"
       >
         Abandonar este Match
       </button>
       {lastResult}
+      {confirmingAbandon && (
+        <div
+          className="fade-enter fixed inset-0 z-[60] flex items-end bg-background/80"
+          onClick={() => !abandon.isPending && setConfirmingAbandon(false)}
+        >
+          <div
+            role="alertdialog"
+            aria-modal="true"
+            aria-labelledby="active-abandon-title"
+            className="sheet-enter mx-auto w-full max-w-md rounded-t-3xl border border-border bg-card p-5 pb-[max(env(safe-area-inset-bottom),24px)]"
+            onClick={(event) => event.stopPropagation()}
+          >
+            <AlertTriangle className="h-6 w-6 text-destructive" />
+            <h2 id="active-abandon-title" className="mt-3 text-lg font-semibold">
+              Abandonar este Match?
+            </h2>
+            <p className="mt-1 text-sm text-muted-foreground">
+              Todos os votos temporários desta sessão serão descartados.
+            </p>
+            <div className="mt-5 grid grid-cols-2 gap-2">
+              <button
+                disabled={abandon.isPending}
+                onClick={() => setConfirmingAbandon(false)}
+                className="pressable min-h-12 rounded-xl border border-border text-sm font-medium"
+              >
+                Cancelar
+              </button>
+              <button
+                disabled={abandon.isPending}
+                onClick={() => abandon.mutate()}
+                className="pressable min-h-12 rounded-xl bg-destructive text-sm font-semibold text-destructive-foreground disabled:opacity-50"
+              >
+                Abandonar
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
     </div>
   );
 }
