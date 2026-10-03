@@ -1,4 +1,4 @@
-import { useState } from "react";
+import { useRef, useState } from "react";
 import { useInfiniteQuery, useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { useServerFn } from "@tanstack/react-start";
 import { Check, Film, Plus, RotateCcw, Tv, X } from "lucide-react";
@@ -7,23 +7,42 @@ import { AnimatedSheet } from "@/components/app/AnimatedSheet";
 import { EmptyState, Poster } from "@/components/app/MediaCard";
 import { PosterGridSkeleton } from "@/components/app/ui";
 import { supabase } from "@/integrations/supabase/client";
-import { addWork, getDiscover, markSeenBefore } from "@/lib/catalog.functions";
+import {
+  addWork,
+  getDiscover,
+  getDismissedDiscover,
+  markSeenBefore,
+} from "@/lib/catalog.functions";
 import { ADD_REACTIONS, REACTION_EMOJI, REACTION_LABEL, formatScore } from "@/lib/format";
 import type { SpaceInfo } from "@/lib/space";
 
 type Item = NonNullable<Awaited<ReturnType<typeof getDiscover>>>["items"][number];
+type SheetState = { item: Item; mode: "react" | "seen" } | null;
 const SCORES = Array.from({ length: 21 }, (_, i) => i / 2);
 const k = (i: { mediaType: string; tmdbId: number }) => `${i.mediaType}:${i.tmdbId}`;
 
 export function DiscoverTab({ space, kind }: { space: SpaceInfo; kind: "all" | "movie" | "tv" }) {
   const qc = useQueryClient();
   const fetchFeed = useServerFn(getDiscover);
+  const fetchDismissed = useServerFn(getDismissedDiscover);
   const add = useServerFn(addWork);
   const seen = useServerFn(markSeenBefore);
   const [gone, setGone] = useState<Set<string>>(new Set());
-  const [sheet, setSheet] = useState<{ item: Item; mode: "react" | "seen" } | null>(null);
-  const hide = (i: Item) => setGone((g) => new Set(g).add(k(i)));
+  const goneRef = useRef(gone);
+  const [restored, setRestored] = useState<Map<string, Item>>(new Map());
+  const [sheet, setSheet] = useState<SheetState>(null);
+  const setGoneState = (next: Set<string>) => {
+    goneRef.current = next;
+    setGone(next);
+  };
+  const hide = (i: Item) => setGoneState(new Set(goneRef.current).add(k(i)));
+  const show = (i: Item) => {
+    const next = new Set(goneRef.current);
+    next.delete(k(i));
+    setGoneState(next);
+  };
   const refreshLibrary = () => qc.invalidateQueries({ queryKey: ["library", space.spaceId] });
+  const dismissedKey = ["discover-dismissed", space.userId, space.spaceId] as const;
 
   const feed = useInfiniteQuery({
     queryKey: ["discover", space.spaceId],
@@ -32,15 +51,9 @@ export function DiscoverTab({ space, kind }: { space: SpaceInfo; kind: "all" | "
     queryFn: ({ pageParam }) => fetchFeed({ data: { spaceId: space.spaceId, page: pageParam } }),
     getNextPageParam: (last, pages) => (last?.hasMore ? pages.length + 1 : undefined),
   });
-  const dismissedCount = useQuery({
-    queryKey: ["discover-dismissed", space.userId],
-    queryFn: async () => {
-      const { count } = await supabase
-        .from("discover_dismissals")
-        .select("id", { count: "exact", head: true })
-        .eq("user_id", space.userId);
-      return count ?? 0;
-    },
+  const dismissed = useQuery({
+    queryKey: dismissedKey,
+    queryFn: () => fetchDismissed({ data: { spaceId: space.spaceId } }),
   });
 
   const dismiss = useMutation({
@@ -53,57 +66,110 @@ export function DiscoverTab({ space, kind }: { space: SpaceInfo; kind: "all" | "
         );
       if (error) throw error;
     },
-    onMutate: hide,
-    onSuccess: () => qc.invalidateQueries({ queryKey: ["discover-dismissed", space.userId] }),
-    onError: (_e, i) => {
-      setGone((g) => {
-        const n = new Set(g);
-        n.delete(k(i));
-        return n;
+    onMutate: async (i) => {
+      await qc.cancelQueries({ queryKey: dismissedKey });
+      const previous = qc.getQueryData<Item[]>(dismissedKey);
+      hide(i);
+      setRestored((current) => {
+        const next = new Map(current);
+        next.delete(k(i));
+        return next;
       });
+      qc.setQueryData<Item[]>(dismissedKey, (current = []) =>
+        current.some((item) => k(item) === k(i)) ? current : [i, ...current],
+      );
+      return { previous };
+    },
+    onSuccess: () => qc.invalidateQueries({ queryKey: dismissedKey }),
+    onError: (_e, i, context) => {
+      show(i);
+      qc.setQueryData(dismissedKey, context?.previous);
       toast.error("Não foi possível dispensar.");
     },
   });
   const restore = useMutation({
-    mutationFn: async () => {
+    mutationFn: async (i: Item) => {
       const { error } = await supabase
         .from("discover_dismissals")
         .delete()
-        .eq("user_id", space.userId);
+        .eq("user_id", space.userId)
+        .eq("media_type", i.mediaType)
+        .eq("tmdb_id", i.tmdbId);
       if (error) throw error;
     },
-    onSuccess: () => {
-      setGone(new Set());
-      qc.invalidateQueries({ queryKey: ["discover-dismissed", space.userId] });
-      qc.resetQueries({ queryKey: ["discover", space.spaceId] });
-      toast("Dispensados restaurados.");
+    onMutate: async (i) => {
+      await qc.cancelQueries({ queryKey: dismissedKey });
+      const previous = qc.getQueryData<Item[]>(dismissedKey);
+      qc.setQueryData<Item[]>(dismissedKey, (current = []) =>
+        current.filter((item) => k(item) !== k(i)),
+      );
+      show(i);
+      setRestored((current) => new Map(current).set(k(i), i));
+      return { previous };
+    },
+    onSuccess: (_data, i) => {
+      qc.invalidateQueries({ queryKey: dismissedKey });
+      toast.success(`${i.title} restaurado`);
+    },
+    onError: (_error, i, context) => {
+      qc.setQueryData(dismissedKey, context?.previous);
+      hide(i);
+      setRestored((current) => {
+        const next = new Map(current);
+        next.delete(k(i));
+        return next;
+      });
+      toast.error("Não foi possível restaurar.");
     },
   });
+  const optimisticallyRemove = (i: Item) => {
+    const key = k(i);
+    const wasGone = goneRef.current.has(key);
+    const restoredItem = restored.get(key);
+    const previousSheet = sheet;
+    hide(i);
+    setRestored((current) => {
+      const next = new Map(current);
+      next.delete(key);
+      return next;
+    });
+    setSheet(null);
+    return { wasGone, restoredItem, previousSheet };
+  };
+  const rollbackRemove = (
+    i: Item,
+    context: { wasGone: boolean; restoredItem: Item | undefined; previousSheet: SheetState } | undefined,
+  ) => {
+    if (!context?.wasGone) show(i);
+    if (context?.restoredItem)
+      setRestored((current) => new Map(current).set(k(i), context.restoredItem as Item));
+    setSheet(context?.previousSheet ?? null);
+  };
   const indicate = useMutation({
     mutationFn: ({ i, reaction }: { i: Item; reaction: "fire" | "like" | "neutral" }) =>
       add({ data: { spaceId: space.spaceId, mediaType: i.mediaType, tmdbId: i.tmdbId, reaction } }),
-    onMutate: ({ i }) => {
-      hide(i);
-      setSheet(null);
-    },
+    onMutate: ({ i }) => optimisticallyRemove(i),
     onSuccess: (_d, { i }) => {
       toast.success(`${i.title} indicado`);
       refreshLibrary();
     },
-    onError: (e) => toast.error(e.message),
+    onError: (e, { i }, context) => {
+      rollbackRemove(i, context);
+      toast.error(e.message);
+    },
   });
   const markSeen = useMutation({
     mutationFn: ({ i, score }: { i: Item; score: number | null }) =>
       seen({ data: { spaceId: space.spaceId, mediaType: i.mediaType, tmdbId: i.tmdbId, score } }),
-    onMutate: ({ i }) => {
-      hide(i);
-      setSheet(null);
-    },
+    onMutate: ({ i }) => optimisticallyRemove(i),
     onSuccess: (_d, { i }) => {
       toast.success(`${i.title} marcado como já assistido`);
       refreshLibrary();
     },
-    onError: (e) => toast.error(e.message),
+    onError: (e, { i }, context) => {
+      rollbackRemove(i, context);
+      toast.error(e.message);
+    },
   });
 
   const seenKeys = new Set<string>();
@@ -111,13 +177,29 @@ export function DiscoverTab({ space, kind }: { space: SpaceInfo; kind: "all" | "
     .flatMap((p) => p?.items ?? [])
     .filter((i) => {
       const key = k(i);
-      if (seenKeys.has(key) || gone.has(key)) return false;
+      if (seenKeys.has(key) || gone.has(key) || restored.has(key)) return false;
       seenKeys.add(key);
       return kind === "all" || i.mediaType === kind;
     });
 
   return (
     <div className="mt-5">
+      {restored.size > 0 && (
+        <section className="mb-6" aria-labelledby="restored-title">
+          <div className="mb-3 flex items-center justify-between">
+            <h2 id="restored-title" className="text-sm font-semibold">
+              Restaurados
+            </h2>
+            <span className="text-xs text-muted-foreground">Disponíveis novamente</span>
+          </div>
+          <DiscoverGrid
+            items={[...restored.values()]}
+            onReact={(item) => setSheet({ item, mode: "react" })}
+            onSeen={(item) => setSheet({ item, mode: "seen" })}
+            onDismiss={(item) => dismiss.mutate(item)}
+          />
+        </section>
+      )}
       {feed.isLoading ? (
         <PosterGridSkeleton />
       ) : feed.isError ? (
@@ -130,53 +212,15 @@ export function DiscoverTab({ space, kind }: { space: SpaceInfo; kind: "all" | "
             Tentar de novo
           </button>
         </div>
-      ) : items.length === 0 && !feed.hasNextPage ? (
+      ) : items.length === 0 && restored.size === 0 && !feed.hasNextPage ? (
         <EmptyState title="Nada novo por aqui" text="Volte depois para mais sugestões." />
       ) : (
-        <div className="grid grid-cols-2 gap-x-3 gap-y-5">
-          {items.map((i) => (
-            <div key={k(i)} className="fade-enter min-w-0">
-              <div className="relative">
-                <Poster path={i.posterPath} title={i.title} />
-                <span className="absolute left-2 top-2 rounded-md bg-background/80 p-1 text-muted-foreground">
-                  {i.mediaType === "tv" ? (
-                    <Tv className="h-3.5 w-3.5" />
-                  ) : (
-                    <Film className="h-3.5 w-3.5" />
-                  )}
-                </span>
-              </div>
-              <p className="mt-2 line-clamp-1 text-sm font-semibold">{i.title}</p>
-              <p className="text-xs text-muted-foreground">
-                {[i.mediaType === "tv" ? "Série" : "Filme", i.year].filter(Boolean).join(" · ")}
-                {i.existingWorkId && " · na biblioteca"}
-              </p>
-              <div className="mt-2 grid grid-cols-3 gap-1.5">
-                <button
-                  aria-label={`Indicar ${i.title}`}
-                  onClick={() => setSheet({ item: i, mode: "react" })}
-                  className="pressable flex min-h-11 items-center justify-center rounded-xl bg-secondary text-foreground"
-                >
-                  <Plus className="h-4 w-4" />
-                </button>
-                <button
-                  aria-label={`Já assisti ${i.title}`}
-                  onClick={() => setSheet({ item: i, mode: "seen" })}
-                  className="pressable flex min-h-11 items-center justify-center rounded-xl border border-border text-muted-foreground"
-                >
-                  <Check className="h-4 w-4" />
-                </button>
-                <button
-                  aria-label={`Dispensar ${i.title}`}
-                  onClick={() => dismiss.mutate(i)}
-                  className="pressable flex min-h-11 items-center justify-center rounded-xl border border-border text-muted-foreground"
-                >
-                  <X className="h-4 w-4" />
-                </button>
-              </div>
-            </div>
-          ))}
-        </div>
+        <DiscoverGrid
+          items={items}
+          onReact={(item) => setSheet({ item, mode: "react" })}
+          onSeen={(item) => setSheet({ item, mode: "seen" })}
+          onDismiss={(item) => dismiss.mutate(item)}
+        />
       )}
 
       {feed.hasNextPage && !feed.isLoading && (
@@ -188,14 +232,38 @@ export function DiscoverTab({ space, kind }: { space: SpaceInfo; kind: "all" | "
           {feed.isFetchingNextPage ? "Carregando…" : "Carregar mais"}
         </button>
       )}
-      {(dismissedCount.data ?? 0) > 0 && (
-        <button
-          onClick={() => restore.mutate()}
-          disabled={restore.isPending}
-          className="pressable mt-3 flex min-h-11 w-full items-center justify-center gap-1.5 rounded-xl text-sm text-muted-foreground disabled:opacity-50"
-        >
-          <RotateCcw className="h-4 w-4" /> Restaurar dispensados ({dismissedCount.data})
-        </button>
+      {(dismissed.data?.length ?? 0) > 0 && (
+        <section className="mt-7 border-t border-border pt-5" aria-labelledby="dismissed-title">
+          <div className="mb-2 flex items-center justify-between">
+            <h2 id="dismissed-title" className="text-sm font-semibold">
+              Dispensados
+            </h2>
+            <span className="text-xs text-muted-foreground">{dismissed.data?.length}</span>
+          </div>
+          <div className="space-y-1">
+            {dismissed.data?.map((item) => (
+              <div key={k(item)} className="flex min-h-14 items-center gap-3 py-1">
+                <div className="w-9 shrink-0 overflow-hidden rounded-md">
+                  <Poster path={item.posterPath} title={item.title} className="rounded-md" />
+                </div>
+                <div className="min-w-0 flex-1">
+                  <p className="truncate text-sm font-medium">{item.title}</p>
+                  <p className="text-xs text-muted-foreground">
+                    {item.mediaType === "tv" ? "Série" : "Filme"}
+                  </p>
+                </div>
+                <button
+                  aria-label={`Restaurar ${item.title}`}
+                  onClick={() => restore.mutate(item)}
+                  disabled={restore.isPending}
+                  className="pressable flex min-h-11 shrink-0 items-center gap-1.5 rounded-xl px-3 text-xs text-muted-foreground disabled:opacity-50"
+                >
+                  <RotateCcw className="h-4 w-4" /> Restaurar
+                </button>
+              </div>
+            ))}
+          </div>
+        </section>
       )}
 
       <AnimatedSheet
@@ -216,13 +284,14 @@ export function DiscoverTab({ space, kind }: { space: SpaceInfo; kind: "all" | "
                     {ADD_REACTIONS.map((r) => (
                       <button
                         key={r}
+                        disabled={indicate.isPending || markSeen.isPending}
                         onClick={() =>
                           indicate.mutate({
                             i: sheet.item,
                             reaction: r as "fire" | "like" | "neutral",
                           })
                         }
-                        className="pressable flex min-h-16 flex-col items-center justify-center rounded-xl border border-border"
+                        className="pressable flex min-h-16 flex-col items-center justify-center rounded-xl border border-border disabled:opacity-50"
                       >
                         <span className="text-2xl">{REACTION_EMOJI[r]}</span>
                         <span className="text-[11px] text-muted-foreground">
@@ -241,16 +310,18 @@ export function DiscoverTab({ space, kind }: { space: SpaceInfo; kind: "all" | "
                     {SCORES.map((s) => (
                       <button
                         key={s}
+                        disabled={indicate.isPending || markSeen.isPending}
                         onClick={() => markSeen.mutate({ i: sheet.item, score: s })}
-                        className="pressable min-h-11 rounded-lg border border-border text-xs"
+                        className="pressable min-h-11 rounded-lg border border-border text-xs disabled:opacity-50"
                       >
                         {formatScore(s)}
                       </button>
                     ))}
                   </div>
                   <button
+                    disabled={indicate.isPending || markSeen.isPending}
                     onClick={() => markSeen.mutate({ i: sheet.item, score: null })}
-                    className="pressable mt-3 min-h-11 w-full rounded-xl bg-secondary text-sm font-medium"
+                    className="pressable mt-3 min-h-11 w-full rounded-xl bg-secondary text-sm font-medium disabled:opacity-50"
                   >
                     Salvar sem nota
                   </button>
@@ -259,6 +330,61 @@ export function DiscoverTab({ space, kind }: { space: SpaceInfo; kind: "all" | "
           </>
         )}
       </AnimatedSheet>
+    </div>
+  );
+}
+
+function DiscoverGrid({
+  items,
+  onReact,
+  onSeen,
+  onDismiss,
+}: {
+  items: Item[];
+  onReact: (item: Item) => void;
+  onSeen: (item: Item) => void;
+  onDismiss: (item: Item) => void;
+}) {
+  return (
+    <div className="grid grid-cols-2 gap-x-3 gap-y-5">
+      {items.map((i) => (
+        <div key={k(i)} className="fade-enter min-w-0">
+          <div className="relative">
+            <Poster path={i.posterPath} title={i.title} />
+            <span className="absolute left-2 top-2 rounded-md bg-background/80 p-1 text-muted-foreground">
+              {i.mediaType === "tv" ? <Tv className="h-3.5 w-3.5" /> : <Film className="h-3.5 w-3.5" />}
+            </span>
+          </div>
+          <p className="mt-2 line-clamp-1 text-sm font-semibold">{i.title}</p>
+          <p className="text-xs text-muted-foreground">
+            {[i.mediaType === "tv" ? "Série" : "Filme", i.year].filter(Boolean).join(" · ")}
+            {i.existingWorkId && " · na biblioteca"}
+          </p>
+          <div className="mt-2 grid grid-cols-3 gap-1.5">
+            <button
+              aria-label={`Indicar ${i.title}`}
+              onClick={() => onReact(i)}
+              className="pressable flex min-h-11 items-center justify-center rounded-xl bg-secondary text-foreground"
+            >
+              <Plus className="h-4 w-4" />
+            </button>
+            <button
+              aria-label={`Já assisti ${i.title}`}
+              onClick={() => onSeen(i)}
+              className="pressable flex min-h-11 items-center justify-center rounded-xl border border-border text-muted-foreground"
+            >
+              <Check className="h-4 w-4" />
+            </button>
+            <button
+              aria-label={`Dispensar ${i.title}`}
+              onClick={() => onDismiss(i)}
+              className="pressable flex min-h-11 items-center justify-center rounded-xl border border-border text-muted-foreground"
+            >
+              <X className="h-4 w-4" />
+            </button>
+          </div>
+        </div>
+      ))}
     </div>
   );
 }
