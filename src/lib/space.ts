@@ -131,14 +131,21 @@ export function isIndicated(w: LibraryWork) {
 }
 
 export function seriesProgress(w: LibraryWork) {
-  const total = (w.work_metadata_cache[0]?.seasons ?? []).reduce(
-    (a, s) => a + (s.episodeCount ?? 0),
-    0,
-  );
-  const st = w.series_states[0];
-  return {
-    seen: w.watch_events.length,
-    total,
-    next: st?.next_season && st?.next_episode ? `T${st.next_season}E${st.next_episode}` : null,
-  };
+  const seasons = (w.work_metadata_cache[0]?.seasons ?? []) as { seasonNumber?: number; episodeCount: number }[];
+  const total = seasons.reduce((a, s) => a + (s.episodeCount ?? 0), 0);
+  const seen = new Set(w.watch_events.map((e) => `${e.season_number}:${e.episode_number}`));
+  let next: string | null = null;
+  outer: for (const s of seasons) {
+    for (let e = 1; e <= s.episodeCount; e++) {
+      if (s.seasonNumber && !seen.has(`${s.seasonNumber}:${e}`)) {
+        next = `T${s.seasonNumber}E${e}`;
+        break outer;
+      }
+    }
+  }
+  if (!seasons.length) {
+    const st = w.series_states[0];
+    next = st?.next_season && st?.next_episode ? `T${st.next_season}E${st.next_episode}` : null;
+  }
+  return { seen: seen.size, total, next };
 }
