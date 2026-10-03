@@ -51,22 +51,40 @@ export function posterUrl(path: string | null, size: "w342" | "w780" | "original
 export async function searchMulti(query: string): Promise<TmdbSearchItem[]> {
   const data = await call("/search/multi", { query, include_adult: "false", page: "1" });
   const results = Array.isArray(data["results"]) ? (data["results"] as Json[]) : [];
-  return results
-    .filter((item) => item["media_type"] === "movie" || item["media_type"] === "tv")
-    .map((item) => {
-      const mediaType = item["media_type"] === "tv" ? ("tv" as const) : ("movie" as const);
-      return {
-        mediaType,
-        tmdbId: Number(item["id"]),
-        title: String(item[mediaType === "tv" ? "name" : "title"] ?? "Sem título"),
-        originalTitle: str(item[mediaType === "tv" ? "original_name" : "original_title"]),
-        posterPath: str(item["poster_path"]),
-        backdropPath: str(item["backdrop_path"]),
-        year: year(item[mediaType === "tv" ? "first_air_date" : "release_date"]),
-        overview: str(item["overview"]),
-      };
-    })
-    .slice(0, 20);
+  const expanded = await Promise.all(
+    results.slice(0, 20).map(async (item): Promise<TmdbSearchItem[]> => {
+      const direct = mapListItem(item);
+      if (direct) return [direct];
+      if (item["media_type"] !== "person") return [];
+
+      const personId = Number(item["id"]);
+      if (!Number.isInteger(personId) || personId <= 0) return [];
+      const credits = await call(`/person/${personId}/combined_credits`);
+      const cast = Array.isArray(credits["cast"]) ? (credits["cast"] as Json[]) : [];
+      const crew = Array.isArray(credits["crew"]) ? (credits["crew"] as Json[]) : [];
+      const knownFor = Array.isArray(item["known_for"]) ? (item["known_for"] as Json[]) : [];
+      const department = String(item["known_for_department"] ?? "");
+      const relevant =
+        department === "Directing"
+          ? crew.filter((credit) => credit["job"] === "Director")
+          : department === "Acting"
+            ? cast
+            : [...cast, ...crew.filter((credit) => credit["job"] === "Director")];
+
+      return [...knownFor, ...relevant]
+        .filter((credit) => credit["adult"] !== true)
+        .map((credit) => mapListItem(credit))
+        .filter((credit): credit is TmdbSearchItem => Boolean(credit))
+        .slice(0, 12);
+    }),
+  );
+
+  const unique = new Map<string, TmdbSearchItem>();
+  for (const item of expanded.flat()) {
+    const resultKey = `${item.mediaType}:${item.tmdbId}`;
+    if (!unique.has(resultKey)) unique.set(resultKey, item);
+  }
+  return [...unique.values()].slice(0, 20);
 }
 
 export type TmdbDetails = {

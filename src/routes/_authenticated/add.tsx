@@ -15,7 +15,14 @@ export const Route = createFileRoute("/_authenticated/add")({
   head: () => ({
     meta: [
       { title: "Adicionar obra — AppCinema" },
-      { name: "description", content: "Indique um filme ou série." },
+      { name: "description", content: "Encontre filmes e séries por título, ator ou diretor." },
+      { property: "og:title", content: "Adicionar obra — AppCinema" },
+      {
+        property: "og:description",
+        content: "Encontre filmes e séries por título, ator ou diretor.",
+      },
+      { property: "og:type", content: "website" },
+      { name: "twitter:card", content: "summary" },
     ],
   }),
   component: () => (
@@ -122,7 +129,9 @@ function AddPage() {
           </button>
         ))}
         {s.data && s.data.length === 0 && (
-          <p className="text-sm text-muted-foreground">Nada encontrado.</p>
+          <p className="text-sm text-muted-foreground">
+            Nenhum filme ou série encontrado por esse título, ator ou diretor.
+          </p>
         )}
       </div>
 
