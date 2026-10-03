@@ -96,19 +96,15 @@ export function HomeSkeleton() {
     <div className="px-4 pt-6" aria-busy="true" aria-label="Carregando">
       <Sk className="h-4 w-24" />
       <Sk className="mt-2 h-7 w-40" />
-      <div className="mt-6 grid grid-cols-4 gap-2">
+      <div className="mt-6 grid grid-cols-2 gap-2">
         {Array.from({ length: 4 }, (_, i) => (
-          <Sk key={i} className="h-[74px] rounded-xl" />
+          <Sk key={i} className={i < 2 ? "h-20 rounded-xl" : "h-16 rounded-xl"} />
         ))}
       </div>
       <Sk className="mt-7 h-5 w-44" />
-      <Sk className="mt-3 h-[88px] rounded-xl" />
+      <Sk className="mt-3 h-32 rounded-xl" />
       <Sk className="mt-7 h-5 w-36" />
-      <div className="mt-3 flex gap-3">
-        {Array.from({ length: 3 }, (_, i) => (
-          <Sk key={i} className="aspect-[2/3] w-28 rounded-xl" />
-        ))}
-      </div>
+      <div className="mt-3 space-y-2"><Sk className="h-16" /><Sk className="h-16" /></div>
     </div>
   );
 }
