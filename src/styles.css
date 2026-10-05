@@ -229,3 +229,35 @@
     transition-delay: 0ms !important;
   }
 }
+
+/* ---- Page transitions (View Transitions API via router defaultViewTransition) ----
+   The old page stays visible until the new one is ready, then a short physical move.
+   Shared elements use view-transition-name poster-<id>/backdrop-<id>. Unsupported browsers swap instantly. */
+::view-transition-old(root) {
+  animation: vt-out 160ms var(--ease-out) both;
+}
+::view-transition-new(root) {
+  animation: vt-in 220ms var(--ease-out) both;
+}
+::view-transition-group(*) {
+  animation-duration: 320ms;
+  animation-timing-function: cubic-bezier(0.2, 0.9, 0.25, 1);
+}
+::view-transition-group(bottom-nav),
+::view-transition-old(bottom-nav),
+::view-transition-new(bottom-nav) {
+  animation: none;
+}
+@keyframes vt-out {
+  to { opacity: 0; transform: scale(0.985); }
+}
+@keyframes vt-in {
+  from { opacity: 0; transform: translateY(10px); }
+}
+@media (prefers-reduced-motion: reduce) {
+  ::view-transition-group(*),
+  ::view-transition-old(*),
+  ::view-transition-new(*) {
+    animation: none !important;
+  }
+}
