@@ -912,7 +912,23 @@ export type Database = {
       }
     }
     Views: {
-      [_ in never]: never
+      work_watch_summary: {
+        Row: {
+          last_watched_at: string | null
+          seen_count: number | null
+          seen_keys: string[] | null
+          work_id: string | null
+        }
+        Relationships: [
+          {
+            foreignKeyName: "watch_events_work_id_fkey"
+            columns: ["work_id"]
+            isOneToOne: false
+            referencedRelation: "works"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
     }
     Functions: {
       can_create_space: { Args: never; Returns: boolean }

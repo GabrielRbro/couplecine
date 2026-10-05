@@ -29,6 +29,13 @@
       "when": 1791208083436,
       "tag": "0003_match_extend_fix_demo_batch",
       "breakpoints": true
+    },
+    {
+      "idx": 4,
+      "version": "7",
+      "when": 1791208329945,
+      "tag": "0004_work_watch_summary_view",
+      "breakpoints": true
     }
   ]
 }
