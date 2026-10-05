@@ -56,7 +56,7 @@ export const smartSearch = createServerFn({ method: "POST" })
       });
       return { ok: true as const, items: await validate(res.items ?? [], data.spaceId, context.supabase) };
     } catch (e) {
-      if (e instanceof AiUnavailable) return { ok: false as const, reason: AI_MESSAGE[e.message] ?? AI_MESSAGE.failed!, items: [] };
+      if (e instanceof AiUnavailable) return { ok: false as const, reason: AI_MESSAGE[e.message] ?? AI_MESSAGE["failed"]!, items: [] };
       throw e;
     }
   });
@@ -96,7 +96,7 @@ export const analyzeImport = createServerFn({ method: "POST" })
       });
       return { ok: true as const, items: await validate(res.items ?? [], data.spaceId, context.supabase) };
     } catch (e) {
-      if (e instanceof AiUnavailable) return { ok: false as const, reason: AI_MESSAGE[e.message] ?? AI_MESSAGE.failed!, items: [] };
+      if (e instanceof AiUnavailable) return { ok: false as const, reason: AI_MESSAGE[e.message] ?? AI_MESSAGE["failed"]!, items: [] };
       throw e;
     }
   });

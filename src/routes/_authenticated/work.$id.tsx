@@ -33,7 +33,7 @@ export const Route = createFileRoute("/_authenticated/work/$id")({
   loader: ({ context, params }) => {
     void context.queryClient.prefetchQuery(workQuery(params.id));
   },
-  errorComponent: ({ error }) => <p className="p-6 text-sm text-destructive">{error.message}</p>,
+  errorComponent: () => <p className="p-6 text-sm text-destructive">Não foi possível abrir a obra.</p>,
   notFoundComponent: () => <p className="p-6 text-sm">Obra não encontrada.</p>,
   component: () => (
     <AppShell skeleton={<DetailSkeleton />}>

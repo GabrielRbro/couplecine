@@ -75,7 +75,10 @@ function SettingsPage() {
   async function removeDemo() {
     if (!window.confirm("Remover todas as obras de demonstração?")) return;
     const { data, error } = await supabase.rpc("demo_cleanup", { _batch: "demo-v1" });
-    if (error) return toast.error("Não foi possível remover.");
+    if (error) {
+      toast.error("Não foi possível remover.");
+      return;
+    }
     toast.success(`${data} obras de demonstração removidas`);
     qc.invalidateQueries();
   }
