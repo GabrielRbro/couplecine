@@ -21,7 +21,17 @@ type SheetState = { item: Item; mode: "react" | "seen" } | null;
 const SCORES = Array.from({ length: 21 }, (_, i) => i / 2);
 const k = (i: { mediaType: string; tmdbId: number }) => `${i.mediaType}:${i.tmdbId}`;
 
-export function DiscoverTab({ space, kind }: { space: SpaceInfo; kind: "all" | "movie" | "tv" }) {
+const fold = (s: string) => s.normalize("NFD").replace(/\p{Diacritic}/gu, "").toLowerCase();
+
+export function DiscoverTab({
+  space,
+  kind,
+  q = "",
+}: {
+  space: SpaceInfo;
+  kind: "all" | "movie" | "tv";
+  q?: string;
+}) {
   const qc = useQueryClient();
   const fetchFeed = useServerFn(getDiscover);
   const fetchDismissed = useServerFn(getDismissedDiscover);
@@ -179,6 +189,7 @@ export function DiscoverTab({ space, kind }: { space: SpaceInfo; kind: "all" | "
       const key = k(i);
       if (seenKeys.has(key) || gone.has(key) || restored.has(key)) return false;
       seenKeys.add(key);
+      if (q.trim() && !fold(`${i.title} ${i.originalTitle ?? ""}`).includes(fold(q))) return false;
       return kind === "all" || i.mediaType === kind;
     });
 

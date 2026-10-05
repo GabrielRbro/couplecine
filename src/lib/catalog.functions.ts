@@ -289,8 +289,11 @@ export const getDismissedDiscover = createServerFn({ method: "POST" })
     const key = (mediaType: string, tmdbId: number) => `${mediaType}:${tmdbId}`;
     const local = new Map((localWorks ?? []).map((work) => [key(work.media_type, work.tmdb_id), work]));
 
-    return Promise.all(
-      (dismissed ?? []).map(async (row) => {
+    // Only the most recent dismissals not in the library hit TMDB, a few at a time.
+    const rows = dismissed ?? [];
+    let remote = 0;
+    const MAX_REMOTE = 12;
+    const mapRow = async (row: (typeof rows)[number]) => {
         const work = local.get(key(row.media_type, row.tmdb_id));
         if (work) {
           return {
@@ -306,6 +309,19 @@ export const getDismissedDiscover = createServerFn({ method: "POST" })
           };
         }
 
+        if (remote++ >= MAX_REMOTE) {
+          return {
+            mediaType: row.media_type,
+            tmdbId: row.tmdb_id,
+            title: row.media_type === "tv" ? "Série dispensada" : "Filme dispensado",
+            originalTitle: null,
+            posterPath: null,
+            backdropPath: null,
+            year: null,
+            overview: null,
+            existingWorkId: null,
+          };
+        }
         try {
           const details = await fetchDetails(row.media_type, row.tmdb_id);
           return {
@@ -332,8 +348,10 @@ export const getDismissedDiscover = createServerFn({ method: "POST" })
             existingWorkId: null,
           };
         }
-      }),
-    );
+    };
+    const out: Awaited<ReturnType<typeof mapRow>>[] = [];
+    for (let i = 0; i < rows.length; i += 4) out.push(...(await Promise.all(rows.slice(i, i + 4).map(mapRow))));
+    return out;
   });
 
 export const markSeenBefore = createServerFn({ method: "POST" })
