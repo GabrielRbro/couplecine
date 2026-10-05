@@ -36,6 +36,13 @@
       "when": 1791208329945,
       "tag": "0004_work_watch_summary_view",
       "breakpoints": true
+    },
+    {
+      "idx": 5,
+      "version": "7",
+      "when": 1791208605976,
+      "tag": "0005_ai_cache",
+      "breakpoints": true
     }
   ]
 }

@@ -14,6 +14,33 @@ export type Database = {
   }
   public: {
     Tables: {
+      ai_cache: {
+        Row: {
+          cache_key: string
+          created_at: string
+          feature: string
+          id: string
+          payload: Json
+          user_id: string
+        }
+        Insert: {
+          cache_key: string
+          created_at?: string
+          feature: string
+          id?: string
+          payload: Json
+          user_id: string
+        }
+        Update: {
+          cache_key?: string
+          created_at?: string
+          feature?: string
+          id?: string
+          payload?: Json
+          user_id?: string
+        }
+        Relationships: []
+      }
       authorized_users: {
         Row: {
           accepted_by: string | null
