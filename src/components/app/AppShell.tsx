@@ -84,7 +84,10 @@ export function BottomNav() {
         className={`fixed inset-0 z-40 bg-background/70 backdrop-blur-sm transition-opacity duration-200 ${open ? "opacity-100" : "pointer-events-none opacity-0"}`}
         onClick={() => close()}
       />
-      <nav style={{ viewTransitionName: "bottom-nav" }} className="fixed inset-x-0 bottom-0 z-50 mx-auto max-w-md px-4 pb-[max(env(safe-area-inset-bottom),12px)]">
+      <nav
+        style={{ viewTransitionName: "bottom-nav" }}
+        className="fixed inset-x-0 bottom-0 z-50 mx-auto max-w-md px-4 pb-[max(env(safe-area-inset-bottom),12px)]"
+      >
         <div className="relative flex items-end rounded-2xl border border-border bg-card/95 px-2 backdrop-blur">
           <Link to="/" className={tab(path === "/")} onClick={(e) => chooseRadial(e, "/")}>
             <Home className="h-5 w-5" /> Início

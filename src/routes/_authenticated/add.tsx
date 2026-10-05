@@ -128,7 +128,9 @@ function AddPage() {
           {ai.data.reason}
         </p>
       )}
-      {mode === "ai" && ai.error && <p className="mt-3 text-sm text-destructive">{ai.error.message}</p>}
+      {mode === "ai" && ai.error && (
+        <p className="mt-3 text-sm text-destructive">{ai.error.message}</p>
+      )}
       {((mode === "tmdb" && s.isPending && !s.data) || (mode === "ai" && ai.isPending)) && (
         <div className="mt-4 space-y-2">
           {[0, 1, 2].map((i) => (
@@ -136,7 +138,9 @@ function AddPage() {
           ))}
         </div>
       )}
-      {mode === "tmdb" && s.error && <p className="mt-6 text-sm text-destructive">{s.error.message}</p>}
+      {mode === "tmdb" && s.error && (
+        <p className="mt-6 text-sm text-destructive">{s.error.message}</p>
+      )}
       <div className="mt-4 space-y-2">
         {(mode === "ai" ? (ai.data?.items ?? []) : (s.data ?? [])).map((r) => (
           <button

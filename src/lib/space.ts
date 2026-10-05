@@ -137,7 +137,10 @@ export function isIndicated(w: LibraryWork) {
 }
 
 export function seriesProgress(w: LibraryWork) {
-  const seasons = (w.work_metadata_cache[0]?.seasons ?? []) as { seasonNumber?: number; episodeCount: number }[];
+  const seasons = (w.work_metadata_cache[0]?.seasons ?? []) as {
+    seasonNumber?: number;
+    episodeCount: number;
+  }[];
   const total = seasons.reduce((a, s) => a + (s.episodeCount ?? 0), 0);
   const seen = new Set(w.watch?.seen_keys ?? []);
   let next: string | null = null;

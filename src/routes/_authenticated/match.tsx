@@ -157,7 +157,8 @@ function MatchPage() {
         .select("id, result_work_ids, closed_at")
         .eq("space_id", spaceId)
         .eq("status", "closed")
-        .not("closed_at", "is", null).order("closed_at", { ascending: false })
+        .not("closed_at", "is", null)
+        .order("closed_at", { ascending: false })
         .limit(1)
         .maybeSingle();
       return data;
@@ -277,17 +278,13 @@ function MatchPage() {
 
   const matchState = me.data;
   const visibleDeck = deck.slice(0, matchState?.limit ?? 0);
-  const nextWorkId = matchState
-    ? visibleDeck.find((id) => !matchState.voted.has(id))
-    : undefined;
+  const nextWorkId = matchState ? visibleDeck.find((id) => !matchState.voted.has(id)) : undefined;
   const currentWork = nextWorkId ? (byId.get(nextWorkId) ?? null) : null;
   const deckDone = Boolean(matchState) && !currentWork;
   const canRequestExtension =
     Boolean(matchState) && deckDone && (matchState?.limit ?? 0) < deck.length;
   const extensionKey = sid && matchState ? `${sid}:${matchState.limit}` : null;
-  const extensionAttempted = extensionKey
-    ? attemptedExtensions.current.has(extensionKey)
-    : false;
+  const extensionAttempted = extensionKey ? attemptedExtensions.current.has(extensionKey) : false;
 
   useEffect(() => {
     if (!canRequestExtension || !extensionKey || extensionAttempted || extend.isPending) return;
@@ -314,12 +311,11 @@ function MatchPage() {
     const direction = liked ? "right" : "left";
     setCardExit({ work: currentWork, direction });
     const reduceMotion = window.matchMedia("(prefers-reduced-motion: reduce)").matches;
-    const exitFinished = new Promise((resolve) => window.setTimeout(resolve, reduceMotion ? 1 : 210));
+    const exitFinished = new Promise((resolve) =>
+      window.setTimeout(resolve, reduceMotion ? 1 : 210),
+    );
     try {
-      await Promise.all([
-        vote.mutateAsync({ workId: currentWork.id, liked }),
-        exitFinished,
-      ]);
+      await Promise.all([vote.mutateAsync({ workId: currentWork.id, liked }), exitFinished]);
     } finally {
       setCardExit(null);
     }
@@ -354,7 +350,9 @@ function MatchPage() {
         <p className="mt-2 text-sm text-muted-foreground">Nenhuma obra em comum desta vez.</p>
       ) : (
         <>
-          <p className="mt-1 text-sm text-muted-foreground">Escolham uma obra ou deixem a sorte decidir.</p>
+          <p className="mt-1 text-sm text-muted-foreground">
+            Escolham uma obra ou deixem a sorte decidir.
+          </p>
           <div className="mt-4 grid grid-cols-3 gap-3">
             {results.map((w) => (
               <Link
@@ -399,8 +397,8 @@ function MatchPage() {
         Abandonar este Match?
       </h2>
       <p className="mt-1 text-sm leading-relaxed text-muted-foreground">
-        Os votos temporários desta sessão serão descartados. O último resultado concluído
-        continuará salvo.
+        Os votos temporários desta sessão serão descartados. O último resultado concluído continuará
+        salvo.
       </p>
       <div className="mt-5 grid grid-cols-2 gap-2">
         <button
@@ -421,11 +419,7 @@ function MatchPage() {
     </AnimatedSheet>
   );
 
-  if (
-    open.isLoading ||
-    (hasResumed && !me.data && !me.error) ||
-    (!open.data && start.isPending)
-  )
+  if (open.isLoading || (hasResumed && !me.data && !me.error) || (!open.data && start.isPending))
     return (
       <div className="px-4 pt-6">
         {header}
@@ -493,7 +487,9 @@ function MatchPage() {
     );
 
   if (!me.data) {
-    return <div className="px-4 pt-6 text-sm text-destructive">Não foi possível retomar este Match.</div>;
+    return (
+      <div className="px-4 pt-6 text-sm text-destructive">Não foi possível retomar este Match.</div>
+    );
   }
   const m = me.data;
   const displayedWork = cardExit?.work ?? currentWork;
@@ -520,7 +516,9 @@ function MatchPage() {
             >
               <MatchPoster
                 work={displayedWork}
-                ready={!!cardExit || loadedCardId === displayedWork.id || !displayedWork.poster_path}
+                ready={
+                  !!cardExit || loadedCardId === displayedWork.id || !displayedWork.poster_path
+                }
                 onReady={() => setLoadedCardId(displayedWork.id)}
               />
             </div>

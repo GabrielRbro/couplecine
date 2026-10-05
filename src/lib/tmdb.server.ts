@@ -105,7 +105,12 @@ export type TmdbDetails = {
   genres: string[];
   crewLead: { name: string; role: string; profilePath: string | null } | null;
   cast: { name: string; character: string; profilePath: string | null }[];
-  seasons: { seasonNumber: number; name: string; episodeCount: number; posterPath?: string | null }[];
+  seasons: {
+    seasonNumber: number;
+    name: string;
+    episodeCount: number;
+    posterPath?: string | null;
+  }[];
 };
 
 export async function fetchDetails(
@@ -264,7 +269,11 @@ export async function findTitle(guess: {
   mediaType?: "movie" | "tv" | null;
 }): Promise<TmdbSearchItem | null> {
   const path = guess.mediaType ? `/search/${guess.mediaType}` : "/search/multi";
-  const data = await call(path, { query: guess.title.slice(0, 100), include_adult: "false", page: "1" });
+  const data = await call(path, {
+    query: guess.title.slice(0, 100),
+    include_adult: "false",
+    page: "1",
+  });
   const results = Array.isArray(data["results"]) ? (data["results"] as Json[]) : [];
   const items = results
     .map((r) => mapListItem(r, guess.mediaType ?? undefined))

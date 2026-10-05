@@ -7,7 +7,14 @@ import { AppShell } from "@/components/app/AppShell";
 import { FilterPills, TogglePill } from "@/components/app/ui";
 import { EmptyState } from "@/components/app/MediaCard";
 import { formatRuntime, REACTION_EMOJI, tmdbImage } from "@/lib/format";
-import { firstName, isIndicated, type LibraryWork, type SpaceInfo, useLibrary, useSpace } from "@/lib/space";
+import {
+  firstName,
+  isIndicated,
+  type LibraryWork,
+  type SpaceInfo,
+  useLibrary,
+  useSpace,
+} from "@/lib/space";
 
 export const Route = createFileRoute("/_authenticated/watch/gallery")({
   head: () => ({
@@ -56,8 +63,16 @@ function GalleryCard({ work, space }: { work: LibraryWork; space: SpaceInfo }) {
         ) : poster ? (
           // No backdrop: blurred poster as ambience, real poster undistorted on the side.
           <div className="flex h-full w-full items-center justify-end overflow-hidden">
-            <img src={poster} alt="" className="absolute inset-0 h-full w-full scale-125 object-cover opacity-35 blur-xl" />
-            <img src={poster} alt="" className="relative mr-5 h-[82%] rounded-lg object-contain shadow-xl" />
+            <img
+              src={poster}
+              alt=""
+              className="absolute inset-0 h-full w-full scale-125 object-cover opacity-35 blur-xl"
+            />
+            <img
+              src={poster}
+              alt=""
+              className="relative mr-5 h-[82%] rounded-lg object-contain shadow-xl"
+            />
           </div>
         ) : (
           <div className="h-full w-full bg-gradient-to-br from-secondary to-card" />
@@ -65,7 +80,9 @@ function GalleryCard({ work, space }: { work: LibraryWork; space: SpaceInfo }) {
         <div className="pointer-events-none absolute inset-0 bg-gradient-to-t from-background via-background/40 to-transparent" />
         <div className="absolute inset-x-0 bottom-0 flex items-end justify-between gap-3 p-4">
           <div className="min-w-0">
-            <p className="line-clamp-2 font-display text-xl font-semibold leading-tight">{work.title}</p>
+            <p className="line-clamp-2 font-display text-xl font-semibold leading-tight">
+              {work.title}
+            </p>
             <p className="mt-1 text-xs text-muted-foreground">{meta.join(" · ")}</p>
           </div>
           <div className="flex shrink-0 items-center gap-1 rounded-full border border-border/60 bg-background/70 px-2.5 py-1 text-sm backdrop-blur">
@@ -119,7 +136,13 @@ function GalleryPage() {
       <p className="mt-0.5 text-sm text-muted-foreground">O que vamos assistir?</p>
       <div className="no-scrollbar -mx-4 mt-4 flex gap-2 overflow-x-auto px-4">
         <FilterPills
-          options={[["all", "Todos"], ["movie", "Filmes"], ["tv", "Séries"]] as const}
+          options={
+            [
+              ["all", "Todos"],
+              ["movie", "Filmes"],
+              ["tv", "Séries"],
+            ] as const
+          }
           value={kind}
           onChange={setKind}
         />
@@ -163,8 +186,12 @@ function GalleryPage() {
         </div>
       )}
       <AnimatedSheet open={sheet} onClose={() => setSheet(false)} labelledBy="gal-filters">
-        <h2 id="gal-filters" className="text-base font-semibold">Filtros</h2>
-        <label className="mt-4 block text-xs text-muted-foreground" htmlFor="gal-genre">Gênero</label>
+        <h2 id="gal-filters" className="text-base font-semibold">
+          Filtros
+        </h2>
+        <label className="mt-4 block text-xs text-muted-foreground" htmlFor="gal-genre">
+          Gênero
+        </label>
         <select
           id="gal-genre"
           value={genre}
@@ -173,7 +200,9 @@ function GalleryPage() {
         >
           <option value="">Todos os gêneros</option>
           {genres.map((g) => (
-            <option key={g} value={g}>{g}</option>
+            <option key={g} value={g}>
+              {g}
+            </option>
           ))}
         </select>
         <div className="mt-4">

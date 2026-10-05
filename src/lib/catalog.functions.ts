@@ -52,50 +52,50 @@ async function ensureWork(
   userId: string,
   data: { spaceId: string; mediaType: "movie" | "tv"; tmdbId: number },
 ): Promise<string> {
-    const { data: found } = await supabase
-      .from("works")
-      .select("id")
-      .eq("space_id", data.spaceId)
-      .eq("media_type", data.mediaType)
-      .eq("tmdb_id", data.tmdbId)
-      .maybeSingle();
-    let workId = found?.id ?? null;
-    if (!workId) {
-      let d: TmdbDetails;
-      try {
-        d = await fetchDetails(data.mediaType, data.tmdbId);
-      } catch (e) {
-        friendly(e);
-      }
-      const { data: inserted, error } = await supabase
-        .from("works")
-        .insert({
-          space_id: data.spaceId,
-          media_type: data.mediaType,
-          tmdb_id: data.tmdbId,
-          title: d.title,
-          original_title: d.originalTitle,
-          overview: d.overview,
-          poster_path: d.posterPath,
-          backdrop_path: d.backdropPath,
-          release_year: d.year,
-          runtime_minutes: d.runtimeMinutes,
-          genres: d.genres,
-          created_by: userId,
-        })
-        .select("id")
-        .single();
-      if (error) throw new Error("Não foi possível salvar a obra.");
-      workId = inserted.id;
-      await supabase.from("work_metadata_cache").upsert(
-        {
-          work_id: workId,
-          payload: d as never,
-          expires_at: new Date(Date.now() + 7 * 864e5).toISOString(),
-        },
-        { onConflict: "work_id" },
-      );
+  const { data: found } = await supabase
+    .from("works")
+    .select("id")
+    .eq("space_id", data.spaceId)
+    .eq("media_type", data.mediaType)
+    .eq("tmdb_id", data.tmdbId)
+    .maybeSingle();
+  let workId = found?.id ?? null;
+  if (!workId) {
+    let d: TmdbDetails;
+    try {
+      d = await fetchDetails(data.mediaType, data.tmdbId);
+    } catch (e) {
+      friendly(e);
     }
+    const { data: inserted, error } = await supabase
+      .from("works")
+      .insert({
+        space_id: data.spaceId,
+        media_type: data.mediaType,
+        tmdb_id: data.tmdbId,
+        title: d.title,
+        original_title: d.originalTitle,
+        overview: d.overview,
+        poster_path: d.posterPath,
+        backdrop_path: d.backdropPath,
+        release_year: d.year,
+        runtime_minutes: d.runtimeMinutes,
+        genres: d.genres,
+        created_by: userId,
+      })
+      .select("id")
+      .single();
+    if (error) throw new Error("Não foi possível salvar a obra.");
+    workId = inserted.id;
+    await supabase.from("work_metadata_cache").upsert(
+      {
+        work_id: workId,
+        payload: d as never,
+        expires_at: new Date(Date.now() + 7 * 864e5).toISOString(),
+      },
+      { onConflict: "work_id" },
+    );
+  }
   return workId;
 }
 
@@ -233,11 +233,17 @@ export const getDiscover = createServerFn({ method: "POST" })
     const [{ data: works }, { data: dismissed }, { data: prior }] = await Promise.all([
       supabase
         .from("works")
-        .select("id, title, media_type, tmdb_id, activity_at, indications(indicated_by), interests(user_id, reaction)")
+        .select(
+          "id, title, media_type, tmdb_id, activity_at, indications(indicated_by), interests(user_id, reaction)",
+        )
         .eq("space_id", data.spaceId)
         .order("activity_at", { ascending: false }),
       supabase.from("discover_dismissals").select("media_type, tmdb_id").eq("user_id", userId),
-      supabase.from("prior_watch_status").select("work_id").eq("user_id", userId).eq("watched", true),
+      supabase
+        .from("prior_watch_status")
+        .select("work_id")
+        .eq("user_id", userId)
+        .eq("watched", true),
     ]);
     const all = works ?? [];
     const key = (t: string, id: number) => `${t}:${id}`;
@@ -258,8 +264,10 @@ export const getDiscover = createServerFn({ method: "POST" })
       let visible = items.filter((i) => !hidden.has(key(i.mediaType, i.tmdbId)));
       if (data.page === 1) visible = await rerankWithGemini(visible, all, userId, supabase);
       return {
-        items: visible
-          .map((i) => ({ ...i, existingWorkId: existing.get(key(i.mediaType, i.tmdbId)) ?? null })),
+        items: visible.map((i) => ({
+          ...i,
+          existingWorkId: existing.get(key(i.mediaType, i.tmdbId)) ?? null,
+        })),
         hasMore: items.length > 0 && data.page < 20,
       };
     } catch (e) {
@@ -271,7 +279,9 @@ export const getDiscover = createServerFn({ method: "POST" })
  * Optional Gemini selection/rerank of the first Descobrir page. TMDB stays the source of truth:
  * only TMDB candidates can be returned, and any failure keeps the TMDB order.
  */
-async function rerankWithGemini<T extends { title: string; year: number | null; mediaType: string }>(
+async function rerankWithGemini<
+  T extends { title: string; year: number | null; mediaType: string },
+>(
   candidates: T[],
   works: { title: string; interests: { user_id: string; reaction: string }[] }[],
   userId: string,
@@ -280,7 +290,10 @@ async function rerankWithGemini<T extends { title: string; year: number | null; 
   const { geminiConfig, geminiJson } = await import("./gemini.server");
   if (!geminiConfig().configured || candidates.length < 6) return candidates;
   const pick = (pred: (r: { user_id: string; reaction: string }) => boolean, n: number) =>
-    works.filter((w) => w.interests.some(pred)).slice(0, n).map((w) => w.title);
+    works
+      .filter((w) => w.interests.some(pred))
+      .slice(0, n)
+      .map((w) => w.title);
   const profile = {
     eu_amo: pick((r) => r.user_id === userId && r.reaction === "fire", 8),
     eu_curto: pick((r) => r.user_id === userId && r.reaction === "like", 6),
@@ -296,14 +309,23 @@ async function rerankWithGemini<T extends { title: string; year: number | null; 
       feature: "discover",
       system:
         'Você seleciona e ordena recomendações para UMA pessoa, ponderando compatibilidade com o parceiro. Mantenha diversidade: não repita demais gênero, franquia ou elenco; inclua alguma exploração. Use só os índices fornecidos. Responda JSON {"order":[índices]} com até 30 itens.',
-      parts: [{ text: `Perfil: ${JSON.stringify(profile)}\nCandidatos (índice|título|ano|tipo):\n${list}` }],
+      parts: [
+        {
+          text: `Perfil: ${JSON.stringify(profile)}\nCandidatos (índice|título|ano|tipo):\n${list}`,
+        },
+      ],
       cacheTtlHours: 24,
       cacheSeed: `d:${JSON.stringify(profile)}:${pool.map((c) => c.title).join(",")}`,
     });
     const order = (res.order ?? []).filter((i) => Number.isInteger(i) && i >= 0 && i < pool.length);
     if (order.length < 6) return candidates;
     const used = new Set(order);
-    return [...new Set(order)].map((i) => pool[i]!).concat(pool.filter((_, i) => !used.has(i)), candidates.slice(40));
+    return [...new Set(order)]
+      .map((i) => pool[i]!)
+      .concat(
+        pool.filter((_, i) => !used.has(i)),
+        candidates.slice(40),
+      );
   } catch {
     return candidates;
   }
@@ -330,70 +352,73 @@ export const getDismissedDiscover = createServerFn({ method: "POST" })
     if (error) throw new Error("Não foi possível carregar os dispensados.");
 
     const key = (mediaType: string, tmdbId: number) => `${mediaType}:${tmdbId}`;
-    const local = new Map((localWorks ?? []).map((work) => [key(work.media_type, work.tmdb_id), work]));
+    const local = new Map(
+      (localWorks ?? []).map((work) => [key(work.media_type, work.tmdb_id), work]),
+    );
 
     // Only the most recent dismissals not in the library hit TMDB, a few at a time.
     const rows = dismissed ?? [];
     let remote = 0;
     const MAX_REMOTE = 12;
     const mapRow = async (row: (typeof rows)[number]) => {
-        const work = local.get(key(row.media_type, row.tmdb_id));
-        if (work) {
-          return {
-            mediaType: work.media_type,
-            tmdbId: work.tmdb_id,
-            title: work.title,
-            originalTitle: work.original_title,
-            posterPath: work.poster_path,
-            backdropPath: work.backdrop_path,
-            year: work.release_year,
-            overview: work.overview,
-            existingWorkId: work.id,
-          };
-        }
+      const work = local.get(key(row.media_type, row.tmdb_id));
+      if (work) {
+        return {
+          mediaType: work.media_type,
+          tmdbId: work.tmdb_id,
+          title: work.title,
+          originalTitle: work.original_title,
+          posterPath: work.poster_path,
+          backdropPath: work.backdrop_path,
+          year: work.release_year,
+          overview: work.overview,
+          existingWorkId: work.id,
+        };
+      }
 
-        if (remote++ >= MAX_REMOTE) {
-          return {
-            mediaType: row.media_type,
-            tmdbId: row.tmdb_id,
-            title: row.media_type === "tv" ? "Série dispensada" : "Filme dispensado",
-            originalTitle: null,
-            posterPath: null,
-            backdropPath: null,
-            year: null,
-            overview: null,
-            existingWorkId: null,
-          };
-        }
-        try {
-          const details = await fetchDetails(row.media_type, row.tmdb_id);
-          return {
-            mediaType: details.mediaType,
-            tmdbId: details.tmdbId,
-            title: details.title,
-            originalTitle: details.originalTitle,
-            posterPath: details.posterPath,
-            backdropPath: details.backdropPath,
-            year: details.year,
-            overview: details.overview,
-            existingWorkId: null,
-          };
-        } catch {
-          return {
-            mediaType: row.media_type,
-            tmdbId: row.tmdb_id,
-            title: row.media_type === "tv" ? "Série dispensada" : "Filme dispensado",
-            originalTitle: null,
-            posterPath: null,
-            backdropPath: null,
-            year: null,
-            overview: null,
-            existingWorkId: null,
-          };
-        }
+      if (remote++ >= MAX_REMOTE) {
+        return {
+          mediaType: row.media_type,
+          tmdbId: row.tmdb_id,
+          title: row.media_type === "tv" ? "Série dispensada" : "Filme dispensado",
+          originalTitle: null,
+          posterPath: null,
+          backdropPath: null,
+          year: null,
+          overview: null,
+          existingWorkId: null,
+        };
+      }
+      try {
+        const details = await fetchDetails(row.media_type, row.tmdb_id);
+        return {
+          mediaType: details.mediaType,
+          tmdbId: details.tmdbId,
+          title: details.title,
+          originalTitle: details.originalTitle,
+          posterPath: details.posterPath,
+          backdropPath: details.backdropPath,
+          year: details.year,
+          overview: details.overview,
+          existingWorkId: null,
+        };
+      } catch {
+        return {
+          mediaType: row.media_type,
+          tmdbId: row.tmdb_id,
+          title: row.media_type === "tv" ? "Série dispensada" : "Filme dispensado",
+          originalTitle: null,
+          posterPath: null,
+          backdropPath: null,
+          year: null,
+          overview: null,
+          existingWorkId: null,
+        };
+      }
     };
     const out: Awaited<ReturnType<typeof mapRow>>[] = [];
-    for (let i = 0; i < rows.length; i += 4) out.push(...(await Promise.all(rows.slice(i, i + 4).map(mapRow))));
+    for (let i = 0; i < rows.length; i += 4)
+      out.push(...(await Promise.all(rows.slice(i, i + 4).map(mapRow))));
     return out;
   });
 
@@ -415,12 +440,18 @@ export const markSeenBefore = createServerFn({ method: "POST" })
     const workId = await ensureWork(supabase, userId, data);
     const { error } = await supabase
       .from("prior_watch_status")
-      .upsert({ work_id: workId, user_id: userId, watched: true }, { onConflict: "user_id,work_id" });
+      .upsert(
+        { work_id: workId, user_id: userId, watched: true },
+        { onConflict: "user_id,work_id" },
+      );
     if (error) throw new Error("Não foi possível salvar.");
     if (data.score !== null) {
       const { error: re } = await supabase
         .from("ratings")
-        .upsert({ work_id: workId, user_id: userId, score: data.score }, { onConflict: "user_id,work_id" });
+        .upsert(
+          { work_id: workId, user_id: userId, score: data.score },
+          { onConflict: "user_id,work_id" },
+        );
       if (re) throw new Error("Não foi possível salvar a nota.");
     }
     return { workId };

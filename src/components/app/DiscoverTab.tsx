@@ -21,7 +21,11 @@ type SheetState = { item: Item; mode: "react" | "seen" } | null;
 const SCORES = Array.from({ length: 21 }, (_, i) => i / 2);
 const k = (i: { mediaType: string; tmdbId: number }) => `${i.mediaType}:${i.tmdbId}`;
 
-const fold = (s: string) => s.normalize("NFD").replace(/\p{Diacritic}/gu, "").toLowerCase();
+const fold = (s: string) =>
+  s
+    .normalize("NFD")
+    .replace(/\p{Diacritic}/gu, "")
+    .toLowerCase();
 
 export function DiscoverTab({
   space,
@@ -148,7 +152,8 @@ export function DiscoverTab({
   };
   const rollbackRemove = (
     i: Item,
-    context: { wasGone: boolean; restoredItem: Item | undefined; previousSheet: SheetState } | undefined,
+    context:
+      { wasGone: boolean; restoredItem: Item | undefined; previousSheet: SheetState } | undefined,
   ) => {
     if (!context?.wasGone) show(i);
     if (context?.restoredItem)
@@ -285,59 +290,57 @@ export function DiscoverTab({
       >
         {sheet && (
           <>
-              <h2 id="discover-sheet-title" className="line-clamp-1 text-lg font-semibold">
-                {sheet.item.title}
-              </h2>
-              {sheet.mode === "react" ? (
-                <>
-                  <p className="mt-1 text-sm text-muted-foreground">Qual é o seu interesse?</p>
-                  <div className="mt-4 grid grid-cols-3 gap-2">
-                    {ADD_REACTIONS.map((r) => (
-                      <button
-                        key={r}
-                        disabled={indicate.isPending || markSeen.isPending}
-                        onClick={() =>
-                          indicate.mutate({
-                            i: sheet.item,
-                            reaction: r as "fire" | "like" | "neutral",
-                          })
-                        }
-                        className="pressable flex min-h-16 flex-col items-center justify-center rounded-xl border border-border disabled:opacity-50"
-                      >
-                        <span className="text-2xl">{REACTION_EMOJI[r]}</span>
-                        <span className="text-[11px] text-muted-foreground">
-                          {REACTION_LABEL[r]}
-                        </span>
-                      </button>
-                    ))}
-                  </div>
-                </>
-              ) : (
-                <>
-                  <p className="mt-1 text-sm text-muted-foreground">
-                    Já assistiu antes? Dê uma nota, se quiser.
-                  </p>
-                  <div className="mt-4 grid grid-cols-7 gap-1.5">
-                    {SCORES.map((s) => (
-                      <button
-                        key={s}
-                        disabled={indicate.isPending || markSeen.isPending}
-                        onClick={() => markSeen.mutate({ i: sheet.item, score: s })}
-                        className="pressable min-h-11 rounded-lg border border-border text-xs disabled:opacity-50"
-                      >
-                        {formatScore(s)}
-                      </button>
-                    ))}
-                  </div>
-                  <button
-                    disabled={indicate.isPending || markSeen.isPending}
-                    onClick={() => markSeen.mutate({ i: sheet.item, score: null })}
-                    className="pressable mt-3 min-h-11 w-full rounded-xl bg-secondary text-sm font-medium disabled:opacity-50"
-                  >
-                    Salvar sem nota
-                  </button>
-                </>
-              )}
+            <h2 id="discover-sheet-title" className="line-clamp-1 text-lg font-semibold">
+              {sheet.item.title}
+            </h2>
+            {sheet.mode === "react" ? (
+              <>
+                <p className="mt-1 text-sm text-muted-foreground">Qual é o seu interesse?</p>
+                <div className="mt-4 grid grid-cols-3 gap-2">
+                  {ADD_REACTIONS.map((r) => (
+                    <button
+                      key={r}
+                      disabled={indicate.isPending || markSeen.isPending}
+                      onClick={() =>
+                        indicate.mutate({
+                          i: sheet.item,
+                          reaction: r as "fire" | "like" | "neutral",
+                        })
+                      }
+                      className="pressable flex min-h-16 flex-col items-center justify-center rounded-xl border border-border disabled:opacity-50"
+                    >
+                      <span className="text-2xl">{REACTION_EMOJI[r]}</span>
+                      <span className="text-[11px] text-muted-foreground">{REACTION_LABEL[r]}</span>
+                    </button>
+                  ))}
+                </div>
+              </>
+            ) : (
+              <>
+                <p className="mt-1 text-sm text-muted-foreground">
+                  Já assistiu antes? Dê uma nota, se quiser.
+                </p>
+                <div className="mt-4 grid grid-cols-7 gap-1.5">
+                  {SCORES.map((s) => (
+                    <button
+                      key={s}
+                      disabled={indicate.isPending || markSeen.isPending}
+                      onClick={() => markSeen.mutate({ i: sheet.item, score: s })}
+                      className="pressable min-h-11 rounded-lg border border-border text-xs disabled:opacity-50"
+                    >
+                      {formatScore(s)}
+                    </button>
+                  ))}
+                </div>
+                <button
+                  disabled={indicate.isPending || markSeen.isPending}
+                  onClick={() => markSeen.mutate({ i: sheet.item, score: null })}
+                  className="pressable mt-3 min-h-11 w-full rounded-xl bg-secondary text-sm font-medium disabled:opacity-50"
+                >
+                  Salvar sem nota
+                </button>
+              </>
+            )}
           </>
         )}
       </AnimatedSheet>
@@ -363,7 +366,11 @@ function DiscoverGrid({
           <div className="relative">
             <Poster path={i.posterPath} title={i.title} />
             <span className="absolute left-2 top-2 rounded-md bg-background/80 p-1 text-muted-foreground">
-              {i.mediaType === "tv" ? <Tv className="h-3.5 w-3.5" /> : <Film className="h-3.5 w-3.5" />}
+              {i.mediaType === "tv" ? (
+                <Tv className="h-3.5 w-3.5" />
+              ) : (
+                <Film className="h-3.5 w-3.5" />
+              )}
             </span>
           </div>
           <p className="mt-2 line-clamp-1 text-sm font-semibold">{i.title}</p>

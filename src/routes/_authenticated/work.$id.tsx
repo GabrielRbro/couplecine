@@ -33,7 +33,9 @@ export const Route = createFileRoute("/_authenticated/work/$id")({
   loader: ({ context, params }) => {
     void context.queryClient.prefetchQuery(workQuery(params.id));
   },
-  errorComponent: () => <p className="p-6 text-sm text-destructive">Não foi possível abrir a obra.</p>,
+  errorComponent: () => (
+    <p className="p-6 text-sm text-destructive">Não foi possível abrir a obra.</p>
+  ),
   notFoundComponent: () => <p className="p-6 text-sm">Obra não encontrada.</p>,
   component: () => (
     <AppShell skeleton={<DetailSkeleton />}>
@@ -320,7 +322,11 @@ function Comparison({
     setEditing(null);
   }
 
-  const InterestPerson = ({ label, r, own }: {
+  const InterestPerson = ({
+    label,
+    r,
+    own,
+  }: {
     label: string;
     r: Reaction | undefined;
     own: boolean;
@@ -337,49 +343,69 @@ function Comparison({
       </button>
     </div>
   );
-  const ScorePerson = ({ label, s, own }: { label: string; s: number | undefined; own: boolean }) => (
+  const ScorePerson = ({
+    label,
+    s,
+    own,
+  }: {
+    label: string;
+    s: number | undefined;
+    own: boolean;
+  }) => (
     <div className="min-w-0 flex-1 text-center">
       <p className="text-xs text-muted-foreground">{label}</p>
-        <button
-          disabled={!own}
-          onClick={() => setEditing("score")}
+      <button
+        disabled={!own}
+        onClick={() => setEditing("score")}
         className="pressable mt-1 inline-flex min-h-11 min-w-11 items-center justify-center text-lg font-semibold"
         aria-label={`${label}: avaliação`}
-        >
-          {s !== undefined ? (
-            formatScore(Number(s))
-          ) : own ? (
-            <span className="text-xs text-primary">Dar nota</span>
-          ) : (
-            "—"
-          )}
-        </button>
+      >
+        {s !== undefined ? (
+          formatScore(Number(s))
+        ) : own ? (
+          <span className="text-xs text-primary">Dar nota</span>
+        ) : (
+          "—"
+        )}
+      </button>
     </div>
   );
 
   return (
     <section className="space-y-3">
       <div className="grid grid-cols-2 gap-3">
-      <div className="rounded-xl border border-border bg-card p-3">
-        <h2 className="text-xs font-semibold">Interesse</h2>
-        <div className="mt-2 flex divide-x divide-border">
-          <InterestPerson label="Eu" r={mine?.reaction} own />
-          <InterestPerson label={space.partner ? firstName(space.partner.display_name) : "Parceiro"} r={theirs?.reaction} own={false} />
+        <div className="rounded-xl border border-border bg-card p-3">
+          <h2 className="text-xs font-semibold">Interesse</h2>
+          <div className="mt-2 flex divide-x divide-border">
+            <InterestPerson label="Eu" r={mine?.reaction} own />
+            <InterestPerson
+              label={space.partner ? firstName(space.partner.display_name) : "Parceiro"}
+              r={theirs?.reaction}
+              own={false}
+            />
+          </div>
         </div>
-      </div>
-      <div className="rounded-xl border border-border bg-card p-3">
-        <div className="flex items-baseline justify-between gap-1">
-          <h2 className="text-xs font-semibold">Avaliação</h2>
-          {avg !== null && <span className="text-[11px] text-muted-foreground">Média {formatScore(avg)}</span>}
+        <div className="rounded-xl border border-border bg-card p-3">
+          <div className="flex items-baseline justify-between gap-1">
+            <h2 className="text-xs font-semibold">Avaliação</h2>
+            {avg !== null && (
+              <span className="text-[11px] text-muted-foreground">Média {formatScore(avg)}</span>
+            )}
+          </div>
+          <div className="mt-2 flex divide-x divide-border">
+            <ScorePerson label="Eu" s={myScore?.score} own />
+            <ScorePerson
+              label={space.partner ? firstName(space.partner.display_name) : "Parceiro"}
+              s={theirScore?.score}
+              own={false}
+            />
+          </div>
         </div>
-        <div className="mt-2 flex divide-x divide-border">
-          <ScorePerson label="Eu" s={myScore?.score} own />
-          <ScorePerson label={space.partner ? firstName(space.partner.display_name) : "Parceiro"} s={theirScore?.score} own={false} />
-        </div>
-      </div>
       </div>
       {avg === null && (
-        <p className="-mt-1 text-[11px] text-muted-foreground">Média aparece quando os dois avaliarem.</p>
+        <p className="-mt-1 text-[11px] text-muted-foreground">
+          Média aparece quando os dois avaliarem.
+        </p>
       )}
       {editing === "reaction" && (
         <div className="grid grid-cols-4 gap-2">
@@ -541,7 +567,12 @@ function SeriesBlock({
   workId: string;
   state: { id: string; status: string } | null;
   events: Ev[];
-  seasons: { seasonNumber: number; name: string; episodeCount: number; posterPath?: string | null }[];
+  seasons: {
+    seasonNumber: number;
+    name: string;
+    episodeCount: number;
+    posterPath?: string | null;
+  }[];
   fallbackImage: string | null;
   onChange: () => void;
 }) {
@@ -569,7 +600,8 @@ function SeriesBlock({
   const seasonPoster = (n: number) => seasons.find((s) => s.seasonNumber === n)?.posterPath ?? null;
   // Episode image priority: real TMDB still → season poster → series artwork.
   const epImage = (ep: Episode, size: string) =>
-    tmdbImage(ep.stillPath, size) ?? tmdbImage(seasonPoster(ep.seasonNumber) ?? fallbackImage, size === "w300" ? "w342" : "w780");
+    tmdbImage(ep.stillPath, size) ??
+    tmdbImage(seasonPoster(ep.seasonNumber) ?? fallbackImage, size === "w300" ? "w342" : "w780");
 
   // After the visible season loads: fetch the other seasons' DATA sequentially in background.
   const loaded = eps.isSuccess;
@@ -582,7 +614,8 @@ function SeriesBlock({
       );
       for (const s of order) {
         if (stop) return;
-        if (s.seasonNumber !== activeSeason) await qc.prefetchQuery(seasonQuery(s.seasonNumber)).catch(() => {});
+        if (s.seasonNumber !== activeSeason)
+          await qc.prefetchQuery(seasonQuery(s.seasonNumber)).catch(() => {});
       }
     })();
     return () => {
@@ -768,12 +801,18 @@ function SeriesBlock({
                 T{openEp.seasonNumber}E{openEp.episodeNumber} · {openEp.name}
               </h3>
               <p className="mt-1 text-xs text-muted-foreground">
-                {[formatRuntime(openEp.runtimeMinutes), formatDate(openEp.airDate)].filter(Boolean).join(" · ") || "Sem data"}
+                {[formatRuntime(openEp.runtimeMinutes), formatDate(openEp.airDate)]
+                  .filter(Boolean)
+                  .join(" · ") || "Sem data"}
               </p>
               <p className="mt-3 text-sm leading-relaxed text-muted-foreground">
                 {openEp.overview || "Sem sinopse disponível."}
               </p>
-              <div className="mt-5 grid grid-cols-2 gap-2" role="group" aria-label="Status do episódio">
+              <div
+                className="mt-5 grid grid-cols-2 gap-2"
+                role="group"
+                aria-label="Status do episódio"
+              >
                 <button
                   disabled={saving || !openDone}
                   onClick={() => toggle(openEp.seasonNumber, openEp.episodeNumber)}

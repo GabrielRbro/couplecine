@@ -34,40 +34,49 @@ export const Route = createFileRoute("/_authenticated/")({
 });
 
 function ContextList({ items, empty }: { items: LibraryWork[]; empty: string }) {
-  return (
-    items.length === 0 ? (
-      <EmptyState title={empty} />
-    ) : (
-      <div className="divide-y divide-border border-y border-border">
-        {items.slice(0, 3).map((w) => (
-          <Link
-            key={w.id}
-            to="/work/$id"
-            params={{ id: w.id }}
-            className="pressable flex min-h-16 items-center gap-3 py-2.5"
-          >
-            <div className="w-9 shrink-0">
-              <Poster path={w.poster_path} title={w.title} className="rounded-md" />
-            </div>
-            <div className="min-w-0 flex-1">
-              <p className="line-clamp-1 text-sm font-semibold">{w.title}</p>
-              <p className="mt-0.5 text-xs text-muted-foreground">
-                {w.media_type === "tv" ? "Série" : "Filme"}{w.release_year ? ` · ${w.release_year}` : ""}
-              </p>
-            </div>
-            <ArrowRight className="h-4 w-4 shrink-0 text-muted-foreground" />
-          </Link>
-        ))}
-      </div>
-    )
+  return items.length === 0 ? (
+    <EmptyState title={empty} />
+  ) : (
+    <div className="divide-y divide-border border-y border-border">
+      {items.slice(0, 3).map((w) => (
+        <Link
+          key={w.id}
+          to="/work/$id"
+          params={{ id: w.id }}
+          className="pressable flex min-h-16 items-center gap-3 py-2.5"
+        >
+          <div className="w-9 shrink-0">
+            <Poster path={w.poster_path} title={w.title} className="rounded-md" />
+          </div>
+          <div className="min-w-0 flex-1">
+            <p className="line-clamp-1 text-sm font-semibold">{w.title}</p>
+            <p className="mt-0.5 text-xs text-muted-foreground">
+              {w.media_type === "tv" ? "Série" : "Filme"}
+              {w.release_year ? ` · ${w.release_year}` : ""}
+            </p>
+          </div>
+          <ArrowRight className="h-4 w-4 shrink-0 text-muted-foreground" />
+        </Link>
+      ))}
+    </div>
   );
 }
 
 /** Continue-watching card: wide (1 item) or compact poster card (2 or 3+). */
-function ContinueCard({ work: w, wide, className = "" }: { work: LibraryWork; wide: boolean; className?: string }) {
+function ContinueCard({
+  work: w,
+  wide,
+  className = "",
+}: {
+  work: LibraryWork;
+  wide: boolean;
+  className?: string;
+}) {
   const p = seriesProgress(w);
   const pct = p.total ? Math.min(100, (p.seen / p.total) * 100) : 0;
-  const label = p.next ? `Próximo ${p.next}` : SERIES_STATUS_LABEL[w.series_states[0]?.status ?? "watching"];
+  const label = p.next
+    ? `Próximo ${p.next}`
+    : SERIES_STATUS_LABEL[w.series_states[0]?.status ?? "watching"];
   const backdrop = tmdbImage(w.backdrop_path, "w780");
   const bar = (
     <div className="mt-2 h-1 overflow-hidden rounded-full bg-muted">
@@ -76,15 +85,27 @@ function ContinueCard({ work: w, wide, className = "" }: { work: LibraryWork; wi
   );
   if (wide)
     return (
-      <Link to="/work/$id" params={{ id: w.id }} className="pressable relative block overflow-hidden rounded-2xl border border-border">
+      <Link
+        to="/work/$id"
+        params={{ id: w.id }}
+        className="pressable relative block overflow-hidden rounded-2xl border border-border"
+      >
         <div className="aspect-[16/9] bg-card">
-          {backdrop && <img src={backdrop} alt="" style={{ viewTransitionName: `backdrop-${w.id}` }} className="h-full w-full object-cover" />}
+          {backdrop && (
+            <img
+              src={backdrop}
+              alt=""
+              style={{ viewTransitionName: `backdrop-${w.id}` }}
+              className="h-full w-full object-cover"
+            />
+          )}
         </div>
         <div className="absolute inset-0 bg-gradient-to-t from-background via-background/50 to-transparent" />
         <div className="absolute inset-x-0 bottom-0 p-4">
           <p className="font-display text-lg font-semibold leading-tight">{w.title}</p>
           <p className="mt-1 text-xs text-muted-foreground">
-            <span className="font-semibold text-foreground">{label}</span> · {p.seen} de {p.total || "?"} episódios
+            <span className="font-semibold text-foreground">{label}</span> · {p.seen} de{" "}
+            {p.total || "?"} episódios
           </p>
           {bar}
         </div>
@@ -115,7 +136,8 @@ function Home() {
         .select("result_work_ids, closed_at")
         .eq("space_id", space!.spaceId!)
         .eq("status", "closed")
-        .not("closed_at", "is", null).order("closed_at", { ascending: false })
+        .not("closed_at", "is", null)
+        .order("closed_at", { ascending: false })
         .limit(1)
         .maybeSingle();
       return data;
@@ -186,7 +208,9 @@ function Home() {
           <Heart className="h-5 w-5 text-primary" />
           <span className="text-xs font-semibold">Último Match</span>
           <span className="text-[11px] text-muted-foreground">
-            {lastMatch.data ? `${lastMatch.data.result_work_ids?.length ?? 0} em comum` : "Nenhum ainda"}
+            {lastMatch.data
+              ? `${lastMatch.data.result_work_ids?.length ?? 0} em comum`
+              : "Nenhum ainda"}
           </span>
         </Link>
         <div className={`${quick} border-dashed`} aria-label="Importações, em breve">
@@ -228,14 +252,18 @@ function Home() {
       <section className="mt-8">
         <div className="mb-3">
           <h2 className="text-base font-semibold">Novidades pra ti</h2>
-          <p className="mt-0.5 text-xs text-muted-foreground">Indicações do casal esperando sua reação.</p>
+          <p className="mt-0.5 text-xs text-muted-foreground">
+            Indicações do casal esperando sua reação.
+          </p>
         </div>
         <ContextList items={news} empty="Nenhuma indicação nova esperando sua reação." />
       </section>
       <section className="mt-8">
         <div className="mb-3">
           <h2 className="text-base font-semibold">Interesse em comum</h2>
-          <p className="mt-0.5 text-xs text-muted-foreground">Ainda não assistidas, e os dois reagiram com 🔥 ou 👍.</p>
+          <p className="mt-0.5 text-xs text-muted-foreground">
+            Ainda não assistidas, e os dois reagiram com 🔥 ou 👍.
+          </p>
         </div>
         <ContextList items={both} empty="Quando os dois curtirem uma obra, ela aparece aqui." />
       </section>

@@ -59,7 +59,11 @@ function SettingsPage() {
     invites.refetch();
   }
 
-  const ai = useQuery({ queryKey: ["ai-status"], queryFn: () => aiStatus(), staleTime: 10 * 60_000 });
+  const ai = useQuery({
+    queryKey: ["ai-status"],
+    queryFn: () => aiStatus(),
+    staleTime: 10 * 60_000,
+  });
   // Owner-only (RLS): counts works tracked in the removable demo batch.
   const demo = useQuery({
     queryKey: ["demo-batch"],
@@ -160,7 +164,9 @@ function SettingsPage() {
         </div>
         <div className="mt-2 flex justify-between text-sm">
           <span>IA (Gemini)</span>
-          <span className={`text-xs ${ai.data?.configured ? "text-primary" : "text-muted-foreground"}`}>
+          <span
+            className={`text-xs ${ai.data?.configured ? "text-primary" : "text-muted-foreground"}`}
+          >
             {ai.data ? (ai.data.configured ? `Ativo · ${ai.data.model}` : "Não configurado") : "…"}
           </span>
         </div>
@@ -170,7 +176,8 @@ function SettingsPage() {
         <section className="rounded-2xl border border-dashed border-border p-4">
           <h2 className="font-semibold">Dados de demonstração</h2>
           <p className="mt-1 text-xs text-muted-foreground">
-            {demo.data} obras de teste identificadas. Remover apaga só esse lote; suas obras reais ficam.
+            {demo.data} obras de teste identificadas. Remover apaga só esse lote; suas obras reais
+            ficam.
           </p>
           <button
             onClick={removeDemo}

@@ -29,7 +29,10 @@ type Part = { text: string } | { inline_data: { mime_type: string; data: string 
 
 async function hash(text: string) {
   const buf = await crypto.subtle.digest("SHA-256", new TextEncoder().encode(text));
-  return [...new Uint8Array(buf)].map((b) => b.toString(16).padStart(2, "0")).join("").slice(0, 40);
+  return [...new Uint8Array(buf)]
+    .map((b) => b.toString(16).padStart(2, "0"))
+    .join("")
+    .slice(0, 40);
 }
 
 /** Calls Gemini with JSON output, using ai_cache for cache/dedupe and a per-hour rate guard. */
@@ -68,11 +71,18 @@ export async function geminiJson<T>(opts: {
     `https://generativelanguage.googleapis.com/v1beta/models/${encodeURIComponent(model)}:generateContent`,
     {
       method: "POST",
-      headers: { "content-type": "application/json", "x-goog-api-key": process.env["GEMINI_API_KEY"]! },
+      headers: {
+        "content-type": "application/json",
+        "x-goog-api-key": process.env["GEMINI_API_KEY"]!,
+      },
       body: JSON.stringify({
         systemInstruction: { parts: [{ text: opts.system }] },
         contents: [{ role: "user", parts: opts.parts }],
-        generationConfig: { responseMimeType: "application/json", temperature: 0.4, maxOutputTokens: 2048 },
+        generationConfig: {
+          responseMimeType: "application/json",
+          temperature: 0.4,
+          maxOutputTokens: 2048,
+        },
       }),
     },
   );
@@ -103,4 +113,8 @@ export async function geminiJson<T>(opts: {
   return parsed;
 }
 
-export type AiTitleGuess = { title: string; year?: number | null; mediaType?: "movie" | "tv" | null };
+export type AiTitleGuess = {
+  title: string;
+  year?: number | null;
+  mediaType?: "movie" | "tv" | null;
+};

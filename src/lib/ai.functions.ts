@@ -15,7 +15,11 @@ export const getAiStatus = createServerFn({ method: "GET" })
   .middleware([requireSupabaseAuth])
   .handler(async () => geminiConfig());
 
-async function validate(guesses: AiTitleGuess[], spaceId: string, supabase: Parameters<typeof geminiJson>[0]["supabase"]) {
+async function validate(
+  guesses: AiTitleGuess[],
+  spaceId: string,
+  supabase: Parameters<typeof geminiJson>[0]["supabase"],
+) {
   const found = await Promise.all(guesses.slice(0, 10).map((g) => findTitle(g).catch(() => null)));
   const { data: existing } = await supabase
     .from("works")
@@ -54,9 +58,17 @@ export const smartSearch = createServerFn({ method: "POST" })
         cacheTtlHours: 72,
         cacheSeed: `q:${data.query.trim().toLowerCase()}`,
       });
-      return { ok: true as const, items: await validate(res.items ?? [], data.spaceId, context.supabase) };
+      return {
+        ok: true as const,
+        items: await validate(res.items ?? [], data.spaceId, context.supabase),
+      };
     } catch (e) {
-      if (e instanceof AiUnavailable) return { ok: false as const, reason: AI_MESSAGE[e.message] ?? AI_MESSAGE["failed"]!, items: [] };
+      if (e instanceof AiUnavailable)
+        return {
+          ok: false as const,
+          reason: AI_MESSAGE[e.message] ?? AI_MESSAGE["failed"]!,
+          items: [],
+        };
       throw e;
     }
   });
@@ -73,7 +85,10 @@ export const analyzeImport = createServerFn({ method: "POST" })
         spaceId: z.string().uuid(),
         text: z.string().max(4000).optional(),
         image: z
-          .object({ mimeType: z.enum(["image/png", "image/jpeg", "image/webp"]), base64: z.string().max(6_000_000) })
+          .object({
+            mimeType: z.enum(["image/png", "image/jpeg", "image/webp"]),
+            base64: z.string().max(6_000_000),
+          })
           .optional(),
       })
       .refine((v) => v.text || v.image, "Envie texto ou imagem.")
@@ -83,7 +98,9 @@ export const analyzeImport = createServerFn({ method: "POST" })
     try {
       const parts = [
         ...(data.text ? [{ text: data.text }] : []),
-        ...(data.image ? [{ inline_data: { mime_type: data.image.mimeType, data: data.image.base64 } }] : []),
+        ...(data.image
+          ? [{ inline_data: { mime_type: data.image.mimeType, data: data.image.base64 } }]
+          : []),
       ];
       const res = await geminiJson<{ items?: AiTitleGuess[] }>({
         supabase: context.supabase,
@@ -94,9 +111,17 @@ export const analyzeImport = createServerFn({ method: "POST" })
         cacheTtlHours: 24 * 14,
         cacheSeed: `i:${data.text ?? ""}:${data.image?.base64.slice(0, 2000) ?? ""}:${data.image?.base64.length ?? 0}`,
       });
-      return { ok: true as const, items: await validate(res.items ?? [], data.spaceId, context.supabase) };
+      return {
+        ok: true as const,
+        items: await validate(res.items ?? [], data.spaceId, context.supabase),
+      };
     } catch (e) {
-      if (e instanceof AiUnavailable) return { ok: false as const, reason: AI_MESSAGE[e.message] ?? AI_MESSAGE["failed"]!, items: [] };
+      if (e instanceof AiUnavailable)
+        return {
+          ok: false as const,
+          reason: AI_MESSAGE[e.message] ?? AI_MESSAGE["failed"]!,
+          items: [],
+        };
       throw e;
     }
   });
