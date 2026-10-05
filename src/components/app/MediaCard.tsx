@@ -35,8 +35,8 @@ export function MediaCard({ work, space }: { work: LibraryWork; space: SpaceInfo
     ? work.interests.find((i) => i.user_id === space.partner!.id)
     : undefined;
   return (
-    <Link to="/work/$id" params={{ id: work.id }} className="block">
-      <div className="relative">
+    <Link to="/work/$id" params={{ id: work.id }} className="pressable block">
+      <div className="relative" style={{ viewTransitionName: `poster-${work.id}` }}>
         <Poster path={work.poster_path} title={work.title} />
         <span className="absolute left-2 top-2 rounded-md bg-background/80 p-1 text-muted-foreground">
           {work.media_type === "tv" ? (
