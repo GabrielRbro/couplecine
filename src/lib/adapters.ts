@@ -1,9 +1,9 @@
 /**
  * Contratos das integrações externas do AppCinema.
  *
- * Apenas o provedor de metadados (TMDB) está implementado nesta entrega.
- * Os demais adaptadores existem como contrato para as fases seguintes e NÃO
- * devem ser simulados como funcionais na interface.
+ * TMDB (metadados) e Gemini (análise de importação, server-side em ai.functions.ts)
+ * estão implementados. Tracker e TV seguem só como contrato e NÃO devem ser
+ * simulados como funcionais na interface.
  */
 
 export type ProviderStatus = "ready" | "not_configured" | "unavailable";
@@ -29,9 +29,11 @@ export interface TvCompanionProvider {
   status(): ProviderStatus;
 }
 
-export const importAiProvider: ImportAiProvider = {
-  id: "pending",
-  status: () => "not_configured",
+/** Client-side descriptor; real status comes from getAiStatus (depends on GEMINI_API_KEY). */
+export const importAiProvider: ImportAiProvider & { serverFn: "analyzeImport" } = {
+  id: "gemini",
+  serverFn: "analyzeImport",
+  status: () => "unavailable",
 };
 
 export const trackerProvider: TrackerProvider = {

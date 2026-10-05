@@ -256,3 +256,23 @@ export async function discoverFeed(
     }
   return out;
 }
+
+/** Validates an AI guess on TMDB: returns the best real work for title (+year/type), or null. */
+export async function findTitle(guess: {
+  title: string;
+  year?: number | null;
+  mediaType?: "movie" | "tv" | null;
+}): Promise<TmdbSearchItem | null> {
+  const path = guess.mediaType ? `/search/${guess.mediaType}` : "/search/multi";
+  const data = await call(path, { query: guess.title.slice(0, 100), include_adult: "false", page: "1" });
+  const results = Array.isArray(data["results"]) ? (data["results"] as Json[]) : [];
+  const items = results
+    .map((r) => mapListItem(r, guess.mediaType ?? undefined))
+    .filter((x): x is TmdbSearchItem => !!x);
+  if (!items.length) return null;
+  if (guess.year) {
+    const exact = items.find((i) => i.year && Math.abs(i.year - guess.year!) <= 1);
+    if (exact) return exact;
+  }
+  return items[0]!;
+}
