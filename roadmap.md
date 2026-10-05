@@ -1,19 +1,15 @@
 # Roadmap
 
-- [x] Lote 1 aprovado: movimento contínuo, BottomNav persistente, histórico radial correto e sheets com saída suave
-- [x] Lote 2 aprovado: Match com pilha cenográfica, voto direcional e resultado fechado temático
-- [x] Lote 3 aprovado: Home como central rápida, ações coerentes e conteúdo contextual
-- [x] Lote 4 aprovado: detalhes de filme e série com hierarquia, comparação e episódios seguros
-- [x] Microetapa 5A: rollback seguro e restauração individual previsível em Descobrir
-- [x] Microetapa 5B: quatro semânticas de histórico e resultado físico leve no Sorteio
-- [x] Microetapa 5C: busca por título, ator e diretor resolvendo sempre para obras TMDB
-- [x] Microetapa 5D: Galeria como modo de escolha — selo, cartões com poster protagonista e empty state orientado a filtros/indicações
+Concluído: Lotes 1–4, microetapas 5A–5D.
 
-- [ ] A. Match secreto: RPCs no backend, ordem por usuário, desfazer, encerramento com os dois, continuar/abandonar, lote adaptativo, último resultado
-- [ ] B. Acesso: só o dono cria espaço; revisar RLS individual; excluir obra com confirmação + desfazer; cada um remove só a própria indicação
-- [ ] C. Barra inferior: ícones cinema, animação do radial, Esc/voltar, reduced-motion
-- [ ] D. Skeletons, carga paralela, microinterações, alvos de 44px, safe-area
-- [ ] E. Detalhe de série: cards de episódio ricos, abrir na temporada do próximo
-- [ ] F. Home: Continuar assistindo mais rico, Último Match revelado, Importações intencional
-- [ ] Reindicação sem apagar a indicação (uma ativa por usuário)
-- [ ] Verificar em 390x844 e 412x915
+## Rodada 6 (em andamento)
+- [ ] 1. Performance/navegação/motion (sessão local no gate, summary leve, staleTime/prefetch, motion, shared poster, radial→Início/Biblioteca)
+- [ ] 2. Galeria: lista vertical de cards com backdrop, filtros Todos/Filmes/Séries/Até 2h/Filtros
+- [ ] 3. Home: sem atalho Continuar, Continuar assistindo 1/2/3+, renomear interesse comum
+- [ ] 4. Detalhes: Interesse/Avaliação lado a lado; aggregate credits em séries; cache versionado
+- [ ] 5. Séries: temporada atual primeiro, prefetch das demais, modal de episódio
+- [ ] 6. Match: auto-start, cenográficos visíveis, revelar só com imagem pronta, match_extend 4–8, veto 👎
+- [ ] 7. Biblioteca/Descobrir: busca coerente, estado em search params, pressable, dispensados sem N chamadas
+- [ ] 8. Gemini: adapter servidor, pesquisa inteligente, rerank Descobrir, provider de importação
+- [ ] 9. Seed demo removível (~45 obras reais)
+- [ ] 10. Validar 390x844
