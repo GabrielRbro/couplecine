@@ -10,7 +10,9 @@ import {
   fetchDetails,
   fetchSeason,
   searchMulti,
+  DETAILS_CACHE_VERSION,
   type TmdbDetails,
+  type TmdbEpisode,
 } from "./tmdb.server";
 
 function friendly(error: unknown): never {
@@ -155,7 +157,14 @@ export const getWorkDetails = createServerFn({ method: "POST" })
       .eq("work_id", data.workId)
       .maybeSingle();
     const cached = cache?.payload as TmdbDetails | undefined;
-    if (cached && cached.cast && new Date(cache!.expires_at) > new Date()) return cached;
+    // Old strategy versions or suspiciously thin cast (e.g. a single actor) are refetched.
+    const valid =
+      cached &&
+      cached.v === DETAILS_CACHE_VERSION &&
+      Array.isArray(cached.cast) &&
+      cached.cast.length >= 3 &&
+      new Date(cache!.expires_at) > new Date();
+    if (valid) return cached;
     try {
       const d = await fetchDetails(work.media_type, work.tmdb_id);
       await supabase.from("work_metadata_cache").upsert(
@@ -185,9 +194,31 @@ export const getSeasonEpisodes = createServerFn({ method: "POST" })
       .eq("id", data.workId)
       .maybeSingle();
     if (!work || work.media_type !== "tv") throw new Error("Série não encontrada.");
+    // season_cache keeps episode lists for 3 days so switching seasons skips TMDB.
+    const { data: hit } = await context.supabase
+      .from("season_cache")
+      .select("payload, updated_at")
+      .eq("work_id", data.workId)
+      .eq("season_number", data.season)
+      .maybeSingle();
+    const fresh = hit && Date.now() - new Date(hit.updated_at).getTime() < 3 * 864e5;
+    if (fresh && Array.isArray(hit.payload)) return hit.payload as unknown as TmdbEpisode[];
     try {
-      return await fetchSeason(work.tmdb_id, data.season);
+      const eps = await fetchSeason(work.tmdb_id, data.season);
+      await context.supabase.from("season_cache").upsert(
+        {
+          work_id: data.workId,
+          season_number: data.season,
+          name: `Temporada ${data.season}`,
+          episode_count: eps.length,
+          payload: eps as never,
+          updated_at: new Date().toISOString(),
+        },
+        { onConflict: "work_id,season_number" },
+      );
+      return eps;
     } catch (e) {
+      if (hit && Array.isArray(hit.payload)) return hit.payload as unknown as TmdbEpisode[];
       friendly(e);
     }
   });
