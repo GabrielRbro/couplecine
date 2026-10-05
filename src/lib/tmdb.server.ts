@@ -87,7 +87,11 @@ export async function searchMulti(query: string): Promise<TmdbSearchItem[]> {
   return [...unique.values()].slice(0, 20);
 }
 
+/** Bump when the details strategy changes; older cached payloads are refetched. */
+export const DETAILS_CACHE_VERSION = 2;
+
 export type TmdbDetails = {
+  v?: number;
   mediaType: "movie" | "tv";
   tmdbId: number;
   title: string;
@@ -101,17 +105,41 @@ export type TmdbDetails = {
   genres: string[];
   crewLead: { name: string; role: string; profilePath: string | null } | null;
   cast: { name: string; character: string; profilePath: string | null }[];
-  seasons: { seasonNumber: number; name: string; episodeCount: number }[];
+  seasons: {
+    seasonNumber: number;
+    name: string;
+    episodeCount: number;
+    posterPath?: string | null;
+  }[];
 };
 
 export async function fetchDetails(
   mediaType: "movie" | "tv",
   tmdbId: number,
 ): Promise<TmdbDetails> {
-  const data = await call(`/${mediaType}/${tmdbId}`, { append_to_response: "credits" });
+  // Series use aggregate_credits (whole run); movies keep regular credits.
+  const data = await call(`/${mediaType}/${tmdbId}`, {
+    append_to_response: mediaType === "tv" ? "aggregate_credits,credits" : "credits",
+  });
   const credits = (data["credits"] as Json | undefined) ?? {};
+  const agg = (data["aggregate_credits"] as Json | undefined) ?? {};
   const crew = Array.isArray(credits["crew"]) ? (credits["crew"] as Json[]) : [];
-  const cast = Array.isArray(credits["cast"]) ? (credits["cast"] as Json[]) : [];
+  const aggCast = Array.isArray(agg["cast"]) ? (agg["cast"] as Json[]) : [];
+  const cast: Json[] =
+    mediaType === "tv" && aggCast.length
+      ? [...aggCast]
+          .sort(
+            (a, b) =>
+              Number(b["total_episode_count"] ?? 0) - Number(a["total_episode_count"] ?? 0) ||
+              Number(a["order"] ?? 999) - Number(b["order"] ?? 999),
+          )
+          .map((m) => {
+            const roles = Array.isArray(m["roles"]) ? (m["roles"] as Json[]) : [];
+            return { ...m, character: roles[0]?.["character"] ?? "" };
+          })
+      : Array.isArray(credits["cast"])
+        ? (credits["cast"] as Json[])
+        : [];
   const createdBy = Array.isArray(data["created_by"]) ? (data["created_by"] as Json[]) : [];
   const genres = Array.isArray(data["genres"]) ? (data["genres"] as Json[]) : [];
   const seasons = Array.isArray(data["seasons"]) ? (data["seasons"] as Json[]) : [];
@@ -121,6 +149,7 @@ export async function fetchDetails(
   const lead = director ?? creator;
 
   return {
+    v: DETAILS_CACHE_VERSION,
     mediaType,
     tmdbId,
     title: String(data[mediaType === "tv" ? "name" : "title"] ?? "Sem título"),
@@ -144,7 +173,7 @@ export async function fetchDetails(
           profilePath: str(lead["profile_path"]),
         }
       : null,
-    cast: cast.slice(0, 8).map((member) => ({
+    cast: cast.slice(0, 12).map((member) => ({
       name: String(member["name"]),
       character: String(member["character"] ?? ""),
       profilePath: str(member["profile_path"]),
@@ -155,6 +184,7 @@ export async function fetchDetails(
         seasonNumber: Number(season["season_number"]),
         name: String(season["name"] ?? `Temporada ${season["season_number"]}`),
         episodeCount: Number(season["episode_count"] ?? 0),
+        posterPath: str(season["poster_path"]),
       })),
   };
 }
@@ -230,4 +260,28 @@ export async function discoverFeed(
       }
     }
   return out;
+}
+
+/** Validates an AI guess on TMDB: returns the best real work for title (+year/type), or null. */
+export async function findTitle(guess: {
+  title: string;
+  year?: number | null;
+  mediaType?: "movie" | "tv" | null;
+}): Promise<TmdbSearchItem | null> {
+  const path = guess.mediaType ? `/search/${guess.mediaType}` : "/search/multi";
+  const data = await call(path, {
+    query: guess.title.slice(0, 100),
+    include_adult: "false",
+    page: "1",
+  });
+  const results = Array.isArray(data["results"]) ? (data["results"] as Json[]) : [];
+  const items = results
+    .map((r) => mapListItem(r, guess.mediaType ?? undefined))
+    .filter((x): x is TmdbSearchItem => !!x);
+  if (!items.length) return null;
+  if (guess.year) {
+    const exact = items.find((i) => i.year && Math.abs(i.year - guess.year!) <= 1);
+    if (exact) return exact;
+  }
+  return items[0]!;
 }

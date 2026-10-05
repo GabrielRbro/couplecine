@@ -29,6 +29,14 @@ export const Route = createFileRoute("/_authenticated/work/$id")({
       { name: "description", content: "Detalhes, reações e notas do casal." },
     ],
   }),
+  // Primes the work query so the page (and its shared poster) renders with data on arrival.
+  loader: ({ context, params }) => {
+    void context.queryClient.prefetchQuery(workQuery(params.id));
+  },
+  errorComponent: () => (
+    <p className="p-6 text-sm text-destructive">Não foi possível abrir a obra.</p>
+  ),
+  notFoundComponent: () => <p className="p-6 text-sm">Obra não encontrada.</p>,
   component: () => (
     <AppShell skeleton={<DetailSkeleton />}>
       <WorkPage />
@@ -39,8 +47,13 @@ export const Route = createFileRoute("/_authenticated/work/$id")({
 const SCORES = Array.from({ length: 21 }, (_, i) => i / 2);
 
 function useWork(id: string) {
-  return useQuery({
+  return useQuery(workQuery(id));
+}
+
+function workQuery(id: string) {
+  return {
     queryKey: ["work", id],
+    staleTime: 30_000,
     queryFn: async () => {
       const [w, i, r, p, s, e, j, n] = await Promise.all([
         supabase.from("works").select("*").eq("id", id).maybeSingle(),
@@ -75,7 +88,7 @@ function useWork(id: string) {
         indications: n.data ?? [],
       };
     },
-  });
+  };
 }
 
 function WorkPage() {
@@ -108,6 +121,7 @@ function WorkPage() {
           <img
             src={tmdbImage(work.backdrop_path, "w780")!}
             alt=""
+            style={{ viewTransitionName: `backdrop-${id}` }}
             className="h-full w-full object-cover opacity-40"
           />
         )}
@@ -121,7 +135,7 @@ function WorkPage() {
         </button>
       </div>
       <div className="-mt-24 relative flex gap-4 px-4">
-        <div className="w-28 shrink-0">
+        <div className="w-28 shrink-0" style={{ viewTransitionName: `poster-${id}` }}>
           <Poster path={work.poster_path} title={work.title} />
         </div>
         <div className="min-w-0 self-end">
@@ -190,6 +204,7 @@ function WorkPage() {
               state={data.state}
               events={data.events}
               seasons={m?.seasons ?? []}
+              fallbackImage={work.backdrop_path ?? work.poster_path}
               onChange={refresh}
             />
           </>
@@ -307,13 +322,17 @@ function Comparison({
     setEditing(null);
   }
 
-  const InterestPerson = ({ label, r, own }: {
+  const InterestPerson = ({
+    label,
+    r,
+    own,
+  }: {
     label: string;
     r: Reaction | undefined;
     own: boolean;
   }) => (
     <div className="min-w-0 flex-1 text-center">
-      <p className="text-xs text-muted-foreground">{label}</p>
+      <p className="text-[11px] text-muted-foreground">{label}</p>
       <button
         disabled={!own}
         onClick={() => setEditing("reaction")}
@@ -324,35 +343,70 @@ function Comparison({
       </button>
     </div>
   );
-  const ScorePerson = ({ label, s, own }: { label: string; s: number | undefined; own: boolean }) => (
+  const ScorePerson = ({
+    label,
+    s,
+    own,
+  }: {
+    label: string;
+    s: number | undefined;
+    own: boolean;
+  }) => (
     <div className="min-w-0 flex-1 text-center">
       <p className="text-xs text-muted-foreground">{label}</p>
-        <button
-          disabled={!own}
-          onClick={() => setEditing("score")}
+      <button
+        disabled={!own}
+        onClick={() => setEditing("score")}
         className="pressable mt-1 inline-flex min-h-11 min-w-11 items-center justify-center text-lg font-semibold"
         aria-label={`${label}: avaliação`}
-        >
-          {s !== undefined ? (
-            formatScore(Number(s))
-          ) : own ? (
-            <span className="text-xs text-primary">Dar nota</span>
-          ) : (
-            "—"
-          )}
-        </button>
+      >
+        {s !== undefined ? (
+          formatScore(Number(s))
+        ) : own ? (
+          <span className="text-xs text-primary">Dar nota</span>
+        ) : (
+          "—"
+        )}
+      </button>
     </div>
   );
 
   return (
     <section className="space-y-3">
-      <div className="rounded-xl border border-border bg-card p-3">
-        <h2 className="text-sm font-semibold">Interesse</h2>
-        <div className="mt-2 flex divide-x divide-border">
-          <InterestPerson label="Eu" r={mine?.reaction} own />
-          <InterestPerson label={space.partner ? firstName(space.partner.display_name) : "Parceiro"} r={theirs?.reaction} own={false} />
+      <div className="grid grid-cols-2 gap-3">
+        <div className="rounded-xl border border-border bg-card p-3">
+          <h2 className="text-xs font-semibold">Interesse</h2>
+          <div className="mt-2 flex divide-x divide-border">
+            <InterestPerson label="Eu" r={mine?.reaction} own />
+            <InterestPerson
+              label={space.partner ? firstName(space.partner.display_name) : "Parceiro"}
+              r={theirs?.reaction}
+              own={false}
+            />
+          </div>
+        </div>
+        <div className="rounded-xl border border-border bg-card p-3">
+          <div className="flex items-baseline justify-between gap-1">
+            <h2 className="text-xs font-semibold">Avaliação</h2>
+            {avg !== null && (
+              <span className="text-[11px] text-muted-foreground">Média {formatScore(avg)}</span>
+            )}
+          </div>
+          <div className="mt-2 flex divide-x divide-border">
+            <ScorePerson label="Eu" s={myScore?.score} own />
+            <ScorePerson
+              label={space.partner ? firstName(space.partner.display_name) : "Parceiro"}
+              s={theirScore?.score}
+              own={false}
+            />
+          </div>
         </div>
       </div>
+      {avg === null && (
+        <p className="-mt-1 text-[11px] text-muted-foreground">
+          Média aparece quando os dois avaliarem.
+        </p>
+      )}
       {editing === "reaction" && (
         <div className="grid grid-cols-4 gap-2">
           {ALL_REACTIONS.map((r) => (
@@ -366,18 +420,6 @@ function Comparison({
           ))}
         </div>
       )}
-      <div className="rounded-xl border border-border bg-card p-3">
-        <div className="flex items-center justify-between gap-3">
-          <h2 className="text-sm font-semibold">Avaliação</h2>
-          <p className="text-xs text-muted-foreground">
-            {avg !== null ? `Média ${formatScore(avg)}` : "Média após os dois avaliarem"}
-          </p>
-        </div>
-        <div className="mt-2 flex divide-x divide-border">
-          <ScorePerson label="Eu" s={myScore?.score} own />
-          <ScorePerson label={space.partner ? firstName(space.partner.display_name) : "Parceiro"} s={theirScore?.score} own={false} />
-        </div>
-      </div>
       {editing === "score" && (
         <div>
           <div className="grid grid-cols-7 gap-1.5">
@@ -492,50 +534,107 @@ function MovieWatched({
 
 type Ev = { id: string; season_number: number | null; episode_number: number | null };
 
+type Episode = NonNullable<Awaited<ReturnType<typeof getSeasonEpisodes>>>[number];
+
+/** Warms the browser image cache a couple of images at a time, never blocking the page. */
+function prefetchImages(urls: string[], concurrency = 2) {
+  const queue = [...urls];
+  let cancelled = false;
+  const next = () => {
+    const url = queue.shift();
+    if (!url || cancelled) return;
+    const img = new Image();
+    img.decoding = "async";
+    img.onload = img.onerror = () => next();
+    img.src = url;
+  };
+  for (let i = 0; i < concurrency; i++) next();
+  return () => {
+    cancelled = true;
+  };
+}
+
 function SeriesBlock({
   space,
   workId,
   state,
   events,
   seasons,
+  fallbackImage,
   onChange,
 }: {
   space: SpaceInfo;
   workId: string;
   state: { id: string; status: string } | null;
   events: Ev[];
-  seasons: { seasonNumber: number; name: string; episodeCount: number }[];
+  seasons: {
+    seasonNumber: number;
+    name: string;
+    episodeCount: number;
+    posterPath?: string | null;
+  }[];
+  fallbackImage: string | null;
   onChange: () => void;
 }) {
-  const seenInit = new Set(events.map((e) => `${e.season_number}:${e.episode_number}`));
-  let firstNext = 1;
-  outer: for (const s of seasons)
-    for (let e = 1; e <= s.episodeCount; e++)
-      if (!seenInit.has(`${s.seasonNumber}:${e}`)) {
-        firstNext = s.seasonNumber;
-        break outer;
-      }
-  const [season, setSeason] = useState<number | null>(null);
-  const activeSeason = season ?? (seasons.length ? firstNext : 1);
-  const fetchSeason = useServerFn(getSeasonEpisodes);
-  const eps = useQuery({
-    queryKey: ["season", workId, activeSeason],
-    queryFn: () => fetchSeason({ data: { workId, season: activeSeason } }),
-    staleTime: 3600_000,
-    enabled: seasons.length > 0,
-  });
+  const qc = useQueryClient();
   const seen = new Set(events.map((e) => `${e.season_number}:${e.episode_number}`));
-  const total = seasons.reduce((a, s) => a + s.episodeCount, 0);
-
   let next: { s: number; e: number } | null = null;
-  for (const s of seasons) {
+  outer: for (const s of seasons)
     for (let e = 1; e <= s.episodeCount; e++)
       if (!seen.has(`${s.seasonNumber}:${e}`)) {
         next = { s: s.seasonNumber, e };
-        break;
+        break outer;
       }
-    if (next) break;
-  }
+  const [season, setSeason] = useState<number | null>(null);
+  const [openEp, setOpenEp] = useState<Episode | null>(null);
+  const [saving, setSaving] = useState(false);
+  const activeSeason = season ?? (seasons.length ? (next?.s ?? seasons[0]!.seasonNumber) : 1);
+  const fetchSeason = useServerFn(getSeasonEpisodes);
+  const seasonQuery = (n: number) => ({
+    queryKey: ["season", workId, n],
+    queryFn: () => fetchSeason({ data: { workId, season: n } }),
+    staleTime: 6 * 3600_000,
+  });
+  const eps = useQuery({ ...seasonQuery(activeSeason), enabled: seasons.length > 0 });
+  const total = seasons.reduce((a, s) => a + s.episodeCount, 0);
+  const seasonPoster = (n: number) => seasons.find((s) => s.seasonNumber === n)?.posterPath ?? null;
+  // Episode image priority: real TMDB still → season poster → series artwork.
+  const epImage = (ep: Episode, size: string) =>
+    tmdbImage(ep.stillPath, size) ??
+    tmdbImage(seasonPoster(ep.seasonNumber) ?? fallbackImage, size === "w300" ? "w342" : "w780");
+
+  // After the visible season loads: fetch the other seasons' DATA sequentially in background.
+  const loaded = eps.isSuccess;
+  useEffect(() => {
+    if (!loaded || seasons.length < 2) return;
+    let stop = false;
+    (async () => {
+      const order = [...seasons].sort(
+        (a, b) => Math.abs(a.seasonNumber - activeSeason) - Math.abs(b.seasonNumber - activeSeason),
+      );
+      for (const s of order) {
+        if (stop) return;
+        if (s.seasonNumber !== activeSeason)
+          await qc.prefetchQuery(seasonQuery(s.seasonNumber)).catch(() => {});
+      }
+    })();
+    return () => {
+      stop = true;
+    };
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [loaded, workId, seasons.length]);
+
+  // Images: active season first, then neighbours, 2 at a time.
+  useEffect(() => {
+    if (!eps.data) return;
+    const neighbours = [activeSeason - 1, activeSeason + 1]
+      .map((n) => qc.getQueryData<Episode[]>(["season", workId, n]) ?? [])
+      .flat();
+    const urls = [...eps.data, ...neighbours]
+      .map((ep) => tmdbImage(ep.stillPath, "w300"))
+      .filter((u): u is string => !!u);
+    return prefetchImages(urls);
+  }, [eps.data, activeSeason, qc, workId]);
 
   async function writeState(status: string) {
     const payload = {
@@ -556,6 +655,7 @@ function SeriesBlock({
   async function toggle(s: number, e: number) {
     const key = `${s}:${e}`;
     const existing = events.find((x) => `${x.season_number}:${x.episode_number}` === key);
+    setSaving(true);
     const { error } = existing
       ? await supabase.from("watch_events").delete().eq("id", existing.id)
       : await supabase.from("watch_events").insert({
@@ -565,6 +665,7 @@ function SeriesBlock({
           episode_number: e,
           created_by: space.userId,
         });
+    setSaving(false);
     if (error) {
       toast.error("Não foi possível salvar.");
       return;
@@ -572,6 +673,8 @@ function SeriesBlock({
     if (!state) await writeState("watching");
     else onChange();
   }
+
+  const openDone = openEp ? seen.has(`${openEp.seasonNumber}:${openEp.episodeNumber}`) : false;
 
   return (
     <section>
@@ -582,7 +685,8 @@ function SeriesBlock({
           <select
             value={state?.status ?? ""}
             onChange={(e) => writeState(e.target.value)}
-            className="rounded-lg border border-border bg-secondary px-2 py-1 text-xs"
+            aria-label="Status da série"
+            className="min-h-9 rounded-lg border border-border bg-secondary px-2 py-1 text-xs"
           >
             {!state && <option value="">Não iniciada</option>}
             {Object.entries(SERIES_STATUS_LABEL).map(([k, v]) => (
@@ -594,13 +698,13 @@ function SeriesBlock({
         </div>
         <div className="mt-3 h-1.5 overflow-hidden rounded-full bg-muted">
           <div
-            className="h-full bg-primary"
+            className="h-full bg-primary transition-[width] duration-200"
             style={{ width: total ? `${Math.min(100, (seen.size / total) * 100)}%` : "0%" }}
           />
         </div>
         <p className="mt-2 text-xs text-muted-foreground">
           {seen.size} de {total || "?"} episódios ·{" "}
-          {next ? `Próximo: T${next.s} E${next.e}` : total ? "Tudo em dia" : ""}
+          {next ? `Próximo: T${next.s}E${next.e}` : total ? "Tudo em dia" : ""}
         </p>
       </div>
 
@@ -629,35 +733,34 @@ function SeriesBlock({
             {eps.data?.map((ep) => {
               const done = seen.has(`${ep.seasonNumber}:${ep.episodeNumber}`);
               const isNext = next?.s === ep.seasonNumber && next?.e === ep.episodeNumber;
-              const img = tmdbImage(ep.stillPath, "w300");
+              const img = epImage(ep, "w300");
               return (
-                <article
+                <button
+                  type="button"
                   key={ep.episodeNumber}
-                  className={`w-52 shrink-0 rounded-xl ${isNext ? "ring-2 ring-primary ring-offset-2 ring-offset-background" : ""}`}
+                  onClick={() => setOpenEp(ep)}
+                  aria-label={`Abrir T${ep.seasonNumber}E${ep.episodeNumber}, ${ep.name}${done ? ", assistido" : ""}`}
+                  className={`pressable w-52 shrink-0 rounded-xl text-left ${isNext ? "ring-2 ring-primary ring-offset-2 ring-offset-background" : ""}`}
                 >
                   <div className="relative aspect-video overflow-hidden rounded-xl bg-muted">
-                    {isNext && (
-                      <span className="absolute left-2 top-2 rounded-md bg-primary px-1.5 py-0.5 text-[10px] font-semibold text-primary-foreground">
-                        Próximo
-                      </span>
-                    )}
                     {img && (
                       <img
                         src={img}
                         alt=""
                         loading="lazy"
-                        className={`h-full w-full object-cover ${done ? "opacity-50" : ""}`}
+                        className={`h-full w-full object-cover ${done ? "opacity-50" : ""} ${ep.stillPath ? "" : "object-top"}`}
                       />
                     )}
-                    <button
-                      type="button"
-                      onClick={() => toggle(ep.seasonNumber, ep.episodeNumber)}
-                      aria-label={`${done ? "Desmarcar" : "Marcar"} T${ep.seasonNumber}E${ep.episodeNumber} como assistido`}
-                      aria-pressed={done}
-                      className={`pressable absolute right-1 top-1 flex h-11 w-11 items-center justify-center rounded-full transition-colors duration-150 ${done ? "bg-primary text-primary-foreground" : "border border-foreground/40 bg-background/80"}`}
-                    >
-                      {done && <Check className="h-3.5 w-3.5" />}
-                    </button>
+                    {isNext && (
+                      <span className="absolute left-2 top-2 rounded-md bg-primary px-1.5 py-0.5 text-[10px] font-semibold text-primary-foreground">
+                        Próximo
+                      </span>
+                    )}
+                    {done && (
+                      <span className="absolute right-2 top-2 flex h-6 w-6 items-center justify-center rounded-full bg-primary text-primary-foreground">
+                        <Check className="h-3.5 w-3.5" />
+                      </span>
+                    )}
                   </div>
                   <p className="mt-1.5 line-clamp-1 text-xs font-semibold">
                     T{ep.seasonNumber}E{ep.episodeNumber} · {ep.name}
@@ -673,12 +776,64 @@ function SeriesBlock({
                       .join(" · ")}
                     {done ? " · Assistido" : ""}
                   </p>
-                </article>
+                </button>
               );
             })}
           </div>
         </div>
       )}
+
+      <AnimatedSheet
+        open={!!openEp}
+        onClose={() => setOpenEp(null)}
+        labelledBy="ep-title"
+        panelClassName="max-h-[88vh] overflow-y-auto p-0 pb-[max(env(safe-area-inset-bottom),20px)]"
+      >
+        {openEp && (
+          <div>
+            <div className="aspect-video overflow-hidden rounded-t-3xl bg-muted">
+              {epImage(openEp, "w780") && (
+                <img src={epImage(openEp, "w780")!} alt="" className="h-full w-full object-cover" />
+              )}
+            </div>
+            <div className="p-5">
+              <h3 id="ep-title" className="text-lg font-semibold leading-tight">
+                T{openEp.seasonNumber}E{openEp.episodeNumber} · {openEp.name}
+              </h3>
+              <p className="mt-1 text-xs text-muted-foreground">
+                {[formatRuntime(openEp.runtimeMinutes), formatDate(openEp.airDate)]
+                  .filter(Boolean)
+                  .join(" · ") || "Sem data"}
+              </p>
+              <p className="mt-3 text-sm leading-relaxed text-muted-foreground">
+                {openEp.overview || "Sem sinopse disponível."}
+              </p>
+              <div
+                className="mt-5 grid grid-cols-2 gap-2"
+                role="group"
+                aria-label="Status do episódio"
+              >
+                <button
+                  disabled={saving || !openDone}
+                  onClick={() => toggle(openEp.seasonNumber, openEp.episodeNumber)}
+                  aria-pressed={!openDone}
+                  className={`pressable min-h-12 rounded-xl border text-sm font-medium ${!openDone ? "border-primary text-foreground" : "border-border text-muted-foreground"}`}
+                >
+                  Não assistido
+                </button>
+                <button
+                  disabled={saving || openDone}
+                  onClick={() => toggle(openEp.seasonNumber, openEp.episodeNumber)}
+                  aria-pressed={openDone}
+                  className={`pressable flex min-h-12 items-center justify-center gap-1.5 rounded-xl text-sm font-semibold ${openDone ? "bg-primary text-primary-foreground" : "border border-border"}`}
+                >
+                  <Check className="h-4 w-4" /> Assistido
+                </button>
+              </div>
+            </div>
+          </div>
+        )}
+      </AnimatedSheet>
     </section>
   );
 }

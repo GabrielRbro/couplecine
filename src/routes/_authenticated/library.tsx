@@ -1,5 +1,6 @@
-import { createFileRoute, Link } from "@tanstack/react-router";
-import { useMemo, useState } from "react";
+import { createFileRoute, Link, useNavigate } from "@tanstack/react-router";
+import { useMemo } from "react";
+import { z } from "zod";
 import { Plus, Search } from "lucide-react";
 import { AppShell } from "@/components/app/AppShell";
 import { EmptyState, MediaCard } from "@/components/app/MediaCard";
@@ -13,6 +14,13 @@ export const Route = createFileRoute("/_authenticated/library")({
       { title: "Biblioteca — AppCinema" },
       { name: "description", content: "Indicações e obras assistidas pelo casal." },
     ],
+  }),
+  // Tab/filters/search live in the URL so opening a work and going back restores them.
+  validateSearch: z.object({
+    tab: z.enum(["ind", "disc", "seen"]).catch("ind").default("ind"),
+    kind: z.enum(["all", "movie", "tv"]).catch("all").default("all"),
+    sort: z.enum(["activity", "title", "year"]).catch("activity").default("activity"),
+    q: z.string().catch("").default(""),
   }),
   component: () => (
     <AppShell
@@ -37,10 +45,14 @@ const norm = (s: string) =>
 function LibraryPage() {
   const { data: space } = useSpace();
   const { data: works = [], isLoading } = useLibrary(space?.spaceId);
-  const [tab, setTab] = useState<Tab>("ind");
-  const [kind, setKind] = useState<"all" | "movie" | "tv">("all");
-  const [sort, setSort] = useState<"activity" | "title" | "year">("activity");
-  const [q, setQ] = useState("");
+  const { tab, kind, sort, q } = Route.useSearch();
+  const navigate = useNavigate({ from: "/library" });
+  const set = (patch: Partial<{ tab: Tab; kind: typeof kind; sort: typeof sort; q: string }>) =>
+    navigate({ search: (prev) => ({ ...prev, ...patch }), replace: true, viewTransition: false });
+  const setTab = (tab: Tab) => set({ tab });
+  const setKind = (kind: "all" | "movie" | "tv") => set({ kind });
+  const setSort = (sort: "activity" | "title" | "year") => set({ sort });
+  const setQ = (q: string) => set({ q });
 
   const list = useMemo(() => {
     let l = works.filter((w) => (tab === "seen" ? isWatched(w) : isIndicated(w)));
@@ -71,7 +83,8 @@ function LibraryPage() {
         <input
           value={q}
           onChange={(e) => setQ(e.target.value)}
-          placeholder="Buscar títulos"
+          placeholder={tab === "disc" ? "Filtrar sugestões" : "Buscar títulos"}
+          aria-label="Buscar"
           className="w-full bg-transparent py-3 text-sm outline-none"
         />
       </div>
@@ -107,7 +120,7 @@ function LibraryPage() {
               onChange={setKind}
             />
           </div>
-          <DiscoverTab space={space} kind={kind} />
+          <DiscoverTab space={space} kind={kind} q={q} />
         </>
       ) : (
         <>

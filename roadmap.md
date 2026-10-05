@@ -1,19 +1,19 @@
 # Roadmap
 
-- [x] Lote 1 aprovado: movimento contínuo, BottomNav persistente, histórico radial correto e sheets com saída suave
-- [x] Lote 2 aprovado: Match com pilha cenográfica, voto direcional e resultado fechado temático
-- [x] Lote 3 aprovado: Home como central rápida, ações coerentes e conteúdo contextual
-- [x] Lote 4 aprovado: detalhes de filme e série com hierarquia, comparação e episódios seguros
-- [x] Microetapa 5A: rollback seguro e restauração individual previsível em Descobrir
-- [x] Microetapa 5B: quatro semânticas de histórico e resultado físico leve no Sorteio
-- [x] Microetapa 5C: busca por título, ator e diretor resolvendo sempre para obras TMDB
-- [x] Microetapa 5D: Galeria como modo de escolha — selo, cartões com poster protagonista e empty state orientado a filtros/indicações
+Concluído: Lotes 1–4, microetapas 5A–5D.
 
-- [ ] A. Match secreto: RPCs no backend, ordem por usuário, desfazer, encerramento com os dois, continuar/abandonar, lote adaptativo, último resultado
-- [ ] B. Acesso: só o dono cria espaço; revisar RLS individual; excluir obra com confirmação + desfazer; cada um remove só a própria indicação
-- [ ] C. Barra inferior: ícones cinema, animação do radial, Esc/voltar, reduced-motion
-- [ ] D. Skeletons, carga paralela, microinterações, alvos de 44px, safe-area
-- [ ] E. Detalhe de série: cards de episódio ricos, abrir na temporada do próximo
-- [ ] F. Home: Continuar assistindo mais rico, Último Match revelado, Importações intencional
-- [ ] Reindicação sem apagar a indicação (uma ativa por usuário)
-- [ ] Verificar em 390x844 e 412x915
+## Rodada 6 (concluída)
+- [x] 1. Gate com sessão local, summary leve via view work_watch_summary, defaults de cache + preload por intenção, View Transitions com poster/backdrop compartilhado, radial→Início/Biblioteca sem histórico sintético
+- [x] 2. Galeria: lista vertical de cards com backdrop, Todos/Filmes/Séries/Até 2h/Filtros (sheet)
+- [x] 3. Home: atalhos Não avaliados/Último Match/Importações; Continuar assistindo 1/2/3+; "Interesse em comum"
+- [x] 4. Detalhes: Interesse/Avaliação lado a lado; aggregate_credits; cache de metadados versionado (v2)
+- [x] 5. Séries: temporada atual primeiro, demais em background, imagens 2 por vez, season_cache, sheet de episódio
+- [x] 6. Match: auto-start, cenográficos visíveis, carta só revela com imagem pronta, match_extend 4–8 com retry, veto 👎 (polling de 5 s mantido; Realtime não feito)
+- [x] 7. Biblioteca: estado na URL, busca filtra Descobrir, cards pressable, dispensados com no máx. 12 chamadas TMDB (4 por vez)
+- [x] 8. Gemini server-side: pesquisa inteligente, rerank do Descobrir, analyzeImport (sem tela de Importações ainda). Aguardando GEMINI_API_KEY
+- [x] 9. Seed demo-v1 (45 obras) rastreado em demo_batch_items; remoção em Configurações (demo_cleanup)
+- [x] 10. Validado em 390x844
+
+## Pendente
+- [ ] GEMINI_API_KEY (bloqueado: usuário precisa adicionar o secret)
+- [ ] Tela de Importações (feature futura) usando analyzeImport

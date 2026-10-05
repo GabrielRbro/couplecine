@@ -2,12 +2,13 @@ import { createFileRoute, Link, useNavigate } from "@tanstack/react-router";
 import { useMutation, useQueryClient } from "@tanstack/react-query";
 import { useServerFn } from "@tanstack/react-start";
 import { useEffect, useState } from "react";
-import { ArrowLeft, Search } from "lucide-react";
+import { ArrowLeft, Search, Sparkles } from "lucide-react";
 import { toast } from "sonner";
 import { AnimatedSheet } from "@/components/app/AnimatedSheet";
 import { AppShell } from "@/components/app/AppShell";
 import { Poster } from "@/components/app/MediaCard";
 import { addWork, searchCatalog } from "@/lib/catalog.functions";
+import { smartSearch } from "@/lib/ai.functions";
 import { ADD_REACTIONS, REACTION_EMOJI, REACTION_LABEL, type Reaction } from "@/lib/format";
 import { useSpace } from "@/lib/space";
 
@@ -42,6 +43,12 @@ function AddPage() {
   const navigate = useNavigate();
   const [q, setQ] = useState("");
   const [picked, setPicked] = useState<Result | null>(null);
+  const [mode, setMode] = useState<"tmdb" | "ai">("tmdb");
+  const smart = useServerFn(smartSearch);
+  // Explicit, optional AI search; traditional search keeps working without it.
+  const ai = useMutation({
+    mutationFn: (query: string) => smart({ data: { query, spaceId: space!.spaceId! } }),
+  });
 
   const s = useMutation({
     mutationFn: (query: string) => search({ data: { query, spaceId: space!.spaceId! } }),
@@ -49,6 +56,7 @@ function AddPage() {
   useEffect(() => {
     const t = q.trim();
     if (t.length < 2 || !space?.spaceId) return;
+    setMode("tmdb");
     const id = setTimeout(() => s.mutate(t), 350);
     return () => clearTimeout(id);
     // eslint-disable-next-line react-hooks/exhaustive-deps
@@ -87,7 +95,10 @@ function AddPage() {
         className="mt-4 flex items-center gap-2 rounded-xl border border-border bg-card px-3"
         onSubmit={(e) => {
           e.preventDefault();
-          if (q.trim()) s.mutate(q.trim());
+          if (q.trim()) {
+            setMode("tmdb");
+            s.mutate(q.trim());
+          }
         }}
       >
         <Search className="h-4 w-4 text-muted-foreground" />
@@ -100,16 +111,38 @@ function AddPage() {
         />
         <button className="pressable min-h-11 px-1 text-sm font-medium text-primary">Buscar</button>
       </form>
-      {s.isPending && !s.data && (
+      <button
+        type="button"
+        disabled={q.trim().length < 3 || ai.isPending}
+        onClick={() => {
+          setMode("ai");
+          ai.mutate(q.trim());
+        }}
+        className="pressable mt-2 flex min-h-11 w-full items-center justify-center gap-2 rounded-xl border border-border text-sm text-muted-foreground disabled:opacity-50"
+      >
+        <Sparkles className="h-4 w-4 text-primary" />
+        {ai.isPending ? "Interpretando…" : "Pesquisa inteligente (descreva o que procura)"}
+      </button>
+      {mode === "ai" && ai.data && !ai.data.ok && (
+        <p className="mt-3 rounded-xl border border-dashed border-border p-3 text-sm text-muted-foreground">
+          {ai.data.reason}
+        </p>
+      )}
+      {mode === "ai" && ai.error && (
+        <p className="mt-3 text-sm text-destructive">{ai.error.message}</p>
+      )}
+      {((mode === "tmdb" && s.isPending && !s.data) || (mode === "ai" && ai.isPending)) && (
         <div className="mt-4 space-y-2">
           {[0, 1, 2].map((i) => (
             <div key={i} className="skeleton h-[88px] rounded-xl" />
           ))}
         </div>
       )}
-      {s.error && <p className="mt-6 text-sm text-destructive">{s.error.message}</p>}
+      {mode === "tmdb" && s.error && (
+        <p className="mt-6 text-sm text-destructive">{s.error.message}</p>
+      )}
       <div className="mt-4 space-y-2">
-        {s.data?.map((r) => (
+        {(mode === "ai" ? (ai.data?.items ?? []) : (s.data ?? [])).map((r) => (
           <button
             key={`${r.mediaType}-${r.tmdbId}`}
             onClick={() => setPicked(r)}
@@ -128,7 +161,7 @@ function AddPage() {
             </div>
           </button>
         ))}
-        {s.data && s.data.length === 0 && (
+        {mode === "tmdb" && s.data && s.data.length === 0 && (
           <p className="text-sm text-muted-foreground">
             Nenhum filme ou série encontrado por esse título, ator ou diretor.
           </p>

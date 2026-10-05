@@ -37,7 +37,8 @@ export function BottomNav() {
   const [open, setOpen] = useState(false);
   const path = useRouterState({ select: (s) => s.location.pathname });
   const navigate = useNavigate();
-  const pendingPath = useRef<(typeof RADIAL)[number]["to"] | null>(null);
+  type Dest = (typeof RADIAL)[number]["to"] | "/" | "/library";
+  const pendingPath = useRef<Dest | null>(null);
 
   // Close on Escape and on browser/Android back.
   useEffect(() => {
@@ -65,7 +66,8 @@ export function BottomNav() {
     else setOpen(false);
   };
 
-  const chooseRadial = (event: MouseEvent<HTMLAnchorElement>, to: (typeof RADIAL)[number]["to"]) => {
+  // Any destination tapped while the radial is open first pops the synthetic entry, then navigates.
+  const chooseRadial = (event: MouseEvent<HTMLAnchorElement>, to: Dest) => {
     if (!open || !window.history.state?.radial) return;
     event.preventDefault();
     pendingPath.current = to;
@@ -82,9 +84,12 @@ export function BottomNav() {
         className={`fixed inset-0 z-40 bg-background/70 backdrop-blur-sm transition-opacity duration-200 ${open ? "opacity-100" : "pointer-events-none opacity-0"}`}
         onClick={() => close()}
       />
-      <nav className="fixed inset-x-0 bottom-0 z-50 mx-auto max-w-md px-4 pb-[max(env(safe-area-inset-bottom),12px)]">
+      <nav
+        style={{ viewTransitionName: "bottom-nav" }}
+        className="fixed inset-x-0 bottom-0 z-50 mx-auto max-w-md px-4 pb-[max(env(safe-area-inset-bottom),12px)]"
+      >
         <div className="relative flex items-end rounded-2xl border border-border bg-card/95 px-2 backdrop-blur">
-          <Link to="/" className={tab(path === "/")} onClick={() => open && close(false)}>
+          <Link to="/" className={tab(path === "/")} onClick={(e) => chooseRadial(e, "/")}>
             <Home className="h-5 w-5" /> Início
           </Link>
           <div className="relative flex flex-1 justify-center">
@@ -130,7 +135,7 @@ export function BottomNav() {
           <Link
             to="/library"
             className={tab(path.startsWith("/library"))}
-            onClick={() => open && close(false)}
+            onClick={(e) => chooseRadial(e, "/library")}
           >
             <Clapperboard className="h-5 w-5" /> Biblioteca
           </Link>
