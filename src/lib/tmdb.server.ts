@@ -87,7 +87,11 @@ export async function searchMulti(query: string): Promise<TmdbSearchItem[]> {
   return [...unique.values()].slice(0, 20);
 }
 
+/** Bump when the details strategy changes; older cached payloads are refetched. */
+export const DETAILS_CACHE_VERSION = 2;
+
 export type TmdbDetails = {
+  v?: number;
   mediaType: "movie" | "tv";
   tmdbId: number;
   title: string;
@@ -108,10 +112,29 @@ export async function fetchDetails(
   mediaType: "movie" | "tv",
   tmdbId: number,
 ): Promise<TmdbDetails> {
-  const data = await call(`/${mediaType}/${tmdbId}`, { append_to_response: "credits" });
+  // Series use aggregate_credits (whole run); movies keep regular credits.
+  const data = await call(`/${mediaType}/${tmdbId}`, {
+    append_to_response: mediaType === "tv" ? "aggregate_credits,credits" : "credits",
+  });
   const credits = (data["credits"] as Json | undefined) ?? {};
+  const agg = (data["aggregate_credits"] as Json | undefined) ?? {};
   const crew = Array.isArray(credits["crew"]) ? (credits["crew"] as Json[]) : [];
-  const cast = Array.isArray(credits["cast"]) ? (credits["cast"] as Json[]) : [];
+  const aggCast = Array.isArray(agg["cast"]) ? (agg["cast"] as Json[]) : [];
+  const cast: Json[] =
+    mediaType === "tv" && aggCast.length
+      ? [...aggCast]
+          .sort(
+            (a, b) =>
+              Number(b["total_episode_count"] ?? 0) - Number(a["total_episode_count"] ?? 0) ||
+              Number(a["order"] ?? 999) - Number(b["order"] ?? 999),
+          )
+          .map((m) => {
+            const roles = Array.isArray(m["roles"]) ? (m["roles"] as Json[]) : [];
+            return { ...m, character: roles[0]?.["character"] ?? "" };
+          })
+      : Array.isArray(credits["cast"])
+        ? (credits["cast"] as Json[])
+        : [];
   const createdBy = Array.isArray(data["created_by"]) ? (data["created_by"] as Json[]) : [];
   const genres = Array.isArray(data["genres"]) ? (data["genres"] as Json[]) : [];
   const seasons = Array.isArray(data["seasons"]) ? (data["seasons"] as Json[]) : [];
@@ -121,6 +144,7 @@ export async function fetchDetails(
   const lead = director ?? creator;
 
   return {
+    v: DETAILS_CACHE_VERSION,
     mediaType,
     tmdbId,
     title: String(data[mediaType === "tv" ? "name" : "title"] ?? "Sem título"),
@@ -144,7 +168,7 @@ export async function fetchDetails(
           profilePath: str(lead["profile_path"]),
         }
       : null,
-    cast: cast.slice(0, 8).map((member) => ({
+    cast: cast.slice(0, 12).map((member) => ({
       name: String(member["name"]),
       character: String(member["character"] ?? ""),
       profilePath: str(member["profile_path"]),
