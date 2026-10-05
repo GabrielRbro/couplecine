@@ -233,7 +233,7 @@ export const getDiscover = createServerFn({ method: "POST" })
     const [{ data: works }, { data: dismissed }, { data: prior }] = await Promise.all([
       supabase
         .from("works")
-        .select("id, media_type, tmdb_id, activity_at, indications(indicated_by), interests(user_id, reaction)")
+        .select("id, title, media_type, tmdb_id, activity_at, indications(indicated_by), interests(user_id, reaction)")
         .eq("space_id", data.spaceId)
         .order("activity_at", { ascending: false }),
       supabase.from("discover_dismissals").select("media_type, tmdb_id").eq("user_id", userId),
@@ -255,9 +255,10 @@ export const getDiscover = createServerFn({ method: "POST" })
     try {
       const items = await discoverFeed(seeds, data.page);
       const existing = new Map(all.map((w) => [key(w.media_type, w.tmdb_id), w.id]));
+      let visible = items.filter((i) => !hidden.has(key(i.mediaType, i.tmdbId)));
+      if (data.page === 1) visible = await rerankWithGemini(visible, all, userId, supabase);
       return {
-        items: items
-          .filter((i) => !hidden.has(key(i.mediaType, i.tmdbId)))
+        items: visible
           .map((i) => ({ ...i, existingWorkId: existing.get(key(i.mediaType, i.tmdbId)) ?? null })),
         hasMore: items.length > 0 && data.page < 20,
       };
@@ -265,6 +266,48 @@ export const getDiscover = createServerFn({ method: "POST" })
       friendly(e);
     }
   });
+
+/**
+ * Optional Gemini selection/rerank of the first Descobrir page. TMDB stays the source of truth:
+ * only TMDB candidates can be returned, and any failure keeps the TMDB order.
+ */
+async function rerankWithGemini<T extends { title: string; year: number | null; mediaType: string }>(
+  candidates: T[],
+  works: { title: string; interests: { user_id: string; reaction: string }[] }[],
+  userId: string,
+  supabase: AuthedClient,
+): Promise<T[]> {
+  const { geminiConfig, geminiJson } = await import("./gemini.server");
+  if (!geminiConfig().configured || candidates.length < 6) return candidates;
+  const pick = (pred: (r: { user_id: string; reaction: string }) => boolean, n: number) =>
+    works.filter((w) => w.interests.some(pred)).slice(0, n).map((w) => w.title);
+  const profile = {
+    eu_amo: pick((r) => r.user_id === userId && r.reaction === "fire", 8),
+    eu_curto: pick((r) => r.user_id === userId && r.reaction === "like", 6),
+    eu_nao_quero: pick((r) => r.user_id === userId && r.reaction === "dislike", 5),
+    parceiro_ama: pick((r) => r.user_id !== userId && r.reaction === "fire", 5),
+  };
+  const pool = candidates.slice(0, 40);
+  const list = pool.map((c, i) => `${i}|${c.title}|${c.year ?? ""}|${c.mediaType}`).join("\n");
+  try {
+    const res = await geminiJson<{ order?: number[] }>({
+      supabase,
+      userId,
+      feature: "discover",
+      system:
+        'Você seleciona e ordena recomendações para UMA pessoa, ponderando compatibilidade com o parceiro. Mantenha diversidade: não repita demais gênero, franquia ou elenco; inclua alguma exploração. Use só os índices fornecidos. Responda JSON {"order":[índices]} com até 30 itens.',
+      parts: [{ text: `Perfil: ${JSON.stringify(profile)}\nCandidatos (índice|título|ano|tipo):\n${list}` }],
+      cacheTtlHours: 24,
+      cacheSeed: `d:${JSON.stringify(profile)}:${pool.map((c) => c.title).join(",")}`,
+    });
+    const order = (res.order ?? []).filter((i) => Number.isInteger(i) && i >= 0 && i < pool.length);
+    if (order.length < 6) return candidates;
+    const used = new Set(order);
+    return [...new Set(order)].map((i) => pool[i]!).concat(pool.filter((_, i) => !used.has(i)), candidates.slice(40));
+  } catch {
+    return candidates;
+  }
+}
 
 export const getDismissedDiscover = createServerFn({ method: "POST" })
   .middleware([requireSupabaseAuth])
