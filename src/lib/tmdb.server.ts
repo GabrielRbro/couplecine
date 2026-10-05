@@ -105,7 +105,7 @@ export type TmdbDetails = {
   genres: string[];
   crewLead: { name: string; role: string; profilePath: string | null } | null;
   cast: { name: string; character: string; profilePath: string | null }[];
-  seasons: { seasonNumber: number; name: string; episodeCount: number }[];
+  seasons: { seasonNumber: number; name: string; episodeCount: number; posterPath?: string | null }[];
 };
 
 export async function fetchDetails(
@@ -179,6 +179,7 @@ export async function fetchDetails(
         seasonNumber: Number(season["season_number"]),
         name: String(season["name"] ?? `Temporada ${season["season_number"]}`),
         episodeCount: Number(season["episode_count"] ?? 0),
+        posterPath: str(season["poster_path"]),
       })),
   };
 }

@@ -29,6 +29,12 @@ export const Route = createFileRoute("/_authenticated/work/$id")({
       { name: "description", content: "Detalhes, reações e notas do casal." },
     ],
   }),
+  // Primes the work query so the page (and its shared poster) renders with data on arrival.
+  loader: ({ context, params }) => {
+    void context.queryClient.prefetchQuery(workQuery(params.id));
+  },
+  errorComponent: ({ error }) => <p className="p-6 text-sm text-destructive">{error.message}</p>,
+  notFoundComponent: () => <p className="p-6 text-sm">Obra não encontrada.</p>,
   component: () => (
     <AppShell skeleton={<DetailSkeleton />}>
       <WorkPage />
@@ -39,8 +45,13 @@ export const Route = createFileRoute("/_authenticated/work/$id")({
 const SCORES = Array.from({ length: 21 }, (_, i) => i / 2);
 
 function useWork(id: string) {
-  return useQuery({
+  return useQuery(workQuery(id));
+}
+
+function workQuery(id: string) {
+  return {
     queryKey: ["work", id],
+    staleTime: 30_000,
     queryFn: async () => {
       const [w, i, r, p, s, e, j, n] = await Promise.all([
         supabase.from("works").select("*").eq("id", id).maybeSingle(),
@@ -75,7 +86,7 @@ function useWork(id: string) {
         indications: n.data ?? [],
       };
     },
-  });
+  };
 }
 
 function WorkPage() {
@@ -108,6 +119,7 @@ function WorkPage() {
           <img
             src={tmdbImage(work.backdrop_path, "w780")!}
             alt=""
+            style={{ viewTransitionName: `backdrop-${id}` }}
             className="h-full w-full object-cover opacity-40"
           />
         )}
@@ -121,7 +133,7 @@ function WorkPage() {
         </button>
       </div>
       <div className="-mt-24 relative flex gap-4 px-4">
-        <div className="w-28 shrink-0">
+        <div className="w-28 shrink-0" style={{ viewTransitionName: `poster-${id}` }}>
           <Poster path={work.poster_path} title={work.title} />
         </div>
         <div className="min-w-0 self-end">
@@ -190,6 +202,7 @@ function WorkPage() {
               state={data.state}
               events={data.events}
               seasons={m?.seasons ?? []}
+              fallbackImage={work.backdrop_path ?? work.poster_path}
               onChange={refresh}
             />
           </>
@@ -313,7 +326,7 @@ function Comparison({
     own: boolean;
   }) => (
     <div className="min-w-0 flex-1 text-center">
-      <p className="text-xs text-muted-foreground">{label}</p>
+      <p className="text-[11px] text-muted-foreground">{label}</p>
       <button
         disabled={!own}
         onClick={() => setEditing("reaction")}
@@ -346,13 +359,28 @@ function Comparison({
 
   return (
     <section className="space-y-3">
+      <div className="grid grid-cols-2 gap-3">
       <div className="rounded-xl border border-border bg-card p-3">
-        <h2 className="text-sm font-semibold">Interesse</h2>
+        <h2 className="text-xs font-semibold">Interesse</h2>
         <div className="mt-2 flex divide-x divide-border">
           <InterestPerson label="Eu" r={mine?.reaction} own />
           <InterestPerson label={space.partner ? firstName(space.partner.display_name) : "Parceiro"} r={theirs?.reaction} own={false} />
         </div>
       </div>
+      <div className="rounded-xl border border-border bg-card p-3">
+        <div className="flex items-baseline justify-between gap-1">
+          <h2 className="text-xs font-semibold">Avaliação</h2>
+          {avg !== null && <span className="text-[11px] text-muted-foreground">Média {formatScore(avg)}</span>}
+        </div>
+        <div className="mt-2 flex divide-x divide-border">
+          <ScorePerson label="Eu" s={myScore?.score} own />
+          <ScorePerson label={space.partner ? firstName(space.partner.display_name) : "Parceiro"} s={theirScore?.score} own={false} />
+        </div>
+      </div>
+      </div>
+      {avg === null && (
+        <p className="-mt-1 text-[11px] text-muted-foreground">Média aparece quando os dois avaliarem.</p>
+      )}
       {editing === "reaction" && (
         <div className="grid grid-cols-4 gap-2">
           {ALL_REACTIONS.map((r) => (
@@ -366,18 +394,6 @@ function Comparison({
           ))}
         </div>
       )}
-      <div className="rounded-xl border border-border bg-card p-3">
-        <div className="flex items-center justify-between gap-3">
-          <h2 className="text-sm font-semibold">Avaliação</h2>
-          <p className="text-xs text-muted-foreground">
-            {avg !== null ? `Média ${formatScore(avg)}` : "Média após os dois avaliarem"}
-          </p>
-        </div>
-        <div className="mt-2 flex divide-x divide-border">
-          <ScorePerson label="Eu" s={myScore?.score} own />
-          <ScorePerson label={space.partner ? firstName(space.partner.display_name) : "Parceiro"} s={theirScore?.score} own={false} />
-        </div>
-      </div>
       {editing === "score" && (
         <div>
           <div className="grid grid-cols-7 gap-1.5">
