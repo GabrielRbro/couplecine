@@ -6,6 +6,8 @@ import { toast } from "sonner";
 import { AppShell } from "@/components/app/AppShell";
 import { supabase } from "@/integrations/supabase/client";
 import { useSpace } from "@/lib/space";
+import { useServerFn } from "@tanstack/react-start";
+import { getAiStatus } from "@/lib/ai.functions";
 
 export const Route = createFileRoute("/_authenticated/settings")({
   head: () => ({
@@ -22,6 +24,7 @@ export const Route = createFileRoute("/_authenticated/settings")({
 });
 
 function SettingsPage() {
+  const aiStatus = useServerFn(getAiStatus);
   const { data: space } = useSpace();
   const qc = useQueryClient();
   const navigate = useNavigate();
@@ -54,6 +57,27 @@ function SettingsPage() {
     setEmail("");
     toast.success("Convite registrado. Peça para a pessoa entrar com esse Google.");
     invites.refetch();
+  }
+
+  const ai = useQuery({ queryKey: ["ai-status"], queryFn: () => aiStatus(), staleTime: 10 * 60_000 });
+  // Owner-only (RLS): counts works tracked in the removable demo batch.
+  const demo = useQuery({
+    queryKey: ["demo-batch"],
+    queryFn: async () => {
+      const { count } = await supabase
+        .from("demo_batch_items")
+        .select("id", { count: "exact", head: true })
+        .eq("batch", "demo-v1")
+        .not("work_id", "is", null);
+      return count ?? 0;
+    },
+  });
+  async function removeDemo() {
+    if (!window.confirm("Remover todas as obras de demonstração?")) return;
+    const { data, error } = await supabase.rpc("demo_cleanup", { _batch: "demo-v1" });
+    if (error) return toast.error("Não foi possível remover.");
+    toast.success(`${data} obras de demonstração removidas`);
+    qc.invalidateQueries();
   }
 
   async function signOut() {
@@ -131,7 +155,28 @@ function SettingsPage() {
           <span>Catálogo (TMDB)</span>
           <span className="text-xs text-primary">Ativo</span>
         </div>
+        <div className="mt-2 flex justify-between text-sm">
+          <span>IA (Gemini)</span>
+          <span className={`text-xs ${ai.data?.configured ? "text-primary" : "text-muted-foreground"}`}>
+            {ai.data ? (ai.data.configured ? `Ativo · ${ai.data.model}` : "Não configurado") : "…"}
+          </span>
+        </div>
       </section>
+
+      {demo.data ? (
+        <section className="rounded-2xl border border-dashed border-border p-4">
+          <h2 className="font-semibold">Dados de demonstração</h2>
+          <p className="mt-1 text-xs text-muted-foreground">
+            {demo.data} obras de teste identificadas. Remover apaga só esse lote; suas obras reais ficam.
+          </p>
+          <button
+            onClick={removeDemo}
+            className="pressable mt-3 min-h-11 w-full rounded-xl border border-destructive/40 text-sm text-destructive"
+          >
+            Remover dados de demonstração
+          </button>
+        </section>
+      ) : null}
 
       <button
         onClick={signOut}
