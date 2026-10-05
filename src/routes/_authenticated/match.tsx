@@ -9,6 +9,7 @@ import { EmptyState, Poster } from "@/components/app/MediaCard";
 import { Sk } from "@/components/app/ui";
 import { supabase } from "@/integrations/supabase/client";
 import { firstName, isIndicated, useLibrary, useSpace } from "@/lib/space";
+import { tmdbImage } from "@/lib/format";
 
 export const Route = createFileRoute("/_authenticated/match")({
   head: () => ({
@@ -23,6 +24,36 @@ export const Route = createFileRoute("/_authenticated/match")({
     </AppShell>
   ),
 });
+
+/** The real poster stays under a scenic cover until its image has decoded, so it never "pops" in. */
+function MatchPoster({
+  work,
+  ready,
+  onReady,
+}: {
+  work: { id: string; poster_path: string | null; title: string };
+  ready: boolean;
+  onReady: () => void;
+}) {
+  const src = tmdbImage(work.poster_path, "w500");
+  return (
+    <div className="relative h-full w-full">
+      {src ? (
+        <img
+          src={src}
+          alt={work.title}
+          decoding="async"
+          onLoad={onReady}
+          onError={onReady}
+          className={`aspect-[2/3] w-full rounded-xl object-cover transition-opacity duration-200 ${ready ? "opacity-100" : "opacity-0"}`}
+        />
+      ) : (
+        <Poster path={null} title={work.title} />
+      )}
+      {!ready && <div className="match-stack-back" aria-hidden="true" />}
+    </div>
+  );
+}
 
 // Deterministic per-user shuffle: same candidates, different stable order on each person's device.
 function seededShuffle<T>(items: T[], seed: string) {
@@ -56,6 +87,12 @@ function MatchPage() {
   } | null>(null);
   const [pickedResultId, setPickedResultId] = useState<string | null>(null);
   const attemptedExtensions = useRef(new Set<string>());
+  const [, setRetryTick] = useState(0);
+  // A session that already existed when this visit began shows Continuar/Abandonar;
+  // a session created during this visit opens straight on the first card.
+  const initialOpenId = useRef<string | null | undefined>(undefined);
+  const autoStarted = useRef(false);
+  const [loadedCardId, setLoadedCardId] = useState<string | null>(null);
 
   const open = useQuery({
     queryKey: ["match-open", spaceId],
@@ -71,6 +108,8 @@ function MatchPage() {
       return data;
     },
   });
+  if (initialOpenId.current === undefined && open.isSuccess)
+    initialOpenId.current = open.data?.id ?? null;
   const sid = open.data?.id;
   const hasResumed = !!sid && resumedSessionId === sid;
 
@@ -133,15 +172,24 @@ function MatchPage() {
 
   const start = useMutation({
     mutationFn: async () => {
-      const ids = works.filter(isIndicated).map((w) => w.id);
+      // Permanent 👎 from either person vetoes a work from the Match pool by default.
+      const ids = works
+        .filter((w) => isIndicated(w) && !w.interests.some((i) => i.reaction === "dislike"))
+        .map((w) => w.id);
       if (ids.length < 2) throw new Error("Adicione pelo menos 2 indicações antes de começar.");
       if (!spaceId || !space) throw new Error("Espaço indisponível.");
-      const { error } = await supabase
+      const { data, error } = await supabase
         .from("match_sessions")
-        .insert({ space_id: spaceId, created_by: space.userId, work_ids: ids });
+        .insert({ space_id: spaceId, created_by: space.userId, work_ids: ids })
+        .select("id")
+        .single();
       if (error) throw new Error("Já existe um Match em andamento.");
+      return data.id;
     },
-    onSuccess: invalidate,
+    onSuccess: (id) => {
+      setResumedSessionId(id);
+      invalidate();
+    },
     onError: (e) => toast.error(e.message),
   });
   const vote = useMutation({
@@ -244,8 +292,23 @@ function MatchPage() {
   useEffect(() => {
     if (!canRequestExtension || !extensionKey || extensionAttempted || extend.isPending) return;
     attemptedExtensions.current.add(extensionKey);
-    extend.mutate();
+    extend.mutate(undefined, {
+      // Transient failure: forget the attempt and retry shortly instead of ending the deck.
+      onError: () => {
+        attemptedExtensions.current.delete(extensionKey);
+        window.setTimeout(() => setRetryTick((t) => t + 1), 2500);
+      },
+    });
   }, [canRequestExtension, extensionAttempted, extensionKey, extend]);
+
+  // Auto-start once per visit when there is no pending session.
+  const libraryReady = works.length > 0 || !!space;
+  useEffect(() => {
+    if (!open.isSuccess || open.data || initialOpenId.current !== null) return;
+    if (autoStarted.current || !libraryReady || !works.length || start.isPending) return;
+    autoStarted.current = true;
+    start.mutate();
+  }, [open.isSuccess, open.data, libraryReady, works.length, start]);
 
   const castVote = async (liked: boolean) => {
     if (!currentWork || cardExit || vote.isPending) return;
@@ -359,11 +422,22 @@ function MatchPage() {
     </AnimatedSheet>
   );
 
-  if (open.isLoading || (hasResumed && !me.data && !me.error))
+  if (
+    open.isLoading ||
+    (hasResumed && !me.data && !me.error) ||
+    (!open.data && start.isPending) ||
+    (open.data && open.data.id !== initialOpenId.current && !hasResumed)
+  )
     return (
       <div className="px-4 pt-6">
         {header}
-        <Sk className="mx-auto mt-6 aspect-[2/3] w-52 rounded-xl" />
+        <div className="mt-8 flex justify-center">
+          <div className="match-stack" aria-label="Preparando o Match">
+            <div className="match-stack-back match-stack-back-far" />
+            <div className="match-stack-back match-stack-back-near" />
+            <div className="match-stack-back z-[2]" />
+          </div>
+        </div>
       </div>
     );
 
@@ -446,10 +520,18 @@ function MatchPage() {
               data-exit-direction={cardExit?.direction}
               className={`match-stack-current ${cardExit?.direction === "left" ? "match-card-exit-left" : cardExit?.direction === "right" ? "match-card-exit-right" : "match-card-arrive"}`}
             >
-              <Poster path={displayedWork.poster_path} title={displayedWork.title} />
+              <MatchPoster
+                work={displayedWork}
+                ready={!!cardExit || loadedCardId === displayedWork.id || !displayedWork.poster_path}
+                onReady={() => setLoadedCardId(displayedWork.id)}
+              />
             </div>
           </div>
-          <p className="mt-4 text-center font-semibold">{displayedWork.title}</p>
+          <p
+            className={`mt-4 text-center font-semibold transition-opacity duration-150 ${!cardExit && displayedWork.poster_path && loadedCardId !== displayedWork.id ? "opacity-0" : ""}`}
+          >
+            {displayedWork.title}
+          </p>
           <p className="text-center text-xs text-muted-foreground">
             {[
               displayedWork.media_type === "tv" ? "Série" : "Filme",
