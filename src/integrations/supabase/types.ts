@@ -73,6 +73,45 @@ export type Database = {
         }
         Relationships: []
       }
+      demo_batch_items: {
+        Row: {
+          batch: string
+          created_at: string
+          id: string
+          match_session_id: string | null
+          work_id: string | null
+        }
+        Insert: {
+          batch: string
+          created_at?: string
+          id?: string
+          match_session_id?: string | null
+          work_id?: string | null
+        }
+        Update: {
+          batch?: string
+          created_at?: string
+          id?: string
+          match_session_id?: string | null
+          work_id?: string | null
+        }
+        Relationships: [
+          {
+            foreignKeyName: "demo_batch_items_match_session_id_fkey"
+            columns: ["match_session_id"]
+            isOneToOne: false
+            referencedRelation: "match_sessions"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "demo_batch_items_work_id_fkey"
+            columns: ["work_id"]
+            isOneToOne: false
+            referencedRelation: "works"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
       discover_dismissals: {
         Row: {
           created_at: string
@@ -877,6 +916,7 @@ export type Database = {
     }
     Functions: {
       can_create_space: { Args: never; Returns: boolean }
+      demo_cleanup: { Args: { _batch: string }; Returns: number }
       match_abandon: { Args: { _session: string }; Returns: undefined }
       match_extend: { Args: { _session: string }; Returns: number }
       match_join: { Args: { _session: string }; Returns: number }
