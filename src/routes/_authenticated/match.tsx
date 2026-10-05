@@ -302,13 +302,12 @@ function MatchPage() {
   }, [canRequestExtension, extensionAttempted, extensionKey, extend]);
 
   // Auto-start once per visit when there is no pending session.
-  const libraryReady = works.length > 0 || !!space;
   useEffect(() => {
     if (!open.isSuccess || open.data || initialOpenId.current !== null) return;
-    if (autoStarted.current || !libraryReady || !works.length || start.isPending) return;
+    if (autoStarted.current || !works.length || start.isPending) return;
     autoStarted.current = true;
     start.mutate();
-  }, [open.isSuccess, open.data, libraryReady, works.length, start]);
+  }, [open.isSuccess, open.data, works.length, start]);
 
   const castVote = async (liked: boolean) => {
     if (!currentWork || cardExit || vote.isPending) return;
@@ -425,8 +424,7 @@ function MatchPage() {
   if (
     open.isLoading ||
     (hasResumed && !me.data && !me.error) ||
-    (!open.data && start.isPending) ||
-    (open.data && open.data.id !== initialOpenId.current && !hasResumed)
+    (!open.data && start.isPending)
   )
     return (
       <div className="px-4 pt-6">
