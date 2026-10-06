@@ -71,15 +71,15 @@ export function ScoreForm({
   const confirm = async () => {
     if (saving || feedback !== null || typed === null) return;
     setFeedback(value);
-    await new Promise((resolve) => window.setTimeout(resolve, window.matchMedia("(prefers-reduced-motion: reduce)").matches ? 1 : 220));
+    await new Promise((resolve) => window.setTimeout(resolve, window.matchMedia("(prefers-reduced-motion: reduce)").matches ? 150 : 480));
     try { await onSave(value); } finally { setFeedback(null); }
   };
   const set = (n: number) => setValue(Math.min(10, Math.max(0, Math.round(n * 2) / 2)));
   return (
     <div className="relative">
-      {feedback !== null && <div role="status" className={`score-feedback absolute inset-0 z-10 flex items-center justify-center rounded-xl bg-card/95 ${feedback <= 2 ? "text-destructive" : "text-primary"}`}>
+      {feedback !== null && <div role="status" data-score-tone={feedback <= 2 ? "low" : feedback >= 9 ? "high" : "normal"} className={`score-feedback absolute inset-0 z-10 flex items-center justify-center rounded-xl bg-card/95 ${feedback <= 2 ? "text-destructive" : "text-primary"}`}>
         {feedback <= 2 ? <ThumbsDown className="h-9 w-9" /> : feedback >= 9 ? <Star className="h-9 w-9" /> : <Check className="h-9 w-9" />}
-        <span className="sr-only">Nota confirmada · {formatScore(feedback)}</span>
+        <span className="sr-only">Confirmando nota · {formatScore(feedback)}</span>
       </div>}
       <h2 id="score-title" className="line-clamp-1 text-lg font-semibold">
         {title}

@@ -1,3 +1,4 @@
+import { Link } from "@tanstack/react-router";
 import { useRef, useState } from "react";
 import { AnimatePresence, motion, useReducedMotion } from "motion/react";
 import { ScoreForm } from "@/components/app/ScorePicker";
@@ -372,7 +373,7 @@ function DiscoverGrid({
             transition={{ type: "spring", stiffness: 420, damping: 36 }}
             className="relative min-w-0 overflow-hidden rounded-2xl"
           >
-            <Poster path={i.posterPath} title={i.title} className="rounded-2xl" />
+            <Link to="/title/$mediaType/$tmdbId" params={{ mediaType: i.mediaType, tmdbId: String(i.tmdbId) }} aria-label={`Abrir ${i.title}`} className="block"><Poster path={i.posterPath} title={i.title} className="rounded-2xl" /></Link>
             <span className="absolute left-2 top-2 rounded-md bg-background/60 p-1 text-muted-foreground backdrop-blur">
               {i.mediaType === "tv" ? <Tv className="h-3 w-3" /> : <Film className="h-3 w-3" />}
             </span>

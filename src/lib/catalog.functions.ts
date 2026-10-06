@@ -201,9 +201,13 @@ export const getWorkDetails = createServerFn({ method: "POST" })
 export const getSeasonEpisodes = createServerFn({ method: "POST" })
   .middleware([requireSupabaseAuth])
   .inputValidator((d) =>
-    z.object({ workId: z.string().uuid(), season: z.number().int().min(1) }).parse(d),
+    z.object({ workId: z.string().uuid().optional(), tmdbId: z.number().int().positive().optional(), season: z.number().int().min(1) }).refine((v) => v.workId || v.tmdbId).parse(d),
   )
   .handler(async ({ data, context }) => {
+    if (!data.workId && data.tmdbId) {
+      try { return await fetchSeason(data.tmdbId, data.season); } catch (e) { friendly(e); }
+    }
+    if (!data.workId) throw new Error("Série indisponível.");
     const { data: work } = await context.supabase
       .from("works")
       .select("tmdb_id, media_type")
@@ -515,7 +519,16 @@ export const getTitlePreview = createServerFn({ method: "POST" })
   .handler(async ({ data, context }) => {
     const { data: work, error } = await context.supabase.from("works").select("id").eq("space_id", data.spaceId).eq("media_type", data.mediaType).eq("tmdb_id", data.tmdbId).maybeSingle();
     if (error) throw new Error("Não foi possível consultar a biblioteca.");
-    try { return { details: await fetchDetails(data.mediaType, data.tmdbId), workId: work?.id ?? null }; }
+    try {
+      if (work) {
+        const { data: cache } = await context.supabase.from("work_metadata_cache").select("payload,expires_at").eq("work_id",work.id).maybeSingle();
+        const cached = cache?.payload as TmdbDetails | undefined;
+        if (cached?.v === DETAILS_CACHE_VERSION && cache && new Date(cache.expires_at).getTime() > Date.now()) return { details: cached, workId: work.id };
+      }
+      const details = await fetchDetails(data.mediaType, data.tmdbId);
+      if (work) await context.supabase.from("work_metadata_cache").upsert({ work_id: work.id, payload: details as never, expires_at: new Date(Date.now()+7*864e5).toISOString() },{onConflict:"work_id"});
+      return { details, workId: work?.id ?? null };
+    }
     catch (e) { friendly(e); }
   });
 

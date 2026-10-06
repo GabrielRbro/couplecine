@@ -87,17 +87,17 @@ export function useScrollLock(active: boolean) {
       const body = document.body;
       const y = window.scrollY;
       const x = window.scrollX;
-      const saved = { position: body.style.position, top: body.style.top, left: body.style.left,
-        width: body.style.width, overflow: body.style.overflow };
-      body.style.position = "fixed";
-      body.style.top = `-${y}px`;
-      body.style.left = `-${x}px`;
-      body.style.width = "100%";
+      const root = document.documentElement;
+      const saved = { bodyOverflow: body.style.overflow, rootOverflow: root.style.overflow, touchAction: root.style.touchAction };
       body.style.overflow = "hidden";
-      document.documentElement.dataset["overlayOpen"] = "true";
+      root.style.overflow = "hidden";
+      root.style.touchAction = "none";
+      root.dataset["overlayOpen"] = "true";
       restore = () => {
-        Object.assign(body.style, saved);
-        delete document.documentElement.dataset["overlayOpen"];
+        body.style.overflow = saved.bodyOverflow;
+        root.style.overflow = saved.rootOverflow;
+        root.style.touchAction = saved.touchAction;
+        delete root.dataset["overlayOpen"];
         window.scrollTo({ left: x, top: y, behavior: "instant" });
       };
     }
@@ -106,4 +106,17 @@ export function useScrollLock(active: boolean) {
       if (locks === 0) { restore?.(); restore = null; }
     };
   }, [active]);
+}
+
+/** Only intentional gestures dismiss the keyboard, never restoration/programmatic scroll. */
+export function useScrollKeyboardDismiss() {
+  useEffect(() => {
+    const blur = () => {
+      const active = document.activeElement;
+      if (active instanceof HTMLElement && (active.matches("input:not([type=range]),textarea") || active.isContentEditable)) active.blur();
+    };
+    window.addEventListener("touchmove", blur, { passive: true });
+    window.addEventListener("wheel", blur, { passive: true });
+    return () => { window.removeEventListener("touchmove", blur); window.removeEventListener("wheel", blur); };
+  }, []);
 }
