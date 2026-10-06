@@ -198,8 +198,9 @@ export const refineMatch = createServerFn({ method: "POST" })
     const fallback = eligible.map((w) => w.id);
     try {
       const compact = eligible.map((w) => ({ id:w.id,title:w.title,type:w.media_type,minutes:w.runtime_minutes,genres:w.genres.slice(0,3) }));
-      const result = await geminiJson<{ ids?: string[] }>({ supabase: context.supabase,userId:context.userId,feature:"smart_search",system:'Refine o conjunto de filmes/séries fornecido para a intenção. Retorne JSON {"ids":[ids]} em ordem de preferência; nunca invente ids, votos ou resultados. Mantenha pelo menos 2 candidatos se disponíveis.',parts:[{text:JSON.stringify({intent:data.query.trim().replace(/\s+/g," "),candidates:compact})}],cacheTtlHours:24,cacheSeed:`match:${data.kind}:${data.query.trim().toLowerCase()}:${JSON.stringify(compact)}` });
+      const result = await geminiJson<{ ids?: string[]; items?: AiTitleGuess[] }>({ supabase: context.supabase,userId:context.userId,feature:"smart_search",system:'Refine o conjunto de filmes/séries fornecido para a intenção. Retorne JSON {"ids":[ids],"items":[{"title":string,"year":number|null,"mediaType":"movie"|"tv"}]} em ordem de preferência. ids só do conjunto. items: até 4 títulos reais externos compatíveis com a intenção; nunca invente metadata, votos ou resultados. Mantenha pelo menos 2 candidatos internos se disponíveis.',parts:[{text:JSON.stringify({intent:data.query.trim().replace(/\s+/g," "),candidates:compact})}],cacheTtlHours:24,cacheSeed:`match-external-v1:${data.kind}:${data.query.trim().toLowerCase()}:${JSON.stringify(compact)}` });
       const ids = [...new Set(result.ids ?? [])].filter((id) => fallback.includes(id));
-      return ids.length >= 2 ? { ids, refined:true, reason:null } : { ids:fallback,refined:false,reason:"Mantivemos o conjunto normal." };
-    } catch { return { ids:fallback, refined:false, reason:"IA indisponível · o Match normal continua disponível." }; }
+      const external = (await validate((result.items ?? []).slice(0,4), data.spaceId, context.supabase)).filter((w) => !w.existingWorkId && (data.kind === "all" || w.mediaType === data.kind)).slice(0,4);
+      return { ids: ids.length >= 2 ? ids : fallback, external, refined: ids.length >= 2 || external.length > 0, reason: null };
+    } catch { return { ids:fallback, external: [], refined:false, reason:"IA indisponível · o Match normal continua disponível." }; }
   });

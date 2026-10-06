@@ -28,11 +28,11 @@ function friendly(error: unknown): never {
 export const searchCatalog = createServerFn({ method: "POST" })
   .middleware([requireSupabaseAuth])
   .inputValidator((d) =>
-    z.object({ query: z.string().min(1).max(120), spaceId: z.string().uuid() }).parse(d),
+    z.object({ query: z.string().min(1).max(120), spaceId: z.string().uuid(), page: z.number().int().min(1).max(20).default(1) }).parse(d),
   )
   .handler(async ({ data, context }) => {
     try {
-      const results = await searchMulti(data.query);
+      const results = await searchMulti(data.query, data.page);
       const { data: existing } = await context.supabase
         .from("works")
         .select("id, media_type, tmdb_id")
@@ -550,11 +550,22 @@ export const getGalleryLogos = createServerFn({ method: "POST" })
         try {
           // Keep the entire existing JSON; a cold cache receives complete details, not a partial payload.
           const fresh = cache && new Date(cache.expires_at).getTime() > Date.now();
-          const next = payload && fresh ? { ...payload, logoPath: await fetchLogo(work.media_type, work.tmdb_id), logoChecked: true } : await fetchDetails(work.media_type, work.tmdb_id);
+          const next = payload && fresh ? { ...payload, logoPath: await fetchLogo(work.media_type, work.tmdb_id), logoChecked: true, no_logo: false } : await fetchDetails(work.media_type, work.tmdb_id);
+          next.no_logo = !next.logoPath;
           result[work.id] = next.logoPath ?? null;
           await context.supabase.from("work_metadata_cache").upsert({ work_id: work.id, payload: next as never, expires_at: new Date(Date.now() + 7 * 864e5).toISOString() }, { onConflict: "work_id" });
         } catch { result[work.id] = null; }
       }
     }));
     return result;
+  });
+
+/** Explicit real-Match preparation: catalog identities only, no indications or reactions. */
+export const materializeMatchCandidates = createServerFn({ method: "POST" })
+  .middleware([requireSupabaseAuth])
+  .inputValidator((d) => z.object({ spaceId: z.string().uuid(), items: z.array(z.object({mediaType:z.enum(["movie","tv"]),tmdbId:z.number().int().positive()})).max(4) }).parse(d))
+  .handler(async ({data,context}) => {
+    const ids: string[] = [];
+    for (const item of data.items) ids.push(await ensureWork(context.supabase, context.userId, {...item,spaceId:data.spaceId}));
+    return ids;
   });

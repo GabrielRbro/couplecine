@@ -1,5 +1,5 @@
 import { Link } from "@tanstack/react-router";
-import { useRef } from "react";
+import { useRef, type CSSProperties } from "react";
 import { Film, Tv } from "lucide-react";
 import { REACTION_EMOJI, tmdbImage } from "@/lib/format";
 import { markShared } from "@/lib/shared-transition";
@@ -10,16 +10,19 @@ export function Poster({
   title,
   className = "",
   eager = false,
+  transitionStyle,
 }: {
   path: string | null;
   title: string;
   className?: string;
   eager?: boolean;
+  transitionStyle?: CSSProperties;
 }) {
   const src = tmdbImage(path);
   return src ? (
     <img
       src={src}
+      style={transitionStyle}
       alt={title}
       loading={eager ? "eager" : "lazy"}
       decoding="async"

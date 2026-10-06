@@ -1,3 +1,5 @@
+import { MatchWinner } from "@/components/app/MatchWinner";
+import { nextHighlight, useMatchLocal } from "@/lib/match-local";
 import { MatchPreparation } from "@/components/app/MatchPreparation";
 import { createFileRoute, Link, useNavigate } from "@tanstack/react-router";
 import { z } from "zod";
@@ -107,8 +109,10 @@ function MatchPage() {
     },
   });
   const couple = members.data === 2;
-  const [simulating, setSimulating] = useState(false);
-  const [preparedIds, setPreparedIds] = useState<string[] | null>(null);
+  const [preparation, setPreparation] = useMatchLocal<{ simulating: boolean; preparedIds: string[] | null; extras: import("@/lib/space").LibraryWork[] }>(`match-preparation:${space?.userId ?? "loading"}`, { simulating: false, preparedIds: null, extras: [] });
+  const { simulating, preparedIds } = preparation;
+  const setSimulating = (value: boolean) => setPreparation((old) => ({ ...old, simulating: value }));
+  const setPreparedIds = (value: string[] | null) => setPreparation((old) => ({ ...old, preparedIds: value }));
   const spaceId = space?.spaceId;
   const [resumedSessionId, setResumedSessionId] = useState<string | null>(null);
   const [confirmingAbandon, setConfirmingAbandon] = useState(false);
@@ -116,7 +120,8 @@ function MatchPage() {
     work: (typeof works)[number];
     direction: "left" | "right";
   } | null>(null);
-  const [pickedResultId, setPickedResultId] = useState<string | null>(null);
+  const [pickedResultId, setPickedResultId] = useMatchLocal<string | null>(`match-winner:${space?.userId ?? "loading"}`, null);
+  const visitedResults = useRef<string[]>([]);
   const [spinId, setSpinId] = useState<string | null>(null);
   const [rolling, setRolling] = useState(false);
   const attemptedExtensions = useRef(new Set<string>());
@@ -130,6 +135,7 @@ function MatchPage() {
   const open = useQuery({
     queryKey: ["match-open", spaceId],
     enabled: !!spaceId,
+    refetchInterval: 3000,
     queryFn: async () => {
       if (!spaceId) return null;
       const { data } = await supabase
@@ -138,6 +144,7 @@ function MatchPage() {
         .eq("space_id", spaceId)
         .eq("status", "open")
         .maybeSingle();
+      if (!data) { qc.invalidateQueries({ queryKey: ["last-match", spaceId] }); }
       return data;
     },
   });
@@ -222,9 +229,7 @@ function MatchPage() {
   const start = useMutation({
     mutationFn: async () => {
       // Permanent 👎 from either person vetoes a work from the Match pool by default.
-      const ids = (preparedIds ? works.filter((w) => preparedIds.includes(w.id)) : works)
-        .filter((w) => isIndicated(w) && !w.interests.some((i) => i.reaction === "dislike"))
-        .map((w) => w.id);
+      const ids = preparedIds ?? works.filter((w) => isIndicated(w) && !w.interests.some((i) => i.reaction === "dislike")).map((w) => w.id);
       if (ids.length < 2) throw new Error("Adicione pelo menos 2 indicações antes de começar.");
       if (!spaceId || !space) throw new Error("Espaço indisponível.");
       if (!couple) throw new Error("O Match precisa de vocês dois no espaço.");
@@ -237,6 +242,8 @@ function MatchPage() {
       return data.id;
     },
     onSuccess: (id) => {
+      setPickedResultId(null);
+      qc.invalidateQueries({ queryKey: ["library", spaceId] });
       setResumedSessionId(id);
       invalidate();
     },
@@ -317,7 +324,7 @@ function MatchPage() {
     onError: () => toast.error("Não foi possível abandonar este Match."),
   });
 
-  const byId = useMemo(() => new Map(works.map((w) => [w.id, w])), [works]);
+  const byId = useMemo(() => new Map([...works, ...preparation.extras].map((w) => [w.id, w])), [works, preparation.extras]);
   const deck = useMemo(
     () =>
       open.data && space
@@ -405,12 +412,14 @@ function MatchPage() {
     setRolling(true);
     let i = 0;
     const steps = 14;
-    let previous = "";
+
     const tick = (delay: number) => {
       window.setTimeout(() => {
-        const options = results.filter((w) => w.id !== previous);
-        const w = options[Math.floor(Math.random()*options.length)] ?? selected;
-        previous = w.id; setSpinId(w.id);
+        const next = nextHighlight(results.map((w) => w.id), visitedResults.current);
+        if (!next) return;
+        visitedResults.current.push(next);
+        visitedResults.current = visitedResults.current.slice(-3);
+        setSpinId(next);
         i++;
         if (i < steps) tick(delay * 1.13);
         else {
@@ -429,7 +438,7 @@ function MatchPage() {
       <h2 className="mt-1 text-xl font-semibold">
         Vocês deram Match em {results.length} {results.length === 1 ? "obra" : "obras"}
       </h2>
-      {results.length === 0 ? (
+      {pickedResultId && byId.get(pickedResultId) ? <MatchWinner work={byId.get(pickedResultId) as NonNullable<ReturnType<typeof byId.get>>} onRoll={pickRandomResult} onRestart={() => { setPickedResultId(null); setPreparedIds(null); autoStarted.current = false; navigate({ search: {}, replace: true }); }} /> : results.length === 0 ? (
         <p className="mt-2 text-sm text-muted-foreground">Nenhuma obra em comum desta vez.</p>
       ) : (
         <>
@@ -504,7 +513,7 @@ function MatchPage() {
     </AnimatedSheet>
   );
 
-  if (simulating && members.data === 1) return <MatchSimulator works={works.filter((w) => preparedIds?.includes(w.id))} onExit={() => setSimulating(false)} />;
+  if (simulating && members.data === 1) return <MatchSimulator storageKey={`match-solo:${space.userId}`} works={[...works.filter((w) => preparedIds?.includes(w.id)), ...preparation.extras]} onExit={() => setSimulating(false)} />;
 
   if (view === "result")
     return (
@@ -545,7 +554,7 @@ function MatchPage() {
           >
             Convidar parceiro
           </Link>
-          {members.data === 1 && spaceId && <MatchPreparation works={works} spaceId={spaceId} solo onStart={(ids) => {setPreparedIds(ids);setSimulating(true);}} />}
+          {members.data === 1 && spaceId && <MatchPreparation works={works} spaceId={spaceId} solo onStart={(ids, extras) => {setPreparation({preparedIds:ids,simulating:true,extras});}} />}
           {last.data && (
             <Link
               to="/match"
@@ -559,7 +568,7 @@ function MatchPage() {
       </div>
     );
 
-  if (couple && !open.data && !preparedIds && spaceId) return <div className="px-4 pt-6">{header}<MatchPreparation works={works} spaceId={spaceId} onStart={setPreparedIds} /></div>;
+  if (couple && !open.data && !preparedIds && spaceId) return <div className="px-4 pt-6">{header}<MatchPreparation works={works} spaceId={spaceId} onStart={(ids, extras) => setPreparation({preparedIds:ids,simulating:false,extras})} /></div>;
 
   if (
     open.isLoading ||

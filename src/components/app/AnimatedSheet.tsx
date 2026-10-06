@@ -38,7 +38,7 @@ export function AnimatedSheet({
   useOverlayHistory(open, () => {
     if (closeDisabled) return;
     onClose();
-  });
+  }, closeDisabled);
   useScrollLock(mounted);
 
   useEffect(() => {
@@ -47,9 +47,7 @@ export function AnimatedSheet({
       setMounted(true);
       const frame = requestAnimationFrame(() => {
         setVisible(true);
-        const first =
-          panel.current?.querySelector<HTMLElement>("[data-autofocus]") ??
-          panel.current?.querySelector<HTMLElement>(FOCUSABLE);
+        const first = panel.current?.querySelector<HTMLElement>("[data-autofocus]");
         (first ?? panel.current)?.focus({ preventScroll: true });
       });
       return () => cancelAnimationFrame(frame);
@@ -88,16 +86,17 @@ export function AnimatedSheet({
 
   return createPortal(
     <div
-      className={`fixed inset-0 z-[200] flex items-end bg-background/90 transition-opacity duration-200 motion-reduce:transition-none ${visible ? "opacity-100" : "opacity-0"}`}
+      className={`fixed inset-0 z-[200] flex items-end bg-background/55 transition-opacity duration-200 motion-reduce:transition-none ${visible ? "opacity-100" : "opacity-0"}`}
       onClick={() => closeRef.current()}
     >
       <div
         ref={panel}
+        data-overlay-panel
         role={role}
         aria-modal="true"
         aria-labelledby={labelledBy}
         tabIndex={-1}
-        className={`mx-auto w-full max-w-md overscroll-contain rounded-t-3xl border border-border bg-card p-5 outline-none transition-transform duration-200 ease-[cubic-bezier(0.22,1,0.36,1)] motion-reduce:transition-none ${visible ? "translate-y-0" : "translate-y-full"} ${panelClassName}`}
+        className={`mx-auto w-full max-w-md overscroll-contain rounded-t-3xl border border-border bg-card ${panelClassName.includes("p-0") ? "" : "p-5"} outline-none transition-transform duration-200 ease-[cubic-bezier(0.22,1,0.36,1)] motion-reduce:transition-none ${visible ? "translate-y-0" : "translate-y-full"} ${panelClassName}`}
         onClick={(event) => event.stopPropagation()}
       >
         {renderedChildren.current}

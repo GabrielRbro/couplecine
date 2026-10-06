@@ -1,3 +1,5 @@
+import { markShared } from "@/lib/shared-transition";
+import { Button } from "@/components/ui/button";
 import { Link } from "@tanstack/react-router";
 import { useRef, useState } from "react";
 import { AnimatePresence, motion, useReducedMotion } from "motion/react";
@@ -359,7 +361,7 @@ function DiscoverGrid({
 }) {
   const reduce = useReducedMotion();
   const action =
-    "pressable flex min-h-11 flex-1 items-center justify-center rounded-xl bg-background/55 text-foreground backdrop-blur";
+    "min-h-11 h-11 flex-1 rounded-none text-foreground hover:bg-foreground/10";
   return (
     <div className="grid grid-cols-2 gap-3">
       <AnimatePresence initial={false} mode="popLayout">
@@ -373,7 +375,7 @@ function DiscoverGrid({
             transition={{ type: "spring", stiffness: 420, damping: 36 }}
             className="relative min-w-0 overflow-hidden rounded-2xl"
           >
-            <Link to="/title/$mediaType/$tmdbId" params={{ mediaType: i.mediaType, tmdbId: String(i.tmdbId) }} aria-label={`Abrir ${i.title}`} className="block"><Poster path={i.posterPath} title={i.title} className="rounded-2xl" /></Link>
+            <Link to="/title/$mediaType/$tmdbId" params={{ mediaType: i.mediaType, tmdbId: String(i.tmdbId) }} aria-label={`Abrir ${i.title}`} onClick={(e) => markShared(e.currentTarget, `tmdb-${i.mediaType}-${i.tmdbId}`, "poster")} className="block"><Poster path={i.posterPath} title={i.title} className="rounded-2xl" /></Link>
             <span className="pointer-events-none absolute left-2 top-2 rounded-md bg-background/60 p-1 text-muted-foreground backdrop-blur">
               {i.mediaType === "tv" ? <Tv className="h-3 w-3" /> : <Film className="h-3 w-3" />}
             </span>
@@ -383,16 +385,16 @@ function DiscoverGrid({
                 {[i.mediaType === "tv" ? "Série" : "Filme", i.year].filter(Boolean).join(" · ")}
                 {i.existingWorkId && " · na biblioteca"}
               </p>
-              <div className="pointer-events-auto mt-1.5 flex gap-1">
-                <button aria-label={`Indicar ${i.title}`} onClick={() => onReact(i)} className={`${action} bg-primary/90 text-primary-foreground`}>
+              <div className="pointer-events-auto -mx-2 -mb-2 mt-2 flex divide-x divide-border border-t border-border bg-card/50">
+                <Button variant="ghost" aria-label={`Indicar ${i.title}`} onClick={() => onReact(i)} className={`${action} text-primary`}>
                   <Plus className="h-4 w-4" />
-                </button>
-                <button aria-label={`Já assisti ${i.title}`} onClick={() => onSeen(i)} className={action}>
+                </Button>
+                <Button variant="ghost" aria-label={`Já assisti ${i.title}`} onClick={() => onSeen(i)} className={action}>
                   <Check className="h-4 w-4" />
-                </button>
-                <button aria-label={`Dispensar ${i.title}`} onClick={() => onDismiss(i)} className={action}>
+                </Button>
+                <Button variant="ghost" aria-label={`Dispensar ${i.title}`} onClick={() => onDismiss(i)} className={action}>
                   <X className="h-4 w-4" />
-                </button>
+                </Button>
               </div>
             </div>
           </motion.div>
