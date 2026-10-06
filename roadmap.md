@@ -29,6 +29,7 @@ Concluído: Lotes 1–4, 5A–5D, Rodada 6, MCP.
 - Limites: consentimento a dois/Android físico e Gemini com chave real não validados; espera Gemini exercitada com atraso controlado. Pessoas clicáveis e alias privado não implementados.
 
 ## Pendente
+- [ ] Rodada 9: ficha modular única, camadas/overlays estáveis, séries, filtros/refino Match, roleta aleatória, logos, feedback/teclado e busca inteligente; validação focada.
 - [ ] Consentimento duplo do Match e Match ativo com 2 membros (bloqueado: precisa da conta real do parceiro)
 - [ ] Teste real do Gemini (bloqueado: nenhuma chave configurada)
 - [ ] Tela de Importações (feature futura)
