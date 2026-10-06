@@ -43,8 +43,7 @@ export function pwaPlugin(): Plugin {
           swDest: join(outDir, "sw.js"),
           globPatterns: ["**/*.{js,css,woff,woff2,ttf,png,jpg,jpeg,svg,webp,webmanifest}"],
           globIgnores: ["sw.js", "workbox-*.js"],
-          navigateFallback: undefined,
-          runtimeCaching: [],
+          navigateFallback: null,
           cleanupOutdatedCaches: true,
           skipWaiting: false, // waits for the user to tap "Atualizar"
           clientsClaim: false,
