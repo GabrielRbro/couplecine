@@ -96,10 +96,9 @@ export function BottomNav() {
         onClick={() => setOpen(false)}
       />
       <nav
-        style={{ viewTransitionName: "bottom-nav" }}
         className="fixed inset-x-0 bottom-0 z-50 mx-auto max-w-md px-4 pb-[max(env(safe-area-inset-bottom),12px)]"
       >
-        <div className="relative flex items-end rounded-2xl border border-border nav-glass px-2">
+        <div style={{ viewTransitionName: "bottom-nav" }} className="relative flex items-end rounded-2xl border border-border nav-glass px-2">
           <Link to="/" className={tab(path === "/")} onClick={(e) => go(e, "/")}>
             <Home className="h-5 w-5" /> Início
           </Link>
