@@ -45,8 +45,9 @@ Concluído: Lotes 1–4, 5A–5D, Rodada 6, MCP.
 - [ ] Tela de Importações (feature futura)
 
 ## Rodada 10
-- [ ] Estrutura overlays/transições e vidro da nav
-- [ ] Descobrir otimista, busca paginada/IA/ordem, Galeria logos/duração
-- [ ] Continuar com duas obras e episódios/modal
-- [ ] Match persistente/roleta/hero/status e candidatos externos
-- [ ] Validação focada móvel sem alterar dados reais; PWA preservada
+- [x] Estrutura overlays/transições e vidro da nav
+- [x] Descobrir otimista, busca paginada/IA/ordem, Galeria logos/duração
+- [x] Continuar com duas obras e episódios/modal
+- [x] Match persistente/roleta/hero/status e candidatos externos
+- [x] Smoke móvel 390x844 e 412x915: cinco ciclos radial/status/episódio estáveis, imagens preservadas; Back bloqueado validado isoladamente, busca paginada e sorteio estável; PWA preservada
+- [ ] QA complementar: adicionar pelo Descobrir somente em DEMO restaurável, cache de logo frio/reload e fixture com exatamente duas obras; Match real deliberadamente não iniciado
