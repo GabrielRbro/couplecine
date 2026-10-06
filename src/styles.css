@@ -327,3 +327,8 @@ html { scrollbar-gutter: stable; }
 @keyframes score-pulse { 0% { transform: scale(.65); opacity: 0; } 60% { transform: scale(1.12); opacity: 1; } 100% { transform: scale(1); } }
 @keyframes score-rise { 0% { transform: translateY(18px) scale(.6); opacity: 0; } 65% { transform: translateY(-8px) scale(1.2); opacity: 1; } 100% { transform: translateY(0) scale(1); } }
 @media (prefers-reduced-motion: reduce) { .score-feedback svg { animation: score-feedback 150ms ease both; } }
+
+.ai-film-frame { animation: ai-film-drift 1.8s ease-in-out infinite alternate; }
+.ai-film-1 { animation-delay: -.4s; }.ai-film-2 { animation-delay: -.8s; }.ai-film-3 { animation-delay: -1.2s; }
+@keyframes ai-film-drift { from { transform: translateY(5px) rotate(-4deg); } to { transform: translateY(-5px) rotate(4deg); } }
+@media (prefers-reduced-motion: reduce) { .ai-film-frame { animation: none; } }

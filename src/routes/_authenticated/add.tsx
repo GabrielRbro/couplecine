@@ -6,6 +6,7 @@ import { AnimatePresence, motion, useReducedMotion } from "motion/react";
 import { LoaderCircle, Search, Sparkles } from "lucide-react";
 import { BackButton, FilterPills, ScrollRow } from "@/components/app/ui";
 import { AppShell } from "@/components/app/AppShell";
+import { IntelligentLoading } from "@/components/app/IntelligentLoading";
 import { Poster } from "@/components/app/MediaCard";
 import { Button } from "@/components/ui/button";
 import { searchCatalog } from "@/lib/catalog.functions";
@@ -37,8 +38,8 @@ function AddPage() {
 
   const ai = useMutation({ mutationFn: (query: string) => {
     if (!space?.spaceId) throw new Error("Espaço indisponível.");
-    return smart({ data: { query, spaceId: space.spaceId } });
-  }, onSuccess: (data, query) => { qc.setQueryData(["smart-search-view", query.trim(), space?.spaceId], data); } });
+    return smart({ data: { query, spaceId: space.spaceId, kind: kind === "movie" ? "movie" : kind === "tv" ? "tv" : "all" } });
+  }, onSuccess: (data, query) => { qc.setQueryData(["smart-search-view", query.trim(), space?.spaceId, kind], data); } });
   useEffect(() => { const t = window.setTimeout(() => setDebounced(q), 350); return () => clearTimeout(t); }, [q]);
   const normal = useQuery({ queryKey: ["catalog-search", debounced, space?.spaceId], enabled: mode !== "ai" && debounced.trim().length >= 2 && Boolean(space?.spaceId), staleTime: 5 * 60_000,
     queryFn: () => {
@@ -46,7 +47,7 @@ function AddPage() {
       return search({ data: { query: debounced.trim(), spaceId: space.spaceId } });
     } });
   // Cached results survive preview → Back, with no stale request overwriting a newer key.
-  const intelligent = useQuery({ queryKey: ["smart-search-view", q.trim(), space?.spaceId], enabled: false,
+  const intelligent = useQuery({ queryKey: ["smart-search-view", q.trim(), space?.spaceId, kind], enabled: false,
     queryFn: () => { throw new Error("A pesquisa inteligente precisa ser solicitada."); }, staleTime: Infinity });
   const data = mode === "ai" ? intelligent.data as Awaited<ReturnType<typeof smartSearch>> | undefined : undefined;
   const items = (mode === "ai" ? data?.items ?? [] : q.trim().length >= 2 ? normal.data ?? [] : []).filter((r) => kind === "all" || r.mediaType === kind);
@@ -62,9 +63,9 @@ function AddPage() {
     <ScrollRow className="mt-2"><FilterPills options={[["all", "Todos"], ["movie", "Filmes"], ["tv", "Séries"]]} value={kind} onChange={(value) => update({ kind: value })} /></ScrollRow>
     <Button variant="outline" disabled={q.trim().length < 3 || ai.isPending} onClick={() => { update({ mode: "ai" }); ai.mutate(q.trim()); }} className="mt-2 min-h-11 w-full gap-2 text-sm text-muted-foreground"><Sparkles className="h-4 w-4 text-primary" />Pesquisa inteligente</Button>
     <AnimatePresence initial={false} mode="wait">
-      {mode === "ai" && pending ? <motion.div key="interpreting" initial={{ opacity: 0 }} animate={{ opacity: 1 }} exit={{ opacity: 0 }} className="relative mt-5 flex min-h-28 items-center justify-center gap-3 overflow-hidden rounded-xl border border-border bg-card" role="status">
-        <div className="skeleton absolute inset-0 opacity-30" /><Sparkles className="relative h-6 w-6 animate-pulse text-primary" /><p className="relative text-sm text-muted-foreground">Interpretando sua busca…</p>
-      </motion.div> : <motion.div key="results" initial={reduce ? false : { opacity: 0 }} animate={{ opacity: 1 }} exit={{ opacity: 0 }} className="mt-4 space-y-2">
+      {mode === "ai" && pending ? <motion.div key="interpreting" initial={{ opacity: 0 }} animate={{ opacity: 1 }} exit={{ opacity: 0 }} className="min-h-28">
+         <IntelligentLoading />
+       </motion.div> : <motion.div key="results" initial={reduce ? false : { opacity: 0 }} animate={{ opacity: 1 }} exit={{ opacity: 0 }} className="mt-4 space-y-2">
         {mode === "tmdb" && pending && !normal.data && [0,1,2].map((i) => <div key={i} className="skeleton h-[88px] rounded-xl" />)}
         <AnimatePresence initial={false} mode="popLayout">{items.map((r) => <motion.div key={`${r.mediaType}-${r.tmdbId}`} layout={!reduce} initial={reduce ? false : { opacity: 0, y: 8 }} animate={{ opacity: 1, y: 0 }} exit={{ opacity: 0 }} transition={{ duration: .18 }}>
           <Link {...("existingWorkId" in r && r.existingWorkId ? { to: "/work/$id" as const, params: { id: r.existingWorkId } } : { to: "/title/$mediaType/$tmdbId" as const, params: { mediaType: r.mediaType, tmdbId: String(r.tmdbId) } })} onClick={(e) => markShared(e.currentTarget.querySelector<HTMLElement>("[data-poster]"), "existingWorkId" in r && r.existingWorkId ? r.existingWorkId : `tmdb-${r.mediaType}-${r.tmdbId}`, "poster")} className="pressable grid grid-cols-[48px_minmax(0,1fr)] items-center gap-3 rounded-xl border border-border bg-card p-2">
