@@ -6,6 +6,7 @@
 // You can pass additional config via defineConfig({ vite: { ... }, etc... }) if needed.
 import { defineConfig } from "@lovable.dev/vite-tanstack-config";
 import { mcpPlugin } from "@lovable.dev/mcp-js/stacks/tanstack/vite";
+import { pwaPlugin } from "./pwa.config.ts";
 
 export default defineConfig({
   tanstackStart: {
@@ -13,5 +14,10 @@ export default defineConfig({
     // nitro/vite builds from this
     server: { entry: "server" },
   },
-  vite: { plugins: [mcpPlugin()] },
+  vite: {
+    plugins: [
+      mcpPlugin(),
+      pwaPlugin(),
+    ],
+  },
 });

@@ -15,6 +15,8 @@ Concluído: Lotes 1–4, 5A–5D, Rodada 6, MCP.
 - [x] P10 a11y/emoji/logs
 - [x] Follow-up: Gemini conectado (status/test/save/remove owner), perfil Descobrir rico, Add/Settings voltar, race busca, convite 3º membro, logs de cache, validação banco
 
+- [x] PWA instalável (manifest, ícones, SW só estáticos, aviso de atualização, Instalar em Configurações)
+
 ## Pendente
 - [ ] Consentimento duplo do Match e Match ativo com 2 membros (bloqueado: precisa da conta real do parceiro)
 - [ ] Teste real do Gemini (bloqueado: nenhuma chave configurada)
