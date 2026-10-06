@@ -1,11 +1,17 @@
-import { createFileRoute, useNavigate } from "@tanstack/react-router";
+import { createFileRoute } from "@tanstack/react-router";
 import { useEffect, useState } from "react";
 import { Popcorn } from "lucide-react";
 import { toast } from "sonner";
 import { lovable } from "@/integrations/lovable";
 import { supabase } from "@/integrations/supabase/client";
 
+const NEXT_KEY = "auth-next";
+function safeNext(v: unknown): string | null {
+  return typeof v === "string" && v.startsWith("/") && !v.startsWith("//") ? v : null;
+}
+
 export const Route = createFileRoute("/auth")({
+  validateSearch: (s: Record<string, unknown>) => ({ next: safeNext(s.next) ?? undefined }),
   head: () => ({
     meta: [
       { title: "Entrar — AppCinema" },
@@ -21,17 +27,23 @@ export const Route = createFileRoute("/auth")({
 });
 
 function AuthPage() {
-  const navigate = useNavigate();
+  const { next } = Route.useSearch();
   const [busy, setBusy] = useState(false);
   useEffect(() => {
+    if (next) sessionStorage.setItem(NEXT_KEY, next);
+    const go = () => {
+      const target = safeNext(sessionStorage.getItem(NEXT_KEY)) ?? "/";
+      sessionStorage.removeItem(NEXT_KEY);
+      window.location.replace(target);
+    };
     supabase.auth.getSession().then(({ data }) => {
-      if (data.session) navigate({ to: "/", replace: true });
+      if (data.session) go();
     });
     const { data } = supabase.auth.onAuthStateChange((event, session) => {
-      if (event === "SIGNED_IN" && session) navigate({ to: "/", replace: true });
+      if (event === "SIGNED_IN" && session) go();
     });
     return () => data.subscription.unsubscribe();
-  }, [navigate]);
+  }, [next]);
 
   async function signIn() {
     setBusy(true);
