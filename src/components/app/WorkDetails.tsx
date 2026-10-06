@@ -145,7 +145,7 @@ export function WorkDetails({ workId, mediaType, tmdbId }: { workId?: string; me
   }
   const isTv = work.media_type === "tv";
   const cachedSeasons = (qc.getQueryData<LibraryWork[]>(["library", space.spaceId]) ?? []).find((w) => w.id === id)?.work_metadata_cache[0]?.seasons;
-  const seasons = m?.seasons?.length ? m.seasons : cachedSeasons?.length ? cachedSeasons : Array.from({ length: m?.seasonCount ?? 0 }, (_, i) => ({ seasonNumber: i + 1, name: `Temporada ${i + 1}`, episodeCount: 0 }));
+  const seasons = m?.seasons?.length ? m.seasons : Array.from({ length: m?.seasonCount ?? cachedSeasons?.length ?? 0 }, (_, i) => ({ seasonNumber: i + 1, name: `Temporada ${i + 1}`, episodeCount: cachedSeasons?.[i]?.episodeCount ?? 0 }));
   const seasonCount = m?.seasonCount ?? seasons.length;
   return (
     <div>
