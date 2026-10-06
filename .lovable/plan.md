@@ -1,49 +1,30 @@
-# Auditoria somente leitura — AppCinema pós-Rodada 6
+# Rodada 8 — polimento focado do AppCinema
 
-Evidências: leitura do código e navegação autenticada em 390x844, sem alterar dados (nenhum voto, nenhum abandono, nada salvo). O exame visual completo em 412x915 e a inspeção quadro a quadro das transições ficaram de fora desta passada (ver "Não validado").
+## Escopo
+Preservar dados atuais, PWA, Gemini storage, RLS, seed demo, MCP e regras do Match real. Sem nova auditoria geral ou alterações em outras features.
 
-## Bugs confirmados
+## Entregas
+1. **Navegação e camadas:** uma BottomNav persistente, radial Galeria/Match/Sortear, toque ativo sem navegação/animação, vidro fosco estável, Back/Escape sem transição de página; scrollbars ocultas e sheets com posição de rolagem preservada.
+2. **Arte e movimento:** versos cinematográficos comuns a Sorteio/Match, poucas imagens pré-carregadas e decodificadas antes do shuffle, fallback cenográfico em falha, bordas/sombras discretas; corrigir camadas e limpeza das transições compartilhadas.
+3. **Galeria:** logos transparentes TMDB com prioridade pt-BR/pt → en → neutro, fallback textual, composição refinada e consulta limitada ao lote visível com cache existente.
+4. **Notas e séries:** ScorePicker começa em 5,0 sem foco numérico automático, feedback breve por faixa de nota também na pilha; progresso compacto no hero e episódios com still horizontal + mini poster da temporada; modal sem tremida ou barra sobreposta.
+5. **Busca e prévia:** remover Buscar, filtros Todos/Filmes/Séries, preservar consulta/filtros/posição, lista animada e estado Gemini sutil; resultado abre prévia TMDB completa. Adicionar só após CTA e picker; obra existente abre biblioteca.
+6. **Simulação do Match:** modo explicitamente local para espaço com um membro, mesmas animações, votos/resultados/sorteio locais, sair/reiniciar; nenhuma escrita colaborativa nem parceiro fictício. Com dois membros, fluxo real intacto.
+7. **Estados coerentes:** retirada de indicação atualiza ações, pending-delete observável impede exclusão repetida e preserva Undo; Continuar assistindo mantém altura constante, variando apenas largura.
 
-| # | Sev. | Problema | Causa provável (arquivo) | Reproduzir | Correção sugerida |
-|---|---|---|---|---|---|
-| A | Crítico | "Excluir obra" nunca apaga de fato | `work.$id.tsx` IndicationsBlock: `deleteWork` navega para /library e depois agenda o `setTimeout`; o cleanup do `useEffect` limpa o timer quando o componente desmonta. A obra só some do cache e volta no próximo refetch | Ficha → Excluir → confirmar → esperar 6 s → recarregar a Biblioteca | Mover o timer de exclusão para fora do componente (módulo ou mutation global), ou excluir já e desfazer recriando |
-| B | Alto | Rep. 1, 13 e 14: sobreposições e camadas erradas durante transições | Toda MediaCard, todo card de Continuar assistindo e todo card da Galeria recebem `viewTransitionName`. Medido: 32 nomes ativos só na Biblioteca. Cada nome vira um grupo na camada de topo da View Transition, acima da BottomNav e do menu radial, e também cria contexto de empilhamento | Home → Biblioteca, ou tocar um item do radial: cards passam por cima da barra | Dar nome só ao elemento tocado, no clique (por exemplo um `sharedId` em memória). Destino com o mesmo nome |
-| C | Alto | Rep. 4/11: Voltar com janela aberta sai da página | `AnimatedSheet` não registra entrada no histórico. Medido: episódio aberto + voltar → saiu da ficha | Ficha de série → episódio → Voltar | No AnimatedSheet, ao abrir, empurrar uma entrada pelo `router.history` (não pelo `window.history`) e fechar no popstate, igual ao radial |
-| D | Alto | Rep. 11: scroll da página atrás da janela | `AnimatedSheet` não trava o `body`. A medição (wheel sobre a janela) foi inconclusiva | Abrir episódio e rolar fora da janela | `overflow: hidden` no body enquanto estiver aberto, com compensação da scrollbar |
-| E | Médio | Rep. 14: radial usa `window.history.pushState` cru | `AppShell.tsx` BottomNav: a entrada não tem a chave de índice do TanStack, e o popstate também chega ao router, que dispara uma View Transition e restauração de scroll. A navegação radial → Biblioteca está correta (history.length estável) | Abrir/fechar o radial várias vezes e observar o flash | Usar `router.history.push` com state, ou bloquear a transição desse pop |
-| F | Médio | Rep. 6: Match tem BottomNav | `_authenticated/route.tsx` só esconde a barra em /onboarding | Abrir Match | Esconder também em /match e dar ao Match um layout fullscreen próprio |
-| G | Médio | Rep. 6: cards cenográficos parecem vazios | `styles.css` match-stack-back: só gradiente com borda, sem textura de "verso" | Match em andamento | Desenhar um verso de carta (padrão sutil e logo) com profundidade |
-| H | Médio | Rep. 2: filtros e abas sem realocação | Biblioteca usa grid simples sem layout animation. Na Galeria o `layout` do Motion existe, mas `popLayout` mais a View Transition do router competem | Trocar Filmes/Séries | `motion` com `layout` + `AnimatePresence` na Biblioteca; usar `viewTransition:false` nos filtros |
-| I | Médio | Rep. 5: Não avaliados abre a ficha | `index.tsx`: Link para `/work/$id` do primeiro pendente | Tocar no atalho | Sheet com pilha de posters reaproveitando o seletor de nota |
-| J | Médio | Rep. 8: Dar nota abre uma grade inline de 21 botões | `work.$id.tsx` Comparison | Tocar "Dar nota" | Sheet com campo numérico (0–10, passo 0,5) e seleção rápida |
-| K | Baixo | Rep. 9/10: progresso e comparação altos | SeriesBlock tem um card cheio de "Progresso do casal". Comparison tem título, rótulos e botões de 44px empilhados | Ficha de série | Progresso como linha discreta junto ao cabeçalho. Comparison numa faixa única de ~64px |
-| L | Baixo | Rep. 12: card de episódio mostra a sinopse | SeriesBlock renderiza `ep.overview` | Ficha de série | Remover a sinopse do card |
-| M | Baixo | Rep. 7: Sorteio só faz fade | `watch.dice.tsx` linha 183: scale/opacity | Sortear | Animação física curta de embaralhar/virar |
-| N | Médio | Galeria perde os filtros ao voltar | `watch.gallery.tsx`: filtros em `useState` | Filtrar → obra → Voltar | Search params, como na Biblioteca |
+## Detalhes técnicos
+- Reutilizar componentes e serviços atuais; extrair apenas apresentação compartilhada indispensável à prévia/arte.
+- Prévia protegida em `/title/$mediaType/$tmdbId`, com metadados próprios; TMDB acessado exclusivamente pelos serviços server-side existentes.
+- Logos guardados no JSON de `work_metadata_cache`, incluindo ausência de logo e validade; processamento em pequenos lotes com concorrência limitada, sem migration.
+- Simulador isolado do caminho de RPCs/sessões reais e desligado automaticamente quando houver parceiro.
+- Não adicionar filtro de Ano nesta rodada: os três filtros pedidos bastam e evitam complexidade opcional.
 
-## Outros problemas encontrados
-- Match: depois de abandonar na mesma visita, `initialOpenId` continua com valor e o início automático não acontece. Aparece o botão "Começar", o que é inconsistente com a regra.
-- Match: o polling de 5 s chama `match_join` a cada ciclo (uma RPC de escrita idempotente). É custo desnecessário.
-- `ai_cache`: o limite por hora conta só as respostas salvas. Falhas e 429 não contam, então tentativas com erro não têm limite. Além disso, o upsert de um item de cache renova o `created_at` e conta de novo.
-- Dispensados: acima de 12 itens fora da biblioteca, aparecem rótulos genéricos ("Filme dispensado").
-- As séries de demonstração não têm `posterPath` das temporadas no cache, então não há fallback para o poster da temporada.
-- Cada episódio marcado invalida a biblioteca inteira (refetch completo). Uma atualização otimista local seria suficiente.
-- A View Transition também roda em navegações com skeleton (perfil ainda carregando). O elemento compartilhado falha e vira só fade.
-- Os emojis de reação dependem da fonte do sistema (em headless viram caixas). O app não define fonte de emoji.
-- `useLibrary` com `spaceId` vazio cria a chave `["library",""]` (inofensivo, mas polui o cache).
-- Lint: centenas de avisos de formatação herdados em arquivos não tocados (`watch.dice.tsx`, entre outros).
+## Validação focada
+- Verificar saída automática de build/typecheck, sem executar builds manuais do projeto.
+- Smoke autenticado em 390×844 e 412×915: radial 5x/Back/toque ativo, Biblioteca/Galeria/transições, logos/fallback, Sorteio 3x com imagens prontas, ficha série/modal, busca/filtro/prévia/Back e simulador até resultados.
+- Confirmar simulador sem novas linhas Match e 45 demos intactas; QA não salva indicação, nota ou episódio nem apaga obra real.
+- Feedback de nota validado isoladamente, sem persistência. Exclusão validada por código/estado sem teste destrutivo.
+- Teclado/safe-area físicos Android e consentimento real com duas contas serão reportados como limites quando indisponíveis; Gemini pending pode ser exercitado com resposta controlada, sem alegar teste real de chave.
 
-## Não validado
-- Consentimento duplo, privacidade em tempo real e votos do parceiro no Match: exigem segunda conta.
-- Início automático do Match e votação: exigem abandonar a sessão real de 3 de outubro ou votar.
-- Pesquisa inteligente, rerank do Descobrir e análise de importação: falta `GEMINI_API_KEY`.
-- Exclusão e escrita de nota ou episódio na prática: exigem mutar dados (o bug A foi confirmado pelo código).
-- Toque físico do Android e safe-area real: só simulados no navegador headless.
-
-## Ordem sugerida de correção
-1. A (exclusão) e B (nomes de transição só no elemento tocado): resolvem o Crítico e os itens 1, 13 e 14.
-2. C, D e E: histórico e janelas (itens 4 e 11).
-3. F e G: Match fullscreen e verso das cartas.
-4. H e N: realocação e estado dos filtros.
-5. I e J: janelas de nota.
-6. K, L e M: polimentos.
+## Documentação final
+Nota curta de conclusão no roadmap apenas após validação; manter futuros **pessoas clicáveis** e **apelido privado do parceiro** como não implementados. Registrar somente novas decisões estruturais indispensáveis em AGENTS.
