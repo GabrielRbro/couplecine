@@ -27,19 +27,15 @@ export const manifest = {
 };
 
 export function pwaPlugin(): Plugin {
-  let outDir = "";
   return {
     name: "appcinema-pwa",
     apply: "build",
     applyToEnvironment: (env) => env.name === "client",
-    configResolved(c) {
-      outDir = c.build.outDir;
-    },
     closeBundle: {
       sequential: true,
       order: "post",
       async handler() {
-        if (!outDir) return;
+        const outDir = this.environment.config.build.outDir;
         await writeFile(join(outDir, "manifest.webmanifest"), JSON.stringify(manifest, null, 2));
         const { generateSW } = await import("workbox-build");
         const res = await generateSW({
