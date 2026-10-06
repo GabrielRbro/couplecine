@@ -217,7 +217,7 @@ function GalleryPage() {
               exit={reduce ? { opacity: 0 } : { opacity: 0, scale: 0.97 }}
               transition={{ type: "spring", stiffness: 380, damping: 34 }}
             >
-              <GalleryCard work={w} space={space} requestLogo={requestLogo} logo={logos[w.id] ?? qc.getQueryData<string | null>(["gallery-logo", w.id])} />
+              <GalleryCard work={w} space={space} requestLogo={requestLogo} logo={w.work_metadata_cache[0]?.logoChecked && new Date(w.work_metadata_cache[0]?.expires_at ?? "").getTime() > Date.now() ? w.work_metadata_cache[0]?.logoPath ?? null : (logos[w.id] !== undefined ? logos[w.id] : qc.getQueryData<string | null>(["gallery-logo", w.id]))} />
             </motion.div>
           ))}
         </AnimatePresence>

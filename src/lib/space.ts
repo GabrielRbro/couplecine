@@ -84,7 +84,7 @@ export type LibraryWork = {
   joint_watch_sessions: { id: string; watched_at: string }[];
   watch: WatchSummary | null;
   series_states: { status: string; next_season: number | null; next_episode: number | null }[];
-  work_metadata_cache: { seasons: { episodeCount: number }[] | null }[];
+  work_metadata_cache: { logoPath?: string | null; logoChecked?: boolean; expires_at?: string; seasons: { episodeCount: number }[] | null }[];
 };
 
 export const libraryQueryOptions = (spaceId: string) => ({
@@ -94,7 +94,7 @@ export const libraryQueryOptions = (spaceId: string) => ({
     const { data, error } = await supabase
       .from("works")
       .select(
-        "id, title, original_title, media_type, poster_path, backdrop_path, runtime_minutes, release_year, activity_at, created_at, genres, interests(user_id, reaction), ratings(user_id, score), indications(indicated_by, created_at, renewed_at), joint_watch_sessions(id, watched_at), work_watch_summary(seen_count, last_watched_at, seen_keys), series_states(status, next_season, next_episode), work_metadata_cache(seasons:payload->seasons)",
+        "id, title, original_title, media_type, poster_path, backdrop_path, runtime_minutes, release_year, activity_at, created_at, genres, interests(user_id, reaction), ratings(user_id, score), indications(indicated_by, created_at, renewed_at), joint_watch_sessions(id, watched_at), work_watch_summary(seen_count, last_watched_at, seen_keys), series_states(status, next_season, next_episode), work_metadata_cache(seasons:payload->seasons,logoPath:payload->>logoPath,logoChecked:payload->logoChecked,expires_at)",
       )
       .eq("space_id", spaceId)
       .order("activity_at", { ascending: false });

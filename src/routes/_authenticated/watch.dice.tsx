@@ -233,8 +233,7 @@ function DicePage() {
                   className="match-picked pressable relative block h-full overflow-hidden rounded-xl border border-border bg-card shadow-sm"
                 >
                   {ready.has(picked.id) ? <Poster eager path={picked.poster_path} title={picked.title} /> : <div className="relative aspect-[2/3]"><div className="match-stack-back" /></div>}
-                  <p className="mt-2 text-center font-semibold">{picked.title}</p>
-                  <p className="text-center text-xs text-muted-foreground">Toque para ver detalhes</p>
+                  <div className="absolute inset-x-0 bottom-0 bg-gradient-to-t from-background via-background/80 to-transparent px-3 pb-4 pt-12"><p className="text-center text-sm font-semibold">{picked.title}</p><p className="mt-1 text-center text-xs text-muted-foreground">{picked.release_year} · {picked.media_type === "tv" ? "Série" : "Filme"}</p></div>
                 </Link>
               </div>
             ) : (

@@ -12,9 +12,9 @@ export function markShared(el: HTMLElement | null, id: string, kind: Kind) {
   clearShared();
   const image = el instanceof HTMLImageElement ? el : el.querySelector("img");
   if (!image) return;
-  pending = { id, kind, at: Date.now() };
-  image.style.viewTransitionName = `shared-${kind}`;
   const started = Date.now();
+  pending = { id, kind, at: started };
+  image.style.viewTransitionName = `shared-${kind}`;
   const cleanup = () => { image.style.viewTransitionName = ""; if (pending?.at === started) clearShared(); };
   // activeViewTransition is supported by modern Chromium; other engines expose pseudo animations.
   const watch = () => {
