@@ -1,4 +1,6 @@
 import { useRef, useState } from "react";
+import { AnimatePresence, motion, useReducedMotion } from "motion/react";
+import { ScoreForm } from "@/components/app/ScorePicker";
 import { useInfiniteQuery, useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { useServerFn } from "@tanstack/react-start";
 import { Check, Film, Plus, RotateCcw, Tv, X } from "lucide-react";
@@ -13,12 +15,11 @@ import {
   getDismissedDiscover,
   markSeenBefore,
 } from "@/lib/catalog.functions";
-import { ADD_REACTIONS, REACTION_EMOJI, REACTION_LABEL, formatScore } from "@/lib/format";
+import { ADD_REACTIONS, REACTION_EMOJI, REACTION_LABEL } from "@/lib/format";
 import type { SpaceInfo } from "@/lib/space";
 
 type Item = NonNullable<Awaited<ReturnType<typeof getDiscover>>>["items"][number];
 type SheetState = { item: Item; mode: "react" | "seen" } | null;
-const SCORES = Array.from({ length: 21 }, (_, i) => i / 2);
 const k = (i: { mediaType: string; tmdbId: number }) => `${i.mediaType}:${i.tmdbId}`;
 
 const fold = (s: string) =>
@@ -320,22 +321,18 @@ export function DiscoverTab({
                 <p className="mt-1 text-sm text-muted-foreground">
                   Já assistiu antes? Dê uma nota, se quiser.
                 </p>
-                <div className="mt-4 grid grid-cols-7 gap-1.5">
-                  {SCORES.map((s) => (
-                    <button
-                      key={s}
-                      disabled={indicate.isPending || markSeen.isPending}
-                      onClick={() => markSeen.mutate({ i: sheet.item, score: s })}
-                      className="pressable min-h-11 rounded-lg border border-border text-xs disabled:opacity-50"
-                    >
-                      {formatScore(s)}
-                    </button>
-                  ))}
+                <div className="mt-3">
+                  <ScoreForm
+                    title="Sua nota"
+                    initial={null}
+                    saving={indicate.isPending || markSeen.isPending}
+                    onSave={(score) => markSeen.mutate({ i: sheet.item, score })}
+                  />
                 </div>
                 <button
                   disabled={indicate.isPending || markSeen.isPending}
                   onClick={() => markSeen.mutate({ i: sheet.item, score: null })}
-                  className="pressable mt-3 min-h-11 w-full rounded-xl bg-secondary text-sm font-medium disabled:opacity-50"
+                  className="pressable mt-2 min-h-11 w-full rounded-xl bg-secondary text-sm font-medium disabled:opacity-50"
                 >
                   Salvar sem nota
                 </button>
@@ -359,50 +356,47 @@ function DiscoverGrid({
   onSeen: (item: Item) => void;
   onDismiss: (item: Item) => void;
 }) {
+  const reduce = useReducedMotion();
+  const action =
+    "pressable flex min-h-11 flex-1 items-center justify-center rounded-xl bg-background/55 text-foreground backdrop-blur";
   return (
-    <div className="grid grid-cols-2 gap-x-3 gap-y-5">
-      {items.map((i) => (
-        <div key={k(i)} className="fade-enter min-w-0">
-          <div className="relative">
-            <Poster path={i.posterPath} title={i.title} />
-            <span className="absolute left-2 top-2 rounded-md bg-background/80 p-1 text-muted-foreground">
-              {i.mediaType === "tv" ? (
-                <Tv className="h-3.5 w-3.5" />
-              ) : (
-                <Film className="h-3.5 w-3.5" />
-              )}
+    <div className="grid grid-cols-2 gap-3">
+      <AnimatePresence initial={false} mode="popLayout">
+        {items.map((i) => (
+          <motion.div
+            key={k(i)}
+            layout={!reduce}
+            initial={reduce ? false : { opacity: 0, scale: 0.94 }}
+            animate={{ opacity: 1, scale: 1 }}
+            exit={reduce ? { opacity: 0 } : { opacity: 0, scale: 0.9 }}
+            transition={{ type: "spring", stiffness: 420, damping: 36 }}
+            className="relative min-w-0 overflow-hidden rounded-2xl"
+          >
+            <Poster path={i.posterPath} title={i.title} className="rounded-2xl" />
+            <span className="absolute left-2 top-2 rounded-md bg-background/60 p-1 text-muted-foreground backdrop-blur">
+              {i.mediaType === "tv" ? <Tv className="h-3 w-3" /> : <Film className="h-3 w-3" />}
             </span>
-          </div>
-          <p className="mt-2 line-clamp-1 text-sm font-semibold">{i.title}</p>
-          <p className="text-xs text-muted-foreground">
-            {[i.mediaType === "tv" ? "Série" : "Filme", i.year].filter(Boolean).join(" · ")}
-            {i.existingWorkId && " · na biblioteca"}
-          </p>
-          <div className="mt-2 grid grid-cols-3 gap-1.5">
-            <button
-              aria-label={`Indicar ${i.title}`}
-              onClick={() => onReact(i)}
-              className="pressable flex min-h-11 items-center justify-center rounded-xl bg-secondary text-foreground"
-            >
-              <Plus className="h-4 w-4" />
-            </button>
-            <button
-              aria-label={`Já assisti ${i.title}`}
-              onClick={() => onSeen(i)}
-              className="pressable flex min-h-11 items-center justify-center rounded-xl border border-border text-muted-foreground"
-            >
-              <Check className="h-4 w-4" />
-            </button>
-            <button
-              aria-label={`Dispensar ${i.title}`}
-              onClick={() => onDismiss(i)}
-              className="pressable flex min-h-11 items-center justify-center rounded-xl border border-border text-muted-foreground"
-            >
-              <X className="h-4 w-4" />
-            </button>
-          </div>
-        </div>
-      ))}
+            <div className="absolute inset-x-0 bottom-0 bg-gradient-to-t from-background via-background/85 to-transparent px-2 pb-2 pt-12">
+              <p className="line-clamp-2 px-0.5 text-sm font-semibold leading-tight">{i.title}</p>
+              <p className="px-0.5 text-[11px] text-foreground/70">
+                {[i.mediaType === "tv" ? "Série" : "Filme", i.year].filter(Boolean).join(" · ")}
+                {i.existingWorkId && " · na biblioteca"}
+              </p>
+              <div className="mt-1.5 flex gap-1">
+                <button aria-label={`Indicar ${i.title}`} onClick={() => onReact(i)} className={`${action} bg-primary/90 text-primary-foreground`}>
+                  <Plus className="h-4 w-4" />
+                </button>
+                <button aria-label={`Já assisti ${i.title}`} onClick={() => onSeen(i)} className={action}>
+                  <Check className="h-4 w-4" />
+                </button>
+                <button aria-label={`Dispensar ${i.title}`} onClick={() => onDismiss(i)} className={action}>
+                  <X className="h-4 w-4" />
+                </button>
+              </div>
+            </div>
+          </motion.div>
+        ))}
+      </AnimatePresence>
     </div>
   );
 }
