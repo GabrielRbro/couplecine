@@ -10,6 +10,7 @@ export type TmdbSearchItem = {
   year: number | null;
   overview: string | null;
   genres?: string[];
+  voteAverage?: number;
 };
 
 // TMDB's fixed genre ids (movie + tv), used to give rerankers real genre signals.
@@ -59,8 +60,8 @@ export function posterUrl(path: string | null, size: "w342" | "w780" | "original
   return path ? `https://image.tmdb.org/t/p/${size}${path}` : null;
 }
 
-export async function searchMulti(query: string): Promise<TmdbSearchItem[]> {
-  const data = await call("/search/multi", { query, include_adult: "false", page: "1" });
+export async function searchMulti(query: string, page = 1): Promise<TmdbSearchItem[]> {
+  const data = await call("/search/multi", { query, include_adult: "false", page: String(page) });
   const results = Array.isArray(data["results"]) ? (data["results"] as Json[]) : [];
   // Fan-out guard: only the top 3 distinct people are expanded into credits.
   const personIds = [
@@ -115,6 +116,7 @@ export type TmdbDetails = {
   v?: number;
   logoPath?: string | null;
   logoChecked?: boolean;
+  no_logo?: boolean;
   mediaType: "movie" | "tv";
   tmdbId: number;
   title: string;
@@ -176,6 +178,7 @@ export async function fetchDetails(
     v: DETAILS_CACHE_VERSION,
     logoPath: chooseLogo(data["images"] as Json | undefined),
     logoChecked: true,
+    no_logo: !chooseLogo(data["images"] as Json | undefined),
     mediaType,
     tmdbId,
     title: String(data[mediaType === "tv" ? "name" : "title"] ?? "Sem título"),
@@ -252,6 +255,7 @@ function mapListItem(item: Json, fallback?: "movie" | "tv"): TmdbSearchItem | nu
     backdropPath: str(item["backdrop_path"]),
     year: year(item[tv ? "first_air_date" : "release_date"]),
     overview: str(item["overview"]),
+    voteAverage: Number(item["vote_average"] ?? 0),
     genres: Array.isArray(item["genre_ids"])
       ? (item["genre_ids"] as unknown[]).map((g) => GENRES[Number(g)]).filter((g): g is string => !!g)
       : [],

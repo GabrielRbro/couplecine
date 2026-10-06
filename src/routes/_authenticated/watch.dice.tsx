@@ -1,6 +1,6 @@
 import { createFileRoute, Link } from "@tanstack/react-router";
 import { useQuery } from "@tanstack/react-query";
-import { useRef, useState } from "react";
+import { useRef, useState, useEffect } from "react";
 import { Dices, RotateCcw, X } from "lucide-react";
 import { AppShell } from "@/components/app/AppShell";
 import { EmptyState, Poster } from "@/components/app/MediaCard";
@@ -78,7 +78,7 @@ function DicePage() {
   const [flick, setFlick] = useState<{ work: LibraryWork; n: number } | null>(null);
   const rollLock = useRef(false);
   const [ready, setReady] = useState<Set<string>>(new Set());
-  if (!space) return null;
+
 
   const pool = works.filter((w) => {
     if (declined.has(w.id)) return false;
@@ -91,8 +91,11 @@ function DicePage() {
     if (history === "jointFresh" && watchedTogether) return false;
     if (history === "nobody" && (watchedTogether || watchedBefore)) return false;
     if (history === "rewatch" && !watchedTogether) return false;
-    return weightOf(w, space, includeDislike) > 0;
+    return space ? weightOf(w, space, includeDislike) > 0 : false;
   });
+
+  useEffect(() => { if (picked && !pool.some((w) => w.id === picked.id)) setPicked(null); }, [kind, history, includeDislike, works, priorWatch, declined, picked]);
+  if (!space) return null;
 
   const roll = async () => {
     if (rollLock.current) return;
@@ -152,7 +155,7 @@ function DicePage() {
       <p className="mt-1 text-sm text-muted-foreground">
         🔥 pesa mais. 👎 fica de fora, a menos que vocês incluam.
       </p>
-      <ScrollRow className="mt-4">
+      <div className="mt-4 flex items-center justify-between gap-1">
         <FilterPills
           options={
             [
@@ -164,7 +167,8 @@ function DicePage() {
           value={kind}
           onChange={setKind}
         />
-      </ScrollRow>
+        <TogglePill on={includeDislike} onClick={() => setIncludeDislike((v) => !v)}>Incluir 👎</TogglePill>
+      </div>
       <ScrollRow className="mt-2">
         <FilterPills
           options={
@@ -178,9 +182,7 @@ function DicePage() {
           value={history}
           onChange={setHistory}
         />
-        <TogglePill on={includeDislike} onClick={() => setIncludeDislike((v) => !v)}>
-          Incluir 👎
-        </TogglePill>
+
       </ScrollRow>
 
       {pool.length === 0 && !picked ? (
@@ -205,7 +207,7 @@ function DicePage() {
         </div>
       ) : (
         <>
-          <div className="relative mx-auto mt-7 w-48">
+          <div className="relative mx-auto mt-7 w-56 aspect-[2/3]">
             {flick ? (
               <div className="relative aspect-[2/3]" aria-live="off" aria-label="Embaralhando">
                 <div aria-hidden className="match-stack-back match-stack-back-far" />
@@ -222,13 +224,13 @@ function DicePage() {
                 </div>
               </div>
             ) : picked ? (
-              <div className="relative isolate pb-3">
+              <div className="relative isolate h-full">
                 <div aria-hidden className="absolute inset-x-3 top-2 bottom-1 -z-10 rotate-2 rounded-xl border border-border bg-secondary" />
                 <Link
                   key={picked.id}
                   to="/work/$id"
                   params={{ id: picked.id }}
-                  className="match-picked pressable block rounded-xl border border-border bg-card p-2 shadow-sm"
+                  className="match-picked pressable relative block h-full overflow-hidden rounded-xl border border-border bg-card shadow-sm"
                 >
                   {ready.has(picked.id) ? <Poster eager path={picked.poster_path} title={picked.title} /> : <div className="relative aspect-[2/3]"><div className="match-stack-back" /></div>}
                   <p className="mt-2 text-center font-semibold">{picked.title}</p>
@@ -243,13 +245,14 @@ function DicePage() {
               </div>
             )}
           </div>
-          <div className="mt-6 flex gap-2">
-            {picked && !rolling && (
+          <div className="mt-6 grid h-14 grid-cols-[auto_minmax(0,1fr)] gap-2">
+            {(
               <Button
                 variant="outline"
                 onClick={decline}
+                disabled={!picked || rolling}
                 aria-label="Recusar nesta rodada"
-                className="pressable min-h-14 rounded-2xl px-4"
+                className={`pressable min-h-14 rounded-2xl px-4 ${picked ? "" : "invisible"}`}
               >
                 <X className="h-4 w-4" /> Hoje não
               </Button>

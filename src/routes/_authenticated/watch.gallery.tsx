@@ -3,7 +3,7 @@ import { useMemo, useRef, useState, useEffect } from "react";
 import { z } from "zod";
 import { useNavigate } from "@tanstack/react-router";
 import { markShared } from "@/lib/shared-transition";
-import { useQuery } from "@tanstack/react-query";
+import { useQuery, useQueryClient } from "@tanstack/react-query";
 import { useServerFn } from "@tanstack/react-start";
 import { getGalleryLogos } from "@/lib/catalog.functions";
 import { SlidersHorizontal } from "lucide-react";
@@ -37,7 +37,7 @@ export const Route = createFileRoute("/_authenticated/watch/gallery")({
   // Filters live in the URL so opening a work and coming back restores them.
   validateSearch: z.object({
     kind: z.enum(["all", "movie", "tv"]).catch("all").default("all"),
-    short: z.boolean().catch(false).default(false),
+    duration: z.number().catch(0).default(0),
     genre: z.string().catch("").default(""),
     both: z.boolean().catch(false).default(false),
   }),
@@ -52,7 +52,7 @@ export const Route = createFileRoute("/_authenticated/watch/gallery")({
 function GalleryCard({ work, space, requestLogo, logo }: { work: LibraryWork; space: SpaceInfo; requestLogo: (id: string) => void; logo?: string | null | undefined }) {
   const mine = work.interests.find((i) => i.user_id === space.userId);
   const theirs = space.partner
-    ? work.interests.find((i) => i.user_id === space.partner!.id)
+    ? work.interests.find((i) => i.user_id === space.partner?.id)
     : undefined;
   const art = useRef<HTMLDivElement>(null);
   useEffect(() => {
@@ -61,17 +61,18 @@ function GalleryCard({ work, space, requestLogo, logo }: { work: LibraryWork; sp
     observer.observe(el); return () => observer.disconnect();
   }, [work.id, requestLogo]);
   const [logoFailed, setLogoFailed] = useState(false);
-  const [titleFallback, setTitleFallback] = useState(false);
-  const [logoReady, setLogoReady] = useState(false);
+  const [titleFallback, setTitleFallback] = useState(logo === null);
+  const fallbackLatched = useRef(logo === null);
+  const [logoReady, setLogoReady] = useState(Boolean(logo));
   useEffect(() => {
-    if (logo === null) { setTitleFallback(true); return; }
+    if (logo === null) { fallbackLatched.current = true; setTitleFallback(true); return; }
     if (logo) {
       let active = true;
       const image = new Image(); image.src = tmdbImage(logo, "w500") ?? "";
-      image.decode().then(() => { if (active) setLogoReady(true); }, () => { if (active) setTitleFallback(true); });
+      image.decode().then(() => { if (active && !fallbackLatched.current) setLogoReady(true); }, () => { if (active) setTitleFallback(true); });
       return () => { active = false; };
     }
-    const timeout = window.setTimeout(() => setTitleFallback(true), 700);
+    const timeout = window.setTimeout(() => { fallbackLatched.current = true; setTitleFallback(true); }, 700);
     return () => clearTimeout(timeout);
   }, [logo]);
   const backdrop = tmdbImage(work.backdrop_path, "w780");
@@ -144,21 +145,22 @@ function GalleryPage() {
   const reduce = useReducedMotion();
   const [visibleIds, setVisibleIds] = useState<string[]>([]);
   const [logos, setLogos] = useState<Record<string, string | null>>({});
+  const qc = useQueryClient();
   const fetchLogos = useServerFn(getGalleryLogos);
   const requestLogo = useMemo(() => (id: string) => setVisibleIds((old) => old.includes(id) ? old : [...old, id]), []);
-  const batch = visibleIds.filter((id) => !(id in logos)).slice(0, 6);
+  const batch = visibleIds.filter((id) => !(id in logos) && qc.getQueryData(["gallery-logo", id]) === undefined).slice(0, 6);
   const logoQuery = useQuery({ queryKey: ["gallery-logos", batch.join(",")], enabled: batch.length > 0, staleTime: 3600_000,
     queryFn: () => fetchLogos({ data: { ids: batch } }) });
-  useEffect(() => { if (logoQuery.data) setLogos((old) => ({ ...old, ...logoQuery.data })); }, [logoQuery.data]);
-  const { kind, short, genre, both: bothLike } = Route.useSearch();
+  useEffect(() => { if (logoQuery.data) { Object.entries(logoQuery.data).forEach(([id, logo]) => qc.setQueryData(["gallery-logo", id], logo)); setLogos((old) => ({ ...old, ...logoQuery.data })); } }, [logoQuery.data]);
+  const { kind, duration, genre, both: bothLike } = Route.useSearch();
   const nav = useNavigate({ from: "/watch/gallery" });
-  const set = (patch: Partial<{ kind: "all" | "movie" | "tv"; short: boolean; genre: string; both: boolean }>) => {
-    const current = { kind, short, genre, both: bothLike };
+  const set = (patch: Partial<{ kind: "all" | "movie" | "tv"; duration: number; genre: string; both: boolean }>) => {
+    const current = { kind, duration, genre, both: bothLike };
     if (Object.entries(patch).every(([k, v]) => current[k as keyof typeof current] === v)) return;
     nav({ to: ".", search: (p) => ({ ...p, ...patch }), replace: true, viewTransition: false });
   };
   const setKind = (k: "all" | "movie" | "tv") => set({ kind: k });
-  const setShort = (f: (v: boolean) => boolean) => set({ short: f(short) });
+  const [durationSheet, setDurationSheet] = useState(false);
   const setGenre = (g: string) => set({ genre: g });
   const setBothLike = (f: (v: boolean) => boolean) => set({ both: f(bothLike) });
   const [sheet, setSheet] = useState(false);
@@ -172,7 +174,7 @@ function GalleryPage() {
   const list = pool.filter(
     (w) =>
       (kind === "all" || w.media_type === kind) &&
-      (!short || (w.runtime_minutes !== null && w.runtime_minutes <= 120)) &&
+      (kind !== "movie" || !duration || (w.runtime_minutes !== null && w.runtime_minutes <= duration)) &&
       (!genre || w.genres.includes(genre)) &&
       (!bothLike ||
         w.interests.filter((i) => i.reaction === "fire" || i.reaction === "like").length >=
@@ -197,9 +199,7 @@ function GalleryPage() {
           value={kind}
           onChange={setKind}
         />
-        <TogglePill on={short} onClick={() => setShort((v) => !v)}>
-          Até 2h
-        </TogglePill>
+        {kind === "movie" && <TogglePill on={duration > 0} onClick={() => setDurationSheet(true)}>Duração{duration ? ` · ${formatRuntime(duration)}` : ""}</TogglePill>}
         <TogglePill on={advanced > 0} onClick={() => setSheet(true)}>
           <span className="inline-flex items-center gap-1">
             <SlidersHorizontal className="h-3.5 w-3.5" /> Filtros{advanced ? ` · ${advanced}` : ""}
@@ -217,7 +217,7 @@ function GalleryPage() {
               exit={reduce ? { opacity: 0 } : { opacity: 0, scale: 0.97 }}
               transition={{ type: "spring", stiffness: 380, damping: 34 }}
             >
-              <GalleryCard work={w} space={space} requestLogo={requestLogo} logo={logos[w.id]} />
+              <GalleryCard work={w} space={space} requestLogo={requestLogo} logo={logos[w.id] ?? qc.getQueryData<string | null>(["gallery-logo", w.id])} />
             </motion.div>
           ))}
         </AnimatePresence>
@@ -236,6 +236,7 @@ function GalleryPage() {
           </Link>
         </div>
       )}
+      <AnimatedSheet open={durationSheet} onClose={() => setDurationSheet(false)} labelledBy="gallery-duration"><h2 id="gallery-duration" className="font-semibold">Duração máxima</h2><p className="mt-3 text-sm">{duration ? `${Math.floor(duration / 60)}h${String(duration % 60).padStart(2,"0")}` : "Sem limite"}</p><input aria-label="Duração máxima em minutos" type="range" min="40" max="240" step="10" value={duration || 240} onChange={(e) => set({ duration: Number(e.target.value) })} className="mt-5 min-h-11 w-full accent-primary" /><Button variant="outline" className="mt-3 min-h-11 w-full" onClick={() => set({duration:0})}>Sem limite</Button><Button className="mt-3 min-h-11 w-full" onClick={() => setDurationSheet(false)}>Aplicar</Button></AnimatedSheet>
       <AnimatedSheet open={sheet} onClose={() => setSheet(false)} labelledBy="gal-filters">
         <h2 id="gal-filters" className="text-base font-semibold">
           Filtros
