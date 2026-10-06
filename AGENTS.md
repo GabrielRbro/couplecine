@@ -21,3 +21,8 @@
 - Demo seed rows are tracked in `demo_batch_items` and removed only through `demo_cleanup(batch)` — never by title/date.
 - The `_authenticated` gate reads the local session (`getSession`); RLS/JWT on every query is the real security boundary.
 - MCP server lives in `src/lib/mcp/` (read-only tools, Supabase OAuth, RLS as the caller) — agents get the same access as the signed-in user.
+- Overlays (sheets, radial, piles) register a silent history entry via `src/lib/overlay.ts`; its capture-phase popstate hides those entries from the router — Back closes overlays first without ghost navigations.
+- Shared view transitions are set only on the tapped element and destination hero (`src/lib/shared-transition.ts`) — naming every card painted lists above the BottomNav.
+- Work deletion is scheduled in module scope (`src/lib/pending-delete.ts`) so the undo timer survives route changes; closing the app keeps the work.
+- Episode toggles go through the `set_episode_watched` RPC so the watch event and series state commit together.
+- The Gemini key is stored in `private.app_secrets`, readable only through service-role definer functions; resolution is app key > GEMINI_API_KEY env. AI attempts are reserved atomically via `ai_reserve` on cache miss only.
