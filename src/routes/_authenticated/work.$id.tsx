@@ -60,7 +60,6 @@ export const Route = createFileRoute("/_authenticated/work/$id")({
   ),
 });
 
-const SCORES = Array.from({ length: 21 }, (_, i) => i / 2);
 
 function useWork(id: string) {
   return useQuery(workQuery(id));
@@ -112,7 +111,6 @@ function workQuery(id: string) {
 
 function WorkPage() {
   const { id } = Route.useParams();
-  const router = useRouter();
   const { data: space } = useSpace();
   const { data, isLoading, error } = useWork(id);
   const details = useServerFn(getWorkDetails);
