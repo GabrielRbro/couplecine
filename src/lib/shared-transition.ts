@@ -7,14 +7,17 @@ type Kind = "poster" | "backdrop";
 let pending: { id: string; kind: Kind; at: number } | null = null;
 
 export function markShared(el: HTMLElement | null, id: string, kind: Kind) {
+  if (kind === "backdrop") return;
   if (!el || typeof document === "undefined" || !("startViewTransition" in document)) return;
   clearShared();
+  const image = el instanceof HTMLImageElement ? el : el.querySelector("img");
+  if (!image) return;
   pending = { id, kind, at: Date.now() };
-  el.style.viewTransitionName = `shared-${kind}`;
+  image.style.viewTransitionName = `shared-${kind}`;
   // Cancelled or finished: always clear the source name.
   window.setTimeout(() => {
-    el.style.viewTransitionName = "";
-  }, 500);
+    image.style.viewTransitionName = "";
+  }, 250);
 }
 
 /** Destination hero: returns a style only if this exact work/kind was just tapped. */
@@ -36,7 +39,7 @@ export function useSharedStyle(id: string, kind: Kind) {
     const t = window.setTimeout(() => {
       setStyle({});
       clearShared();
-    }, 500);
+    }, 250);
     return () => window.clearTimeout(t);
   }, [style.viewTransitionName]);
   return style;

@@ -23,7 +23,7 @@ function AuthenticatedLayout() {
   return (
     <>
       <Outlet />
-      {!NO_NAV.has(path) && <BottomNav />}
+      <div hidden={NO_NAV.has(path)}><BottomNav /></div>
     </>
   );
 }
