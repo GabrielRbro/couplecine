@@ -143,10 +143,7 @@ function GalleryPage() {
   const { data: works = [] } = useLibrary(space?.spaceId);
   const reduce = useReducedMotion();
   const [visibleIds, setVisibleIds] = useState<string[]>([]);
-  const [logos, setLogos] = useState<Record<string, string | null>>(() => Object.fromEntries(works.flatMap((w) => {
-    const payload = w.work_metadata_cache[0] as unknown as { logoChecked?: boolean; logoPath?: string | null } | undefined;
-    return payload?.logoChecked ? [[w.id, payload.logoPath ?? null]] : [];
-  })));
+  const [logos, setLogos] = useState<Record<string, string | null>>({});
   const fetchLogos = useServerFn(getGalleryLogos);
   const requestLogo = useMemo(() => (id: string) => setVisibleIds((old) => old.includes(id) ? old : [...old, id]), []);
   const batch = visibleIds.filter((id) => !(id in logos)).slice(0, 6);

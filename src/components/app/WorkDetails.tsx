@@ -6,7 +6,6 @@ import { ArrowLeft, Check, ChevronDown, Plus, Trash2, Tv } from "lucide-react";
 import { DetailSkeleton, useBack } from "@/components/app/ui";
 import { toast } from "sonner";
 import { AnimatedSheet } from "@/components/app/AnimatedSheet";
-import { AppShell } from "@/components/app/AppShell";
 import { Poster } from "@/components/app/MediaCard";
 import { ScorePicker } from "@/components/app/ScorePicker";
 import { supabase } from "@/integrations/supabase/client";
@@ -26,7 +25,7 @@ import {
 import { firstName, useSpace, type LibraryWork, type SpaceInfo } from "@/lib/space";
 import { useSharedStyle } from "@/lib/shared-transition";
 import { Button } from "@/components/ui/button";
-import { scheduleWorkDelete, useWorkDeletion } from "@/lib/pending-delete";
+import { restoreWorkDeletion, scheduleWorkDelete, useWorkDeletion } from "@/lib/pending-delete";
 
 function BackOverlay() {
   const back = useBack("/library");
@@ -121,6 +120,7 @@ export function WorkDetails({ workId, mediaType, tmdbId }: { workId?: string; me
       return add({ data: { ...identity, spaceId: space.spaceId, reaction } });
     },
     onSuccess: async ({ workId: nextId }) => {
+      restoreWorkDeletion(nextId);
       await qc.fetchQuery(workQuery(nextId));
       setActiveId(nextId); setPicking(false);
       qc.invalidateQueries({ queryKey: ["library"] });
