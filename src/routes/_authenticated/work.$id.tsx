@@ -112,50 +112,64 @@ function WorkPage() {
   };
 
   if (isLoading || !space) return <DetailSkeleton />;
-  if (error || !data) return <p className="p-6 text-sm text-destructive">Obra não encontrada.</p>;
+  if (error || !data)
+    return (
+      <div className="p-6 text-sm">
+        <p className="text-destructive">{error?.message ?? "Obra não encontrada."}</p>
+        <button
+          onClick={() => qc.invalidateQueries({ queryKey: ["work", id] })}
+          className="pressable mt-3 min-h-11 rounded-xl border border-border px-4"
+        >
+          Tentar de novo
+        </button>
+      </div>
+    );
   const { work } = data;
   const m = meta.data;
   const isTv = work.media_type === "tv";
+  // Season count comes from the cached summary first, so "N temp." never pops in late.
+  const cachedSeasons = (
+    qc.getQueryData<LibraryWork[]>(["library", space.spaceId]) ?? []
+  ).find((w) => w.id === id)?.work_metadata_cache[0]?.seasons?.length;
+  const seasonCount = m?.seasonCount ?? cachedSeasons ?? null;
 
   return (
     <div>
-      <div className="relative h-44 overflow-hidden">
-        {tmdbImage(work.backdrop_path, "w780") && (
+      <div className="relative h-64 overflow-hidden">
+        {tmdbImage(work.backdrop_path, "w1280") ? (
           <img
-            src={tmdbImage(work.backdrop_path, "w780")!}
+            src={tmdbImage(work.backdrop_path, "w1280")!}
             alt=""
-            style={{ viewTransitionName: `backdrop-${id}` }}
-            className="h-full w-full object-cover opacity-40"
+            style={sharedBackdrop}
+            className="h-full w-full object-cover opacity-80"
           />
+        ) : (
+          <div className="h-full w-full bg-gradient-to-br from-accent to-card" />
         )}
-        <div className="absolute inset-0 bg-gradient-to-b from-transparent to-background" />
-        <button
-          onClick={() => router.history.back()}
-          aria-label="Voltar"
-          className="pressable hit absolute left-4 top-4 flex h-10 w-10 items-center justify-center rounded-full bg-background/70"
-        >
-          <ArrowLeft className="h-5 w-5" />
-        </button>
+        <div className="absolute inset-0 bg-gradient-to-b from-background/30 via-transparent to-background" />
+        <BackOverlay />
       </div>
-      <div className="-mt-24 relative flex gap-4 px-4">
-        <div className="w-28 shrink-0" style={{ viewTransitionName: `poster-${id}` }}>
+      <div className="relative -mt-28 flex gap-4 px-4">
+        <div className="w-28 shrink-0 shadow-2xl" style={sharedPoster}>
           <Poster path={work.poster_path} title={work.title} />
         </div>
         <div className="min-w-0 self-end">
-          <h1 className="text-xl font-semibold leading-tight">{work.title}</h1>
+          <h1 className="text-2xl font-semibold leading-tight">{work.title}</h1>
           {work.original_title && work.original_title !== work.title && (
             <p className="text-xs text-muted-foreground">{work.original_title}</p>
           )}
           <p className="mt-1 text-xs text-muted-foreground">
-            {[
-              isTv ? "Série" : "Filme",
-              work.release_year,
-              isTv && m?.seasonCount
-                ? `${m.seasonCount} temp.`
-                : formatRuntime(work.runtime_minutes),
-            ]
-              .filter(Boolean)
-              .join(" · ")}
+            {isTv ? "Série" : "Filme"}
+            {work.release_year ? ` · ${work.release_year}` : ""}
+            {isTv ? (
+              <span className="inline-block min-w-[4.5rem]">
+                {seasonCount ? ` · ${seasonCount} temp.` : ""}
+              </span>
+            ) : work.runtime_minutes ? (
+              ` · ${formatRuntime(work.runtime_minutes)}`
+            ) : (
+              ""
+            )}
           </p>
           {work.genres.length > 0 && (
             <p className="mt-1 line-clamp-1 text-xs text-muted-foreground">
@@ -165,14 +179,24 @@ function WorkPage() {
         </div>
       </div>
 
-      <div className="space-y-6 px-4 pt-6">
+      <div className="space-y-6 px-4 pt-5">
+        {isTv && (
+          <SeriesProgressStrip
+            space={space}
+            workId={id}
+            state={data.state}
+            events={data.events}
+            seasons={m?.seasons ?? []}
+            onChange={refresh}
+          />
+        )}
         <button
           disabled
           aria-label="Assistir na TV, não configurado"
           title="Envio para a TV não configurado"
-          className="flex min-h-12 w-full items-center justify-center gap-2 rounded-xl bg-primary px-4 text-sm font-semibold text-primary-foreground opacity-60"
+          className="flex min-h-11 w-full items-center justify-center gap-2 rounded-xl border border-dashed border-border text-xs text-muted-foreground"
         >
-          <Tv className="h-5 w-5" /> Assistir na TV · não configurado
+          <Tv className="h-4 w-4" /> Assistir na TV · não configurado
         </button>
         <Comparison
           space={space}
