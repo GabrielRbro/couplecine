@@ -6,5 +6,11 @@ export async function readyPoster(path: string | null): Promise<boolean> {
   if (!src) return false;
   const img = new Image();
   img.src = src;
-  try { await img.decode(); return true; } catch { return false; }
+  let timer: ReturnType<typeof setTimeout> | undefined;
+  try {
+    return await Promise.race([
+      img.decode().then(() => true, () => false),
+      new Promise<boolean>((resolve) => { timer = setTimeout(() => resolve(false), 5000); }),
+    ]);
+  } finally { if (timer !== undefined) clearTimeout(timer); }
 }

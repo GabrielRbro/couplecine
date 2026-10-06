@@ -18,7 +18,7 @@ export function useWorkDeletion(id: string) {
 }
 
 export function scheduleWorkDelete(qc: QueryClient, workId: string, title: string) {
-  if (pending.has(workId)) return;
+  if (pending.has(workId) || deleted.has(workId)) return;
   const prev = qc.getQueriesData({ queryKey: ["library"] });
   qc.setQueriesData({ queryKey: ["library"] }, (old: unknown) =>
     Array.isArray(old) ? old.filter((w: { id: string }) => w.id !== workId) : old,
@@ -45,7 +45,8 @@ export function scheduleWorkDelete(qc: QueryClient, workId: string, title: strin
       label: "Desfazer",
       onClick: () => {
         const t = pending.get(workId);
-        if (t) window.clearTimeout(t);
+        if (t === undefined) return;
+        window.clearTimeout(t);
         pending.delete(workId);
         emit();
         prev.forEach(([k, v]) => qc.setQueryData(k, v));

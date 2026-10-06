@@ -536,7 +536,8 @@ export const getGalleryLogos = createServerFn({ method: "POST" })
         if (payload?.logoChecked && cache && new Date(cache.expires_at).getTime() > Date.now()) { result[work.id] = payload.logoPath ?? null; continue; }
         try {
           // Keep the entire existing JSON; a cold cache receives complete details, not a partial payload.
-          const next = payload ? { ...payload, logoPath: await fetchLogo(work.media_type, work.tmdb_id), logoChecked: true } : await fetchDetails(work.media_type, work.tmdb_id);
+          const fresh = cache && new Date(cache.expires_at).getTime() > Date.now();
+          const next = payload && fresh ? { ...payload, logoPath: await fetchLogo(work.media_type, work.tmdb_id), logoChecked: true } : await fetchDetails(work.media_type, work.tmdb_id);
           result[work.id] = next.logoPath ?? null;
           await context.supabase.from("work_metadata_cache").upsert({ work_id: work.id, payload: next as never, expires_at: new Date(Date.now() + 7 * 864e5).toISOString() }, { onConflict: "work_id" });
         } catch { result[work.id] = null; }
