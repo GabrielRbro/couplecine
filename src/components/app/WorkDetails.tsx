@@ -175,8 +175,7 @@ export function WorkDetails({ workId, mediaType, tmdbId }: { workId?: string; me
           <p className="mt-1 text-xs text-muted-foreground">
             {isTv ? "Série" : "Filme"}
             {work.release_year ? ` · ${work.release_year}` : ""}
-            </>}
-        {isTv ? (
+            {isTv ? (
               <span className="inline-block min-w-[4.5rem]">
                 {seasonCount ? ` · ${seasonCount} temp.` : ""}
               </span>
