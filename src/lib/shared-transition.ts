@@ -29,7 +29,7 @@ export function markShared(el: HTMLElement | null, id: string, kind: Kind) {
 
 /** Destination hero: returns a style only if this exact work/kind was just tapped. */
 export function sharedStyle(id: string, kind: Kind): { viewTransitionName?: string } {
-  if (pending && pending.id === id && pending.kind === kind && Date.now() - pending.at < 1500)
+  if (pending && pending.id === id && pending.kind === kind)
     return { viewTransitionName: `shared-${kind}` };
   return {};
 }
