@@ -47,28 +47,51 @@ export function TogglePill({
   );
 }
 
-export function PageHeader({ title, back = "/" }: { title: string; back?: "/" | "/library" }) {
+/** Goes back in history when there's an in-app entry; otherwise falls back to a route. */
+export function useBack(fallback: "/" | "/library" = "/") {
   const router = useRouter();
+  return () => {
+    const idx = (window.history.state as { __TSR_index?: number } | null)?.__TSR_index ?? 0;
+    if (idx > 0) router.history.back();
+    else router.navigate({ to: fallback, replace: true });
+  };
+}
+
+export function BackButton({ fallback = "/" }: { fallback?: "/" | "/library" }) {
+  const back = useBack(fallback);
+  return (
+    <button
+      onClick={back}
+      aria-label="Voltar"
+      className="pressable -ml-2 flex h-11 w-11 items-center justify-center rounded-full"
+    >
+      <ArrowLeft className="h-5 w-5" />
+    </button>
+  );
+}
+
+export function PageHeader({ title, back = "/" }: { title: string; back?: "/" | "/library" }) {
   return (
     <div className="flex items-center gap-2">
-      {router.history.length > 1 ? (
-        <button
-          onClick={() => router.history.back()}
-          aria-label="Voltar"
-          className="pressable -ml-2 flex h-11 w-11 items-center justify-center rounded-full"
-        >
-          <ArrowLeft className="h-5 w-5" />
-        </button>
-      ) : (
-        <Link
-          to={back}
-          aria-label="Voltar"
-          className="pressable -ml-2 flex h-11 w-11 items-center justify-center rounded-full"
-        >
-          <ArrowLeft className="h-5 w-5" />
-        </Link>
-      )}
+      <BackButton fallback={back} />
       <h1 className="text-xl font-semibold">{title}</h1>
+    </div>
+  );
+}
+
+/** Horizontal filter row with a soft fade that hints it scrolls. */
+export function ScrollRow({ children, className = "" }: { children: ReactNode; className?: string }) {
+  return (
+    <div
+      className={`no-scrollbar -mx-4 flex gap-2 overflow-x-auto px-4 py-1 ${className}`}
+      style={{
+        maskImage: "linear-gradient(90deg, transparent 0, #000 16px, #000 calc(100% - 28px), transparent 100%)",
+        WebkitMaskImage:
+          "linear-gradient(90deg, transparent 0, #000 16px, #000 calc(100% - 28px), transparent 100%)",
+      }}
+    >
+      {children}
+      <span aria-hidden className="w-2 shrink-0" />
     </div>
   );
 }
