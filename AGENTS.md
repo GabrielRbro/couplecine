@@ -27,3 +27,7 @@
 - Episode toggles go through the `set_episode_watched` RPC so the watch event and series state commit together.
 - The Gemini key is stored in `private.app_secrets`, readable only through service-role definer functions; resolution is app key > GEMINI_API_KEY env. AI attempts are reserved atomically via `ai_reserve` on cache miss only.
 - PWA: `pwa.config.ts` (build-only Vite plugin via workbox-build) writes manifest + sw.js precaching only static build assets, no runtime/navigation caching; `src/lib/pwa.ts` is the sole registrar (refuses dev/preview/iframe, `?sw=off`) and prompts "Atualizar" instead of auto-reloading — keeps private data off the cache and never interrupts use.
+- Catalog previews use the authenticated title route and existing catalog server functions; existing works link directly to their work page — avoids duplicate local records and keeps TMDB credentials server-only.
+- Gallery title logos share complete work_metadata_cache payloads and are fetched in visible batches with two workers; expired payloads refresh fully — avoids N+1 bursts and extending stale metadata.
+- MatchSimulator is presentation-only local state, offered only to a one-member space and isolated from real Match writes — enables temporary solo QA without fake participants or sessions.
+- Animation poster readiness uses a bounded decode helper and scenic fallback — slow or failed images never leave shuffle cards blank or permanently locked.

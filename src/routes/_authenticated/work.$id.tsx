@@ -785,7 +785,7 @@ function SeriesBlock({
               <button
                 key={s.seasonNumber}
                 onClick={() => { if (activeSeason !== s.seasonNumber) setSeason(s.seasonNumber); }}
-                className={`pressable min-h-11 shrink-0 rounded-full px-4 text-xs font-medium ${activeSeason === s.seasonNumber ? "bg-primary text-primary-foreground" : "border border-border text-muted-foreground"}`}
+                className={`${activeSeason === s.seasonNumber ? "" : "pressable"} min-h-11 shrink-0 rounded-full px-4 text-xs font-medium ${activeSeason === s.seasonNumber ? "bg-primary text-primary-foreground" : "border border-border text-muted-foreground"}`}
               >
                 T{s.seasonNumber}
               </button>
