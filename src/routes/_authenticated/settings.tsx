@@ -1,7 +1,8 @@
-import { createFileRoute, Link, useNavigate } from "@tanstack/react-router";
+import { createFileRoute, useNavigate } from "@tanstack/react-router";
+import { BackButton } from "@/components/app/ui";
+import { GeminiSettings } from "@/components/app/GeminiSettings";
 import { useQuery, useQueryClient } from "@tanstack/react-query";
 import { useState } from "react";
-import { ArrowLeft } from "lucide-react";
 import { toast } from "sonner";
 import { AppShell } from "@/components/app/AppShell";
 import { supabase } from "@/integrations/supabase/client";
@@ -42,6 +43,10 @@ function SettingsPage() {
   });
 
   async function invite() {
+    if (space?.partner) {
+      toast.error("Este espaço já tem dois membros.");
+      return;
+    }
     const value = email.trim().toLowerCase();
     if (!/^\S+@\S+\.\S+$/.test(value)) {
       toast.error("Digite um e-mail válido.");
@@ -62,7 +67,7 @@ function SettingsPage() {
   const ai = useQuery({
     queryKey: ["ai-status"],
     queryFn: () => aiStatus(),
-    staleTime: 10 * 60_000,
+    staleTime: 60_000,
   });
   // Owner-only (RLS): counts works tracked in the removable demo batch.
   const demo = useQuery({
@@ -100,13 +105,7 @@ function SettingsPage() {
   return (
     <div className="space-y-6 px-4 pt-6">
       <div className="flex items-center gap-3">
-        <Link
-          to="/"
-          aria-label="Voltar"
-          className="pressable -ml-2 flex h-11 w-11 items-center justify-center rounded-full"
-        >
-          <ArrowLeft className="h-5 w-5" />
-        </Link>
+        <BackButton />
         <h1 className="text-xl font-semibold">Configurações</h1>
       </div>
 
@@ -162,14 +161,7 @@ function SettingsPage() {
           <span>Catálogo (TMDB)</span>
           <span className="text-xs text-primary">Ativo</span>
         </div>
-        <div className="mt-2 flex justify-between text-sm">
-          <span>IA (Gemini)</span>
-          <span
-            className={`text-xs ${ai.data?.configured ? "text-primary" : "text-muted-foreground"}`}
-          >
-            {ai.data ? (ai.data.configured ? `Ativo · ${ai.data.model}` : "Não configurado") : "…"}
-          </span>
-        </div>
+        <GeminiSettings status={ai.data} onChanged={() => ai.refetch()} />
       </section>
 
       {demo.data ? (

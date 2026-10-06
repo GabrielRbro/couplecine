@@ -169,14 +169,14 @@ function MatchPage() {
             .from("match_participants")
             .select("close_requested, card_limit")
             .eq("session_id", sid)
-            .maybeSingle()
-            .abortSignal(signal),
+            .abortSignal(signal)
+            .maybeSingle(),
           supabase.rpc("match_partner_wants_close", { _session: sid }).abortSignal(signal),
         ]);
       if (ve || pe) throw ve ?? pe;
       return {
         limit: part?.card_limit ?? 0,
-        voted: new Set((votes ?? []).map((v) => v.work_id)),
+        voted: new Set((votes ?? []).map((v: { work_id: string }) => v.work_id)),
         lastVote: votes?.at(-1)?.work_id ?? null,
         iWant: !!part?.close_requested,
         partnerWants: !!partnerWants,

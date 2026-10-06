@@ -9,6 +9,17 @@ export type TmdbSearchItem = {
   backdropPath: string | null;
   year: number | null;
   overview: string | null;
+  genres?: string[];
+};
+
+// TMDB's fixed genre ids (movie + tv), used to give rerankers real genre signals.
+const GENRES: Record<number, string> = {
+  28: "Ação", 12: "Aventura", 16: "Animação", 35: "Comédia", 80: "Crime", 99: "Documentário",
+  18: "Drama", 10751: "Família", 14: "Fantasia", 36: "História", 27: "Terror", 10402: "Música",
+  9648: "Mistério", 10749: "Romance", 878: "Ficção científica", 10770: "Filme de TV",
+  53: "Thriller", 10752: "Guerra", 37: "Faroeste", 10759: "Ação e Aventura", 10762: "Infantil",
+  10763: "Notícias", 10764: "Reality", 10765: "Sci-Fi e Fantasia", 10766: "Novela",
+  10767: "Talk show", 10768: "Guerra e Política",
 };
 
 type Json = Record<string, unknown>;
@@ -236,6 +247,9 @@ function mapListItem(item: Json, fallback?: "movie" | "tv"): TmdbSearchItem | nu
     backdropPath: str(item["backdrop_path"]),
     year: year(item[tv ? "first_air_date" : "release_date"]),
     overview: str(item["overview"]),
+    genres: Array.isArray(item["genre_ids"])
+      ? (item["genre_ids"] as unknown[]).map((g) => GENRES[Number(g)]).filter((g): g is string => !!g)
+      : [],
   };
 }
 

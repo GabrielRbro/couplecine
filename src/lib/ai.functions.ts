@@ -1,19 +1,78 @@
 import { createServerFn } from "@tanstack/react-start";
 import { z } from "zod";
 import { requireSupabaseAuth } from "@/integrations/supabase/auth-middleware";
-import { AiUnavailable, geminiConfig, geminiJson, type AiTitleGuess } from "./gemini.server";
+import { AiUnavailable, GEMINI_SECRET, geminiConfig, geminiJson, testGemini, type AiTitleGuess } from "./gemini.server";
 import { findTitle, type TmdbSearchItem } from "./tmdb.server";
 
 const AI_MESSAGE: Record<string, string> = {
-  not_configured: "Pesquisa inteligente não configurada (falta GEMINI_API_KEY).",
+  not_configured: "Pesquisa inteligente não configurada. Adicione a chave do Gemini em Configurações.",
   rate_limited: "Limite de uso da IA atingido por agora. Use a busca normal.",
   failed: "A IA não respondeu. Use a busca normal.",
   bad_output: "A IA respondeu de forma inválida. Tente reformular.",
 };
 
+type Ctx = { supabase: Parameters<typeof geminiJson>[0]["supabase"] };
+async function isOwner(ctx: Ctx) {
+  const { data, error } = await ctx.supabase.rpc("can_create_space");
+  return !error && data === true;
+}
+async function requireOwner(ctx: Ctx) {
+  if (!(await isOwner(ctx))) throw new Error("Só o dono do espaço pode alterar a chave do Gemini.");
+}
+
 export const getAiStatus = createServerFn({ method: "GET" })
   .middleware([requireSupabaseAuth])
-  .handler(async () => geminiConfig());
+  .handler(async ({ context }) => {
+    const [cfg, owner] = await Promise.all([geminiConfig(), isOwner(context)]);
+    // Partner sees only on/off; the owner also sees source and last 4 chars.
+    return {
+      configured: cfg.configured,
+      model: cfg.model,
+      isOwner: owner,
+      source: owner ? cfg.source : null,
+      last4: owner ? cfg.last4 : null,
+    };
+  });
+
+const keySchema = z.object({ key: z.string().trim().min(20).max(200) });
+
+export const testGeminiKey = createServerFn({ method: "POST" })
+  .middleware([requireSupabaseAuth])
+  .inputValidator((d) => keySchema.parse(d))
+  .handler(async ({ data, context }) => {
+    await requireOwner(context);
+    return { result: await testGemini(data.key) };
+  });
+
+export const saveGeminiKey = createServerFn({ method: "POST" })
+  .middleware([requireSupabaseAuth])
+  .inputValidator((d) => keySchema.parse(d))
+  .handler(async ({ data, context }) => {
+    await requireOwner(context);
+    const result = await testGemini(data.key);
+    if (result === "invalid_key") return { ok: false as const, result };
+    const { supabaseAdmin } = await import("@/integrations/supabase/client.server");
+    const { error } = await supabaseAdmin.rpc("app_secret_set", {
+      _name: GEMINI_SECRET,
+      _value: data.key,
+      _by: context.userId,
+    });
+    if (error) {
+      console.error("app_secret_set failed:", error.code);
+      throw new Error("Não foi possível salvar a chave.");
+    }
+    return { ok: true as const, result };
+  });
+
+export const removeGeminiKey = createServerFn({ method: "POST" })
+  .middleware([requireSupabaseAuth])
+  .handler(async ({ context }) => {
+    await requireOwner(context);
+    const { supabaseAdmin } = await import("@/integrations/supabase/client.server");
+    const { error } = await supabaseAdmin.rpc("app_secret_delete", { _name: GEMINI_SECRET });
+    if (error) throw new Error("Não foi possível remover a chave.");
+    return { ok: true };
+  });
 
 async function validate(
   guesses: AiTitleGuess[],

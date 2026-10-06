@@ -1,8 +1,9 @@
-import { createFileRoute, Link, useNavigate } from "@tanstack/react-router";
+import { createFileRoute, useNavigate } from "@tanstack/react-router";
+import { BackButton } from "@/components/app/ui";
 import { useMutation, useQueryClient } from "@tanstack/react-query";
 import { useServerFn } from "@tanstack/react-start";
-import { useEffect, useState } from "react";
-import { ArrowLeft, Search, Sparkles } from "lucide-react";
+import { useEffect, useRef, useState } from "react";
+import { Search, Sparkles } from "lucide-react";
 import { toast } from "sonner";
 import { AnimatedSheet } from "@/components/app/AnimatedSheet";
 import { AppShell } from "@/components/app/AppShell";
@@ -50,8 +51,16 @@ function AddPage() {
     mutationFn: (query: string) => smart({ data: { query, spaceId: space!.spaceId! } }),
   });
 
+  // Request sequence: only the latest query may write results.
+  const seq = useRef(0);
+  const [results, setResults] = useState<Result[] | undefined>(undefined);
   const s = useMutation({
-    mutationFn: (query: string) => search({ data: { query, spaceId: space!.spaceId! } }),
+    mutationFn: async (query: string) => {
+      const id = ++seq.current;
+      const r = await search({ data: { query, spaceId: space!.spaceId! } });
+      if (id === seq.current) setResults(r ?? []);
+      return r;
+    },
   });
   useEffect(() => {
     const t = q.trim();
@@ -82,13 +91,7 @@ function AddPage() {
   return (
     <div className="px-4 pt-6">
       <div className="flex items-center gap-3">
-        <Link
-          to="/"
-          aria-label="Voltar"
-          className="pressable -ml-2 flex h-11 w-11 items-center justify-center rounded-full"
-        >
-          <ArrowLeft className="h-5 w-5" />
-        </Link>
+        <BackButton />
         <h1 className="text-xl font-semibold">Adicionar obra</h1>
       </div>
       <form
@@ -131,7 +134,7 @@ function AddPage() {
       {mode === "ai" && ai.error && (
         <p className="mt-3 text-sm text-destructive">{ai.error.message}</p>
       )}
-      {((mode === "tmdb" && s.isPending && !s.data) || (mode === "ai" && ai.isPending)) && (
+      {((mode === "tmdb" && s.isPending && !results) || (mode === "ai" && ai.isPending)) && (
         <div className="mt-4 space-y-2">
           {[0, 1, 2].map((i) => (
             <div key={i} className="skeleton h-[88px] rounded-xl" />
@@ -142,7 +145,7 @@ function AddPage() {
         <p className="mt-6 text-sm text-destructive">{s.error.message}</p>
       )}
       <div className="mt-4 space-y-2">
-        {(mode === "ai" ? (ai.data?.items ?? []) : (s.data ?? [])).map((r) => (
+        {(mode === "ai" ? (ai.data?.items ?? []) : (results ?? [])).map((r) => (
           <button
             key={`${r.mediaType}-${r.tmdbId}`}
             onClick={() => setPicked(r)}
@@ -161,7 +164,7 @@ function AddPage() {
             </div>
           </button>
         ))}
-        {mode === "tmdb" && s.data && s.data.length === 0 && (
+        {mode === "tmdb" && !s.isPending && results && results.length === 0 && (
           <p className="text-sm text-muted-foreground">
             Nenhum filme ou série encontrado por esse título, ator ou diretor.
           </p>

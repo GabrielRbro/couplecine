@@ -364,7 +364,10 @@ function Comparison({
               { onConflict: "user_id,work_id" },
             );
     setSaving(false);
-    if (error) return toast.error("Não foi possível salvar.");
+    if (error) {
+      toast.error("Não foi possível salvar.");
+      return;
+    }
     onChange();
     setEditing(null);
   }
@@ -728,7 +731,10 @@ function SeriesBlock({
       _next_episode: n?.e ?? (null as unknown as number),
     });
     setSaving(false);
-    if (error) return toast.error("Não foi possível salvar.");
+    if (error) {
+      toast.error("Não foi possível salvar.");
+      return;
+    }
     // Patch only this work in the library summary instead of refetching everything.
     qc.setQueriesData<LibraryWork[]>({ queryKey: ["library", space.spaceId] }, (old) =>
       old?.map((w) =>
