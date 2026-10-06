@@ -2,7 +2,7 @@ import { Link, useNavigate, useRouterState } from "@tanstack/react-router";
 import { useEffect, useState, type MouseEvent, type ReactNode } from "react";
 import { Clapperboard, Dices, Film, Heart, Home, Popcorn, X } from "lucide-react";
 import { useSpace } from "@/lib/space";
-import { closeOverlaysThen, useOverlayHistory, useScrollKeyboardDismiss } from "@/lib/overlay";
+import { closeOverlaysThen, useOverlayHistory, useScrollKeyboardDismiss, useScrollLock } from "@/lib/overlay";
 import { Button } from "@/components/ui/button";
 import { HomeSkeleton } from "./ui";
 
@@ -67,6 +67,7 @@ export function BottomNav() {
 
   // One silent history entry while open: Back/Escape close it, router never sees it.
   useOverlayHistory(open, () => setOpen(false));
+  useScrollLock(open);
   useEffect(() => {
     if (!open) return;
     const onKey = (e: KeyboardEvent) => e.key === "Escape" && setOpen(false);
@@ -92,7 +93,8 @@ export function BottomNav() {
       <Button variant="ghost"
         aria-label="Fechar menu"
         tabIndex={open ? 0 : -1}
-        className={`fixed inset-0 z-40 h-auto w-auto rounded-none p-0 bg-background/80 hover:bg-background/80 backdrop-blur-sm transition-opacity duration-150 ${open ? "opacity-100" : "pointer-events-none opacity-0"}`}
+        style={{ background: "linear-gradient(to bottom, color-mix(in oklch, var(--background) 80%, transparent) 0 calc(100% - var(--nav-space)), transparent calc(100% - var(--nav-space)) 100%)" }}
+        className={`fixed inset-0 z-40 h-auto w-auto rounded-none p-0 transition-opacity duration-150 ${open ? "opacity-100" : "pointer-events-none opacity-0"}`}
         onClick={() => setOpen(false)}
       />
       <nav
