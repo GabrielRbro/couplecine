@@ -38,7 +38,7 @@ export function AnimatedSheet({
   useOverlayHistory(open, () => {
     if (closeDisabled) return;
     onClose();
-  });
+  }, closeDisabled);
   useScrollLock(mounted);
 
   useEffect(() => {
@@ -88,11 +88,12 @@ export function AnimatedSheet({
 
   return createPortal(
     <div
-      className={`fixed inset-0 z-[200] flex items-end bg-background/90 transition-opacity duration-200 motion-reduce:transition-none ${visible ? "opacity-100" : "opacity-0"}`}
+      className={`fixed inset-0 z-[200] flex items-end bg-background/55 transition-opacity duration-200 motion-reduce:transition-none ${visible ? "opacity-100" : "opacity-0"}`}
       onClick={() => closeRef.current()}
     >
       <div
         ref={panel}
+        data-overlay-panel
         role={role}
         aria-modal="true"
         aria-labelledby={labelledBy}

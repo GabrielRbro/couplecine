@@ -48,13 +48,14 @@ function ContextList({ items, empty }: { items: LibraryWork[]; empty: string }) 
             key={w.id}
             to="/work/$id"
             params={{ id: w.id }}
+            onClick={(e) => markShared(e.currentTarget.querySelector("[data-context-poster]"), w.id, "poster")}
             className="pressable relative flex h-20 items-center gap-3 overflow-hidden rounded-2xl bg-card pr-3"
           >
             {art && (
               <img src={art} alt="" loading="lazy" className="absolute inset-0 h-full w-full object-cover opacity-35" />
             )}
             <div className="absolute inset-0 bg-gradient-to-r from-background/90 via-background/70 to-background/30" />
-            <div className="relative h-full w-14 shrink-0">
+            <div data-context-poster className="relative h-full w-14 shrink-0">
               <Poster path={w.poster_path} title={w.title} className="h-full rounded-none rounded-l-2xl" />
             </div>
             <div className="relative min-w-0 flex-1">
@@ -90,16 +91,17 @@ function ContinueCard({
     ? `Próximo ${p.next}`
     : SERIES_STATUS_LABEL[w.series_states[0]?.status ?? "watching"];
   const hero = layout === "hero";
-  const img = hero ? tmdbImage(w.backdrop_path, "w780") : tmdbImage(w.poster_path, "w342");
+  const useBackdrop = layout !== "strip" && Boolean(w.backdrop_path);
+  const img = useBackdrop ? tmdbImage(w.backdrop_path, "w780") : tmdbImage(w.poster_path, "w342");
   return (
     <Link
       to="/work/$id"
       params={{ id: w.id }}
-      onClick={() => markShared(art.current, w.id, hero ? "backdrop" : "poster")}
+      onClick={() => markShared(art.current, w.id, useBackdrop ? "backdrop" : "poster")}
       className={`pressable relative block h-52 min-w-0 overflow-hidden rounded-3xl bg-card art-edge ${className}`}
     >
       <div ref={art} className="h-full w-full">
-        {img && <img src={img} alt="" className={`h-full w-full ${layout === "half" ? "object-contain" : "object-cover"}`} />}
+        {img && <img src={img} alt="" className={`h-full w-full object-cover`} />}
       </div>
       <div className="absolute inset-0 bg-gradient-to-t from-background via-background/40 to-transparent" />
       <div className={`absolute inset-x-0 bottom-0 ${hero ? "p-4" : "p-3"}`}>

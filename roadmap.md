@@ -43,3 +43,10 @@ Concluído: Lotes 1–4, 5A–5D, Rodada 6, MCP.
 - [ ] Consentimento duplo do Match e Match ativo com 2 membros (bloqueado: precisa da conta real do parceiro)
 - [ ] Validação completa do Gemini por intenção/qualidade; refinamento retornou sucesso no smoke atual, sem alterar configuração de segredos.
 - [ ] Tela de Importações (feature futura)
+
+## Rodada 10
+- [ ] Estrutura overlays/transições e vidro da nav
+- [ ] Descobrir otimista, busca paginada/IA/ordem, Galeria logos/duração
+- [ ] Continuar com duas obras e episódios/modal
+- [ ] Match persistente/roleta/hero/status e candidatos externos
+- [ ] Validação focada móvel sem alterar dados reais; PWA preservada

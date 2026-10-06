@@ -6,7 +6,7 @@ import { useEffect, useRef } from "react";
  * listener runs in the capture phase and stops propagation, so the router never sees these
  * entries (no ghost navigation, no view transition).
  */
-type Entry = { id: string; close: () => void };
+type Entry = { id: string; close: () => void; canClose: () => boolean };
 const stack: Entry[] = [];
 let swallow = 0;
 let after: (() => void) | null = null;
@@ -32,6 +32,10 @@ function install() {
       if (!top) return;
       if ((window.history.state as { __overlay?: string } | null)?.__overlay === top.id) return;
       e.stopImmediatePropagation();
+      if (!top.canClose()) {
+        window.history.pushState({ ...(window.history.state ?? {}), __overlay: top.id }, "");
+        return;
+      }
       stack.pop();
       top.close();
     },
@@ -45,6 +49,7 @@ export function overlayCount() {
 
 /** Closes every open overlay (consuming their history entries) and then runs `fn`. */
 export function closeOverlaysThen(fn: () => void) {
+  if (stack.some((entry) => !entry.canClose())) return;
   const n = stack.length;
   if (n === 0) return fn();
   const entries = stack.splice(0, n);
@@ -54,14 +59,16 @@ export function closeOverlaysThen(fn: () => void) {
   window.history.go(-n);
 }
 
-export function useOverlayHistory(open: boolean, onClose: () => void) {
+export function useOverlayHistory(open: boolean, onClose: () => void, closeDisabled = false) {
   const closeRef = useRef(onClose);
   closeRef.current = onClose;
+  const disabledRef = useRef(closeDisabled);
+  disabledRef.current = closeDisabled;
   useEffect(() => {
     if (!open || typeof window === "undefined") return;
     install();
     const id = Math.random().toString(36).slice(2);
-    const entry: Entry = { id, close: () => closeRef.current() };
+    const entry: Entry = { id, close: () => closeRef.current(), canClose: () => !disabledRef.current };
     window.history.pushState({ ...(window.history.state ?? {}), __overlay: id }, "");
     stack.push(entry);
     return () => {
@@ -84,21 +91,20 @@ export function useScrollLock(active: boolean) {
   useEffect(() => {
     if (!active || typeof document === "undefined") return;
     if (locks++ === 0) {
-      const body = document.body;
+      // Capture gestures instead of changing either scroll container's geometry.
       const y = window.scrollY;
       const x = window.scrollX;
-      const root = document.documentElement;
-      const saved = { bodyOverflow: body.style.overflow, rootOverflow: root.style.overflow, touchAction: root.style.touchAction };
-      body.style.overflow = "hidden";
-      root.style.overflow = "hidden";
-      root.style.touchAction = "none";
-      root.dataset["overlayOpen"] = "true";
+      const preventBackgroundScroll = (event: Event) => {
+        const target = event.target;
+        const panel = target instanceof Element ? target.closest('[data-overlay-panel]') : null;
+        if (!panel || panel.scrollHeight <= panel.clientHeight) event.preventDefault();
+      };
+      document.addEventListener("touchmove", preventBackgroundScroll, { passive: false });
+      document.addEventListener("wheel", preventBackgroundScroll, { passive: false });
       restore = () => {
-        body.style.overflow = saved.bodyOverflow;
-        root.style.overflow = saved.rootOverflow;
-        root.style.touchAction = saved.touchAction;
-        delete root.dataset["overlayOpen"];
-        window.scrollTo({ left: x, top: y, behavior: "instant" });
+        document.removeEventListener("touchmove", preventBackgroundScroll);
+        document.removeEventListener("wheel", preventBackgroundScroll);
+        if (window.scrollY !== y || window.scrollX !== x) window.scrollTo({ left: x, top: y, behavior: "instant" });
       };
     }
     return () => {

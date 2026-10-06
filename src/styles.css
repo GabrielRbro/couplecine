@@ -138,7 +138,7 @@
 /* Pressed feedback for taps. */
 @utility pressable {
   transition: transform var(--dur-fast) var(--ease-out), opacity var(--dur-fast) var(--ease-out), background-color var(--dur-fast) var(--ease-out), color var(--dur-fast) var(--ease-out);
-  &:active { transform: scale(0.96); opacity: 0.85; }
+  &:active { opacity: 0.85; }
 }
 
 @utility fade-enter {
@@ -273,10 +273,10 @@
   animation: none;
 }
 @keyframes vt-out {
-  to { opacity: 0; transform: scale(0.985); }
+  to { opacity: 0; }
 }
 @keyframes vt-in {
-  from { opacity: 0; transform: translateY(10px); }
+  from { opacity: 0; }
 }
 @media (prefers-reduced-motion: reduce) {
   ::view-transition-group(*),
@@ -297,13 +297,13 @@
 
 /* Round 8: stable glass and intentional cinematic surfaces. */
 :root {
-  --nav-glass: oklch(0.22 0.012 285 / 88%);
+  --nav-glass: oklch(0.22 0.012 285 / 62%);
   --art-shadow: 0 5px 18px -8px oklch(0 0 0 / 65%);
   --card-back-shadow: 0 16px 36px -14px oklch(0 0 0 / 75%);
 }
 html, body, * { scrollbar-width: none; }
 *::-webkit-scrollbar { display: none; }
-.nav-glass { background: var(--nav-glass); backdrop-filter: blur(38px) saturate(110%); }
+.nav-glass { background: var(--nav-glass); -webkit-backdrop-filter: blur(42px) saturate(170%); backdrop-filter: blur(42px) saturate(170%); }
 .nav-tab { transition: color var(--dur-fast) var(--ease-out); }
 .art-edge { border: 1px solid var(--border); box-shadow: var(--art-shadow); }
 .match-stack-back { box-shadow: var(--card-back-shadow), inset 0 0 0 6px var(--card); }
@@ -312,13 +312,13 @@ html, body, * { scrollbar-width: none; }
 ::view-transition-new(bottom-nav) { opacity: 1; mix-blend-mode: normal; }
 ::view-transition-group(shared-backdrop) { z-index: 1; }
 ::view-transition-group(shared-poster), ::view-transition-group(detail-poster) { z-index: 2; }
-html[data-overlay-open] nav { visibility: hidden; }
+
 .score-feedback { animation: score-feedback 150ms var(--ease-out) both; }
 @keyframes score-feedback { from { opacity: 0; transform: scale(.94); } to { opacity: 1; transform: scale(1); } }
 
 /* Round 9: no body relocation while sheets open; no shared backdrop over hero text. */
 html { scrollbar-gutter: stable; }
-::view-transition-group(shared-backdrop) { display: none; }
+::view-transition-group(shared-backdrop) { animation-duration: 200ms; }
 ::view-transition-group(shared-poster) { animation-duration: 200ms; }
 .score-feedback svg { animation: score-pulse 480ms var(--ease-out) both; }
 .score-feedback[data-score-tone="low"] svg { animation-name: score-drop; }
