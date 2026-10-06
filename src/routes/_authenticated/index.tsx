@@ -1,4 +1,7 @@
 import { createFileRoute, Link } from "@tanstack/react-router";
+import { useRef, useState } from "react";
+import { markShared } from "@/lib/shared-transition";
+import { UnratedPile } from "@/components/app/UnratedPile";
 import { ArrowRight, Heart, Plus, Settings, Star, Upload } from "lucide-react";
 import { useQuery } from "@tanstack/react-query";
 import { supabase } from "@/integrations/supabase/client";
@@ -37,88 +40,80 @@ function ContextList({ items, empty }: { items: LibraryWork[]; empty: string }) 
   return items.length === 0 ? (
     <EmptyState title={empty} />
   ) : (
-    <div className="divide-y divide-border border-y border-border">
-      {items.slice(0, 3).map((w) => (
-        <Link
-          key={w.id}
-          to="/work/$id"
-          params={{ id: w.id }}
-          className="pressable flex min-h-16 items-center gap-3 py-2.5"
-        >
-          <div className="w-9 shrink-0">
-            <Poster path={w.poster_path} title={w.title} className="rounded-md" />
-          </div>
-          <div className="min-w-0 flex-1">
-            <p className="line-clamp-1 text-sm font-semibold">{w.title}</p>
-            <p className="mt-0.5 text-xs text-muted-foreground">
-              {w.media_type === "tv" ? "Série" : "Filme"}
-              {w.release_year ? ` · ${w.release_year}` : ""}
-            </p>
-          </div>
-          <ArrowRight className="h-4 w-4 shrink-0 text-muted-foreground" />
-        </Link>
-      ))}
+    <div className="space-y-2">
+      {items.slice(0, 3).map((w) => {
+        const art = tmdbImage(w.backdrop_path, "w780");
+        return (
+          <Link
+            key={w.id}
+            to="/work/$id"
+            params={{ id: w.id }}
+            className="pressable relative flex h-20 items-center gap-3 overflow-hidden rounded-2xl bg-card pr-3"
+          >
+            {art && (
+              <img src={art} alt="" loading="lazy" className="absolute inset-0 h-full w-full object-cover opacity-35" />
+            )}
+            <div className="absolute inset-0 bg-gradient-to-r from-background/90 via-background/70 to-background/30" />
+            <div className="relative h-full w-14 shrink-0">
+              <Poster path={w.poster_path} title={w.title} className="h-full rounded-none rounded-l-2xl" />
+            </div>
+            <div className="relative min-w-0 flex-1">
+              <p className="line-clamp-1 font-display text-sm font-semibold">{w.title}</p>
+              <p className="mt-0.5 text-xs text-foreground/70">
+                {w.media_type === "tv" ? "Série" : "Filme"}
+                {w.release_year ? ` · ${w.release_year}` : ""}
+                {w.genres[0] ? ` · ${w.genres[0]}` : ""}
+              </p>
+            </div>
+            <ArrowRight className="relative h-4 w-4 shrink-0 text-muted-foreground" />
+          </Link>
+        );
+      })}
     </div>
   );
 }
 
-/** Continue-watching card: wide (1 item) or compact poster card (2 or 3+). */
+/** Continue-watching card: art-led, with title + progress anchored inside the image. */
 function ContinueCard({
   work: w,
-  wide,
+  layout,
   className = "",
 }: {
   work: LibraryWork;
-  wide: boolean;
+  layout: "hero" | "half" | "strip";
   className?: string;
 }) {
+  const art = useRef<HTMLDivElement>(null);
   const p = seriesProgress(w);
   const pct = p.total ? Math.min(100, (p.seen / p.total) * 100) : 0;
   const label = p.next
     ? `Próximo ${p.next}`
     : SERIES_STATUS_LABEL[w.series_states[0]?.status ?? "watching"];
-  const backdrop = tmdbImage(w.backdrop_path, "w780");
-  const bar = (
-    <div className="mt-2 h-1 overflow-hidden rounded-full bg-muted">
-      <div className="h-full rounded-full bg-primary" style={{ width: `${pct}%` }} />
-    </div>
-  );
-  if (wide)
-    return (
-      <Link
-        to="/work/$id"
-        params={{ id: w.id }}
-        className="pressable relative block overflow-hidden rounded-2xl border border-border"
-      >
-        <div className="aspect-[16/9] bg-card">
-          {backdrop && (
-            <img
-              src={backdrop}
-              alt=""
-              style={{ viewTransitionName: `backdrop-${w.id}` }}
-              className="h-full w-full object-cover"
-            />
-          )}
-        </div>
-        <div className="absolute inset-0 bg-gradient-to-t from-background via-background/50 to-transparent" />
-        <div className="absolute inset-x-0 bottom-0 p-4">
-          <p className="font-display text-lg font-semibold leading-tight">{w.title}</p>
-          <p className="mt-1 text-xs text-muted-foreground">
-            <span className="font-semibold text-foreground">{label}</span> · {p.seen} de{" "}
-            {p.total || "?"} episódios
-          </p>
-          {bar}
-        </div>
-      </Link>
-    );
+  const hero = layout === "hero";
+  const img = hero ? tmdbImage(w.backdrop_path, "w780") : tmdbImage(w.poster_path, "w342");
   return (
-    <Link to="/work/$id" params={{ id: w.id }} className={`pressable block min-w-0 ${className}`}>
-      <div style={{ viewTransitionName: `poster-${w.id}` }}>
-        <Poster path={w.poster_path} title={w.title} className="rounded-xl" />
+    <Link
+      to="/work/$id"
+      params={{ id: w.id }}
+      onClick={() => markShared(art.current, w.id, hero ? "backdrop" : "poster")}
+      className={`pressable relative block min-w-0 overflow-hidden rounded-3xl bg-card ${className}`}
+    >
+      <div ref={art} className={hero ? "aspect-[16/10]" : "aspect-[2/3]"}>
+        {img && <img src={img} alt="" className="h-full w-full object-cover" />}
       </div>
-      <p className="mt-2 line-clamp-1 text-sm font-semibold">{w.title}</p>
-      <p className="text-[11px] text-muted-foreground">{label}</p>
-      {bar}
+      <div className="absolute inset-0 bg-gradient-to-t from-background via-background/40 to-transparent" />
+      <div className={`absolute inset-x-0 bottom-0 ${hero ? "p-4" : "p-3"}`}>
+        <p className={`line-clamp-2 font-display font-semibold leading-tight ${hero ? "text-xl" : "text-sm"}`}>
+          {w.title}
+        </p>
+        <p className="mt-1 text-[11px] text-foreground/75">
+          <span className="font-semibold text-foreground">{label}</span>
+          {hero ? ` · ${p.seen} de ${p.total || "?"} episódios` : ""}
+        </p>
+        <div className="mt-2 h-1 overflow-hidden rounded-full bg-foreground/15">
+          <div className="h-full rounded-full bg-primary" style={{ width: `${pct}%` }} />
+        </div>
+      </div>
     </Link>
   );
 }
@@ -143,6 +138,7 @@ function Home() {
       return data;
     },
   });
+  const [pile, setPile] = useState(false);
   if (!space || isLoading) return <HomeSkeleton />;
   const continuing = works.filter(
     (w) => w.media_type === "tv" && w.series_states[0]?.status === "watching",
@@ -192,11 +188,11 @@ function Home() {
 
       <section className="mt-5 grid grid-cols-3 gap-2" aria-label="Atalhos">
         {unrated[0] ? (
-          <Link to="/work/$id" params={{ id: unrated[0].id }} className={quick}>
+          <button onClick={() => setPile(true)} className={`${quick} text-left`}>
             <Star className="h-5 w-5 text-primary" />
             <span className="text-xs font-semibold">Não avaliados</span>
             <span className="text-[11px] text-muted-foreground">{unrated.length} pendentes</span>
-          </Link>
+          </button>
         ) : (
           <div className={`${quick} opacity-55`}>
             <Star className="h-5 w-5 text-primary" />
@@ -204,7 +200,7 @@ function Home() {
             <span className="text-[11px] text-muted-foreground">Tudo em dia</span>
           </div>
         )}
-        <Link to="/match" className={quick}>
+        <Link to="/match" search={{ view: "result" }} className={quick}>
           <Heart className="h-5 w-5 text-primary" />
           <span className="text-xs font-semibold">Último Match</span>
           <span className="text-[11px] text-muted-foreground">
@@ -234,15 +230,15 @@ function Home() {
                 ? ""
                 : continuing.length === 2
                   ? "grid grid-cols-2 gap-3"
-                  : "no-scrollbar -mx-4 flex snap-x snap-mandatory gap-3 overflow-x-auto px-4"
+                  : "no-scrollbar -mx-4 flex snap-x snap-mandatory gap-3 overflow-x-auto scroll-px-4 px-4"
             }
           >
             {continuing.map((w) => (
               <ContinueCard
                 key={w.id}
                 work={w}
-                wide={continuing.length === 1}
-                className={continuing.length >= 3 ? "w-[38%] shrink-0 snap-start" : ""}
+                layout={continuing.length === 1 ? "hero" : continuing.length === 2 ? "half" : "strip"}
+                className={continuing.length >= 3 ? "w-[37%] shrink-0 snap-start" : ""}
               />
             ))}
           </div>
@@ -267,6 +263,7 @@ function Home() {
         </div>
         <ContextList items={both} empty="Quando os dois curtirem uma obra, ela aparece aqui." />
       </section>
+      <UnratedPile open={pile} onClose={() => setPile(false)} works={unrated} space={space} />
     </div>
   );
 }
