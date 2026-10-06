@@ -7,17 +7,24 @@ type Kind = "poster" | "backdrop";
 let pending: { id: string; kind: Kind; at: number } | null = null;
 
 export function markShared(el: HTMLElement | null, id: string, kind: Kind) {
-  if (kind === "backdrop") return;
+
   if (!el || typeof document === "undefined" || !("startViewTransition" in document)) return;
   clearShared();
   const image = el instanceof HTMLImageElement ? el : el.querySelector("img");
   if (!image) return;
   pending = { id, kind, at: Date.now() };
   image.style.viewTransitionName = `shared-${kind}`;
-  // Cancelled or finished: always clear the source name.
-  window.setTimeout(() => {
-    image.style.viewTransitionName = "";
-  }, 250);
+  const started = Date.now();
+  const cleanup = () => { image.style.viewTransitionName = ""; if (pending?.at === started) clearShared(); };
+  // activeViewTransition is supported by modern Chromium; other engines expose pseudo animations.
+  const watch = () => {
+    const transition = (document as Document & { activeViewTransition?: { finished: Promise<void> } }).activeViewTransition;
+    if (transition) { void transition.finished.then(cleanup, cleanup); return; }
+    const animations = document.getAnimations().filter((a) => (a.effect as KeyframeEffect | null)?.pseudoElement?.startsWith("::view-transition"));
+    if (animations.length) { void Promise.allSettled(animations.map((a) => a.finished)).then(cleanup); return; }
+    if (Date.now() - started < 2000) requestAnimationFrame(watch); else cleanup();
+  };
+  requestAnimationFrame(watch);
 }
 
 /** Destination hero: returns a style only if this exact work/kind was just tapped. */
@@ -36,11 +43,12 @@ export function useSharedStyle(id: string, kind: Kind) {
   const [style, setStyle] = useState(() => sharedStyle(id, kind));
   useEffect(() => {
     if (!style.viewTransitionName) return;
-    const t = window.setTimeout(() => {
-      setStyle({});
-      clearShared();
-    }, 250);
-    return () => window.clearTimeout(t);
+    let frame = 0;
+    const watch = () => {
+      if (!pending) setStyle({}); else frame = requestAnimationFrame(watch);
+    };
+    frame = requestAnimationFrame(watch);
+    return () => cancelAnimationFrame(frame);
   }, [style.viewTransitionName]);
   return style;
 }

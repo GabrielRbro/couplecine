@@ -2,7 +2,7 @@
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { useServerFn } from "@tanstack/react-start";
 import { useEffect, useRef, useState } from "react";
-import { ArrowLeft, Check, ChevronDown, Plus, Trash2, Tv } from "lucide-react";
+import { ArrowLeft, Check, ChevronDown, Plus, Trash2, Tv, X } from "lucide-react";
 import { DetailSkeleton, useBack } from "@/components/app/ui";
 import { toast } from "sonner";
 import { AnimatedSheet } from "@/components/app/AnimatedSheet";
@@ -119,17 +119,25 @@ export function WorkDetails({ workId, mediaType, tmdbId }: { workId?: string; me
       if (!identity || !space?.spaceId) throw new Error("Espaço indisponível.");
       return add({ data: { ...identity, spaceId: space.spaceId, reaction } });
     },
+    onMutate: async () => {
+      if (!identity) return [];
+      await qc.cancelQueries({ queryKey: ["discover", space?.spaceId] });
+      const snapshots = qc.getQueriesData({ queryKey: ["discover", space?.spaceId] });
+      qc.setQueriesData({ queryKey: ["discover", space?.spaceId] }, (old: { pages: { items: { mediaType: string; tmdbId: number }[] }[] } | undefined) => old && ({ ...old, pages: old.pages.map((page) => ({ ...page, items: page.items.filter((i) => i.mediaType !== identity.mediaType || i.tmdbId !== identity.tmdbId) })) }));
+      return snapshots;
+    },
     onSuccess: async ({ workId: nextId }) => {
       restoreWorkDeletion(nextId);
       await qc.fetchQuery(workQuery(nextId));
       setActiveId(nextId); setPicking(false);
       qc.invalidateQueries({ queryKey: ["library"] });
       toast.success("Indicação salva");
-    }, onError: (e) => toast.error(e.message),
+    }, onError: (e, _reaction, snapshots) => { snapshots?.forEach(([key, value]) => qc.setQueryData(key, value)); toast.error(e.message); },
   });
   const transitionId = workId ?? `tmdb-${mediaType}-${tmdbId}`;
   // Backdrops stay in ordinary hero paint; poster-only transitions cannot cover text.
   const sharedPoster = useSharedStyle(transitionId, "poster");
+  const sharedBackdrop = useSharedStyle(transitionId, "backdrop");
   const m = meta.data?.details;
   const internal = Boolean(activeId && deletion === "active" && local.data?.work);
   const work = local.data?.work ?? retained.current ?? (m ? {
@@ -154,7 +162,7 @@ export function WorkDetails({ workId, mediaType, tmdbId }: { workId?: string; me
           <img
             src={tmdbImage(work.backdrop_path, "w1280") ?? ""}
             alt=""
-            
+            style={sharedBackdrop}
             className="h-full w-full object-cover opacity-80"
           />
         ) : (
@@ -164,8 +172,8 @@ export function WorkDetails({ workId, mediaType, tmdbId }: { workId?: string; me
         <BackOverlay />
       </div>
       <div className="relative z-10 -mt-28 flex gap-4 px-4">
-        <div className="relative z-10 w-28 shrink-0 shadow-2xl" style={sharedPoster}>
-          <Poster path={work.poster_path} title={work.title} />
+        <div className="relative z-10 w-28 shrink-0 shadow-2xl">
+          <div style={sharedPoster}><Poster path={work.poster_path} title={work.title} /></div>
         </div>
         <div className="min-w-0 self-end">
           <h1 className="text-2xl font-semibold leading-tight">{work.title}</h1>
@@ -239,7 +247,7 @@ export function WorkDetails({ workId, mediaType, tmdbId }: { workId?: string; me
               state={data.state}
               events={data.events}
               seasons={seasons}
-              fallbackImage={work.backdrop_path ?? work.poster_path}
+              fallbackImage={work.backdrop_path}
               onChange={refresh}
             />
           </>
@@ -636,6 +644,17 @@ function SeriesProgressStrip({
   );
 }
 
+function EpisodeArt({ ep, posterPath, fallbackImage, big = false }: { ep: Episode; posterPath: string | null; fallbackImage: string | null; big?: boolean }) {
+  // A horizontal frame always dominates; absent stills use the series backdrop, never a vertical slot.
+  const src = tmdbImage(ep.stillPath ?? fallbackImage, big ? "w780" : "w300");
+  const mini = ep.stillPath ? tmdbImage(posterPath, "w185") : null;
+  return <div className="relative h-full w-full bg-muted">
+    {src && <img src={src} alt="" loading={big ? "eager" : "lazy"} className="h-full w-full object-cover" />}
+    {big && <div className="pointer-events-none absolute inset-0 bg-gradient-to-t from-card/70 to-transparent" />}
+    {mini && <img src={mini} alt="" className="absolute bottom-2 left-2 h-[30%] aspect-[2/3] rounded border border-border object-cover shadow-lg" />}
+  </div>;
+}
+
 function SeriesBlock({
   space,
   workId,
@@ -760,20 +779,6 @@ function SeriesBlock({
 
   const openDone = openEp ? seen.has(`${openEp.seasonNumber}:${openEp.episodeNumber}`) : false;
 
-  const Art = ({ ep, big }: { ep: Episode; big?: boolean }) => {
-    const a = epArt(ep);
-    const src = tmdbImage(a.path, a.kind === "poster" ? "w342" : big ? "w780" : "w300");
-    if (!src) return <div className="match-stack-back" />;
-    if (a.kind === "poster")
-      return (
-        <div className="relative flex h-full w-full items-center justify-center overflow-hidden">
-          <img src={src} alt="" className="absolute inset-0 h-full w-full scale-125 object-cover opacity-40 blur-lg" />
-          <img src={src} alt="" loading="lazy" className="relative h-[88%] rounded-md object-contain shadow-lg" />
-        </div>
-      );
-    const mini = tmdbImage(seasonPoster(ep.seasonNumber), "w185");
-    return <div className="relative h-full w-full"><img src={src} alt="" loading="lazy" className="h-full w-full object-cover" />{mini && <img src={mini} alt="" className="absolute bottom-1.5 right-1.5 h-[68%] aspect-[2/3] rounded-md border border-border object-cover shadow-lg" />}</div>;
-  };
 
   return (
     <section>
@@ -813,7 +818,7 @@ function SeriesBlock({
                   <div
                     className={`relative aspect-video overflow-hidden rounded-xl bg-muted ${isNext ? "ring-2 ring-primary" : ""} ${done ? "opacity-60" : ""}`}
                   >
-                    <Art ep={ep} />
+                    <EpisodeArt ep={ep} posterPath={seasonPoster(ep.seasonNumber)} fallbackImage={fallbackImage} />
                     {isNext && (
                       <span className="absolute left-1.5 top-1.5 rounded-md bg-primary px-1.5 py-0.5 text-[10px] font-semibold text-primary-foreground">
                         Próximo
@@ -843,14 +848,15 @@ function SeriesBlock({
         onClose={() => setOpenEp(null)}
         closeDisabled={saving}
         labelledBy="ep-title"
-        panelClassName="max-h-[88dvh] overflow-y-auto p-0 pb-[max(env(safe-area-inset-bottom),20px)]"
+        panelClassName="relative max-h-[88dvh] overflow-visible p-0 pb-[max(env(safe-area-inset-bottom),20px)]"
       >
         {openEp && (
-          <div>
-            <div className="aspect-video overflow-hidden rounded-t-3xl bg-muted">
-              <Art ep={openEp} big />
+          <div className="max-h-[82dvh] overflow-y-auto overscroll-contain rounded-t-3xl">
+            <Button variant="secondary" size="icon" aria-label="Fechar episódio" disabled={saving} onClick={() => setOpenEp(null)} className="absolute -top-4 right-3 z-20 h-11 w-11 rounded-full border border-border shadow-lg"><X /></Button>
+            <div className="relative aspect-[16/10] overflow-hidden bg-muted">
+              <EpisodeArt ep={openEp} posterPath={seasonPoster(openEp.seasonNumber)} fallbackImage={fallbackImage} big />
             </div>
-            <div className="p-5">
+            <div className="p-6">
               <h3 id="ep-title" className="text-lg font-semibold leading-tight">
                 T{openEp.seasonNumber}E{openEp.episodeNumber} · {openEp.name}
               </h3>
