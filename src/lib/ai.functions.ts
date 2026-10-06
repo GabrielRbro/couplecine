@@ -79,7 +79,8 @@ async function validate(
   spaceId: string,
   supabase: Parameters<typeof geminiJson>[0]["supabase"],
 ) {
-  const found = await Promise.all(guesses.slice(0, 10).map((g) => findTitle(g).catch(() => null)));
+  const found: (TmdbSearchItem | null)[] = [];
+  for (let i = 0; i < Math.min(10, guesses.length); i += 4) found.push(...await Promise.all(guesses.slice(i, i + 4).map((g) => findTitle(g).catch(() => null))));
   const { data: existing } = await supabase
     .from("works")
     .select("id, media_type, tmdb_id")
@@ -104,23 +105,24 @@ const GUESS_SCHEMA_HINT =
 export const smartSearch = createServerFn({ method: "POST" })
   .middleware([requireSupabaseAuth])
   .inputValidator((d) =>
-    z.object({ query: z.string().min(3).max(300), spaceId: z.string().uuid() }).parse(d),
+    z.object({ query: z.string().min(3).max(300), spaceId: z.string().uuid(), kind: z.enum(["all", "movie", "tv"]).default("all") }).parse(d),
   )
   .handler(async ({ data, context }) => {
+    const began = Date.now();
+    const query = data.query.trim().replace(/\s+/g, " ").toLowerCase();
     try {
       const res = await geminiJson<{ items?: AiTitleGuess[] }>({
         supabase: context.supabase,
         userId: context.userId,
         feature: "smart_search",
         system: `Você ajuda um casal a encontrar filmes e séries a partir de descrições em linguagem natural (pt-BR). ${GUESS_SCHEMA_HINT}`,
-        parts: [{ text: data.query }],
+        parts: [{ text: `${query}\nTipo: ${data.kind}` }],
         cacheTtlHours: 72,
-        cacheSeed: `q:${data.query.trim().toLowerCase()}`,
+        cacheSeed: `q3:${query}:${data.kind}`,
       });
-      return {
-        ok: true as const,
-        items: await validate(res.items ?? [], data.spaceId, context.supabase),
-      };
+      const interpreted = Date.now();
+      const items = (await validate(res.items ?? [], data.spaceId, context.supabase)).filter((w) => data.kind === "all" || w.mediaType === data.kind);
+      return { ok: true as const, items, timings: { interpretMs: interpreted - began, validateMs: Date.now() - interpreted } };
     } catch (e) {
       if (e instanceof AiUnavailable)
         return {
@@ -183,4 +185,21 @@ export const analyzeImport = createServerFn({ method: "POST" })
         };
       throw e;
     }
+  });
+
+/** Optional preparation only: reads the caller's eligible library, never votes or results. */
+export const refineMatch = createServerFn({ method: "POST" })
+  .middleware([requireSupabaseAuth])
+  .inputValidator((d) => z.object({ spaceId: z.string().uuid(), ids: z.array(z.string().uuid()).max(40), query: z.string().min(3).max(180), kind: z.enum(["all", "movie", "tv"]) }).parse(d))
+  .handler(async ({ data, context }) => {
+    const { data: rows, error } = await context.supabase.from("works").select("id,tmdb_id,media_type,title,runtime_minutes,genres,interests(reaction),indications(id)").eq("space_id",data.spaceId).in("id",data.ids);
+    if (error) throw new Error("Não foi possível preparar candidatos.");
+    const eligible = (rows ?? []).filter((w) => w.indications.length && !w.interests.some((i) => i.reaction === "dislike") && (data.kind === "all" || w.media_type === data.kind));
+    const fallback = eligible.map((w) => w.id);
+    try {
+      const compact = eligible.map((w) => ({ id:w.id,title:w.title,type:w.media_type,minutes:w.runtime_minutes,genres:w.genres.slice(0,3) }));
+      const result = await geminiJson<{ ids?: string[] }>({ supabase: context.supabase,userId:context.userId,feature:"smart_search",system:'Refine o conjunto de filmes/séries fornecido para a intenção. Retorne JSON {"ids":[ids]} em ordem de preferência; nunca invente ids, votos ou resultados. Mantenha pelo menos 2 candidatos se disponíveis.',parts:[{text:JSON.stringify({intent:data.query.trim().replace(/\s+/g," "),candidates:compact})}],cacheTtlHours:24,cacheSeed:`match:${data.kind}:${data.query.trim().toLowerCase()}:${JSON.stringify(compact)}` });
+      const ids = [...new Set(result.ids ?? [])].filter((id) => fallback.includes(id));
+      return ids.length >= 2 ? { ids, refined:true, reason:null } : { ids:fallback,refined:false,reason:"Mantivemos o conjunto normal." };
+    } catch { return { ids:fallback, refined:false, reason:"IA indisponível · o Match normal continua disponível." }; }
   });

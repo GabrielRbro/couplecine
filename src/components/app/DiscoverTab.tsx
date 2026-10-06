@@ -1,3 +1,4 @@
+import { Link } from "@tanstack/react-router";
 import { useRef, useState } from "react";
 import { AnimatePresence, motion, useReducedMotion } from "motion/react";
 import { ScoreForm } from "@/components/app/ScorePicker";
@@ -372,17 +373,17 @@ function DiscoverGrid({
             transition={{ type: "spring", stiffness: 420, damping: 36 }}
             className="relative min-w-0 overflow-hidden rounded-2xl"
           >
-            <Poster path={i.posterPath} title={i.title} className="rounded-2xl" />
-            <span className="absolute left-2 top-2 rounded-md bg-background/60 p-1 text-muted-foreground backdrop-blur">
+            <Link to="/title/$mediaType/$tmdbId" params={{ mediaType: i.mediaType, tmdbId: String(i.tmdbId) }} aria-label={`Abrir ${i.title}`} className="block"><Poster path={i.posterPath} title={i.title} className="rounded-2xl" /></Link>
+            <span className="pointer-events-none absolute left-2 top-2 rounded-md bg-background/60 p-1 text-muted-foreground backdrop-blur">
               {i.mediaType === "tv" ? <Tv className="h-3 w-3" /> : <Film className="h-3 w-3" />}
             </span>
-            <div className="absolute inset-x-0 bottom-0 bg-gradient-to-t from-background via-background/85 to-transparent px-2 pb-2 pt-12">
+            <div className="pointer-events-none absolute inset-x-0 bottom-0 bg-gradient-to-t from-background via-background/85 to-transparent px-2 pb-2 pt-12">
               <p className="line-clamp-2 px-0.5 text-sm font-semibold leading-tight">{i.title}</p>
               <p className="px-0.5 text-[11px] text-foreground/70">
                 {[i.mediaType === "tv" ? "Série" : "Filme", i.year].filter(Boolean).join(" · ")}
                 {i.existingWorkId && " · na biblioteca"}
               </p>
-              <div className="mt-1.5 flex gap-1">
+              <div className="pointer-events-auto mt-1.5 flex gap-1">
                 <button aria-label={`Indicar ${i.title}`} onClick={() => onReact(i)} className={`${action} bg-primary/90 text-primary-foreground`}>
                   <Plus className="h-4 w-4" />
                 </button>

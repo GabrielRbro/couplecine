@@ -28,7 +28,18 @@ Concluído: Lotes 1–4, 5A–5D, Rodada 6, MCP.
 - Limite dos dados: já havia 42 registros demo rastreados e 41 obras demo existentes na leitura inicial; preservados, sem completar artificialmente para 45.
 - Limites: consentimento a dois/Android físico e Gemini com chave real não validados; espera Gemini exercitada com atraso controlado. Pessoas clicáveis e alias privado não implementados.
 
+## Rodada 9
+- [x] Ficha modular única para catálogo/biblioteca, adição in-place, metadados preservados durante exclusão e Undo, Descobrir abre ficha sem interceptação do gradiente.
+- [x] Transição somente no poster; backdrop não atravessa texto; barra montada e frost constante; scroll-lock sem deslocar body.
+- [x] Temporadas disponíveis antes do prefetch, reset horizontal, status em sheet; feedback animado de nota e blur por gesto intencional.
+- [x] Filtros antes do Match, refinamento Gemini opcional com interseção de IDs elegíveis e fallback; proteção de respostas obsoletas; sorteio aleatório entre resultados no solo/fechado.
+- [x] Busca inteligente com validações TMDB em lotes, cache por filtro/query e loading reutilizável; logos decodificados com fallback estável; dois Continuar sem deformar imagem e com altura fixa.
+- [x] Typecheck/build automáticos OK. Smoke autenticado 390×844/412×915: radial Back/Escape repetido, ficha filme/série/externa, status sem salvar, episódio/Back/scroll, nota sem salvar, exclusão+Undo sem DELETE, busca/Back, Descobrir/ficha, Galeria e Sorteio local, filtros/refino/simulador e roleta 3x; sem erros de página/HTTP ou overflow nas telas medidas.
+- Dados preservados no QA: 46 obras, 41 registros demo existentes, 16 sessões Match, 12 votos e zero abertas antes/depois; sem salvar notas/reações/episódios. Contagens são as observadas nesta rodada, não as de rodadas anteriores.
+- PWA/configuração e integrações preservadas; instalação/atualização Android real não revalidadas. Consentimento a dois e alteração persistida de ficha não exercitados para preservar dados. Exatamente dois Continuar validado por estrutura, pois dados atuais têm três; métricas de créditos indisponíveis.
+- Futuro, fora do escopo: pessoas clicáveis e alias privado do parceiro.
+
 ## Pendente
 - [ ] Consentimento duplo do Match e Match ativo com 2 membros (bloqueado: precisa da conta real do parceiro)
-- [ ] Teste real do Gemini (bloqueado: nenhuma chave configurada)
+- [ ] Validação completa do Gemini por intenção/qualidade; refinamento retornou sucesso no smoke atual, sem alterar configuração de segredos.
 - [ ] Tela de Importações (feature futura)

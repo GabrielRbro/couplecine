@@ -10,6 +10,7 @@ import { SlidersHorizontal } from "lucide-react";
 import { AnimatePresence, motion, useReducedMotion } from "motion/react";
 import { AnimatedSheet } from "@/components/app/AnimatedSheet";
 import { AppShell } from "@/components/app/AppShell";
+import { Button } from "@/components/ui/button";
 import { FilterPills, ScrollRow, TogglePill } from "@/components/app/ui";
 import { EmptyState } from "@/components/app/MediaCard";
 import { formatRuntime, REACTION_EMOJI, tmdbImage } from "@/lib/format";
@@ -48,7 +49,7 @@ export const Route = createFileRoute("/_authenticated/watch/gallery")({
 });
 
 /** Cinematic choice card: horizontal backdrop with only what matters to decide now. */
-function GalleryCard({ work, space, requestLogo, logo }: { work: LibraryWork; space: SpaceInfo; requestLogo: (id: string) => void; logo?: string | null }) {
+function GalleryCard({ work, space, requestLogo, logo }: { work: LibraryWork; space: SpaceInfo; requestLogo: (id: string) => void; logo?: string | null | undefined }) {
   const mine = work.interests.find((i) => i.user_id === space.userId);
   const theirs = space.partner
     ? work.interests.find((i) => i.user_id === space.partner!.id)
@@ -60,6 +61,19 @@ function GalleryCard({ work, space, requestLogo, logo }: { work: LibraryWork; sp
     observer.observe(el); return () => observer.disconnect();
   }, [work.id, requestLogo]);
   const [logoFailed, setLogoFailed] = useState(false);
+  const [titleFallback, setTitleFallback] = useState(false);
+  const [logoReady, setLogoReady] = useState(false);
+  useEffect(() => {
+    if (logo === null) { setTitleFallback(true); return; }
+    if (logo) {
+      let active = true;
+      const image = new Image(); image.src = tmdbImage(logo, "w500") ?? "";
+      image.decode().then(() => { if (active) setLogoReady(true); }, () => { if (active) setTitleFallback(true); });
+      return () => { active = false; };
+    }
+    const timeout = window.setTimeout(() => setTitleFallback(true), 700);
+    return () => clearTimeout(timeout);
+  }, [logo]);
   const backdrop = tmdbImage(work.backdrop_path, "w780");
   const poster = tmdbImage(work.poster_path, "w342");
   const meta = [
@@ -104,7 +118,7 @@ function GalleryCard({ work, space, requestLogo, logo }: { work: LibraryWork; sp
         <div className="pointer-events-none absolute inset-0 bg-gradient-to-t from-background via-background/55 to-transparent" />
         <div className="absolute inset-x-0 bottom-0 flex items-end justify-between gap-3 p-4">
           <div className="min-w-0">
-            {logo && !logoFailed ? <img src={tmdbImage(logo, "w500") ?? ""} alt={work.title} onError={() => setLogoFailed(true)} className="mb-2 max-h-16 max-w-[220px] w-auto object-contain object-left drop-shadow-md" /> : <p className="line-clamp-2 font-display text-xl font-semibold leading-tight">{work.title}</p>}
+            {!titleFallback && logo && logoReady && !logoFailed ? <img src={tmdbImage(logo, "w500") ?? ""} alt={work.title} onError={() => setLogoFailed(true)} className="mb-2 max-h-16 max-w-[220px] w-auto object-contain object-left drop-shadow-md" /> : titleFallback || logoFailed ? <p className="line-clamp-2 font-display text-xl font-semibold leading-tight">{work.title}</p> : <div aria-hidden className="skeleton mb-2 h-10 w-40" />}
             <p className="mt-1 text-xs text-foreground/70">{meta.join(" · ")}</p>
           </div>
           <div className="emoji flex shrink-0 items-center gap-1.5 rounded-full bg-background/50 px-2.5 py-1 text-sm backdrop-blur">
@@ -203,7 +217,7 @@ function GalleryPage() {
               exit={reduce ? { opacity: 0 } : { opacity: 0, scale: 0.97 }}
               transition={{ type: "spring", stiffness: 380, damping: 34 }}
             >
-              <GalleryCard work={w} space={space} requestLogo={requestLogo} logo={logos[w.id] ?? null} />
+              <GalleryCard work={w} space={space} requestLogo={requestLogo} logo={logos[w.id]} />
             </motion.div>
           ))}
         </AnimatePresence>
@@ -229,19 +243,7 @@ function GalleryPage() {
         <label className="mt-4 block text-xs text-muted-foreground" htmlFor="gal-genre">
           Gênero
         </label>
-        <select
-          id="gal-genre"
-          value={genre}
-          onChange={(e) => setGenre(e.target.value)}
-          className="mt-1 min-h-11 w-full rounded-lg border border-border bg-background px-3 text-sm"
-        >
-          <option value="">Todos os gêneros</option>
-          {genres.map((g) => (
-            <option key={g} value={g}>
-              {g}
-            </option>
-          ))}
-        </select>
+        <div className="mt-2 flex max-h-48 flex-wrap gap-2 overflow-y-auto">{["", ...genres].map((g) => <Button key={g} variant={genre === g ? "secondary" : "outline"} className="min-h-11 text-xs" onClick={() => setGenre(g)}>{g || "Todos os gêneros"}</Button>)}</div>
         <div className="mt-4">
           <TogglePill on={bothLike} onClick={() => setBothLike((v) => !v)}>
             Os dois curtiram

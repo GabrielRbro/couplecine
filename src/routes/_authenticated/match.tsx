@@ -1,3 +1,4 @@
+import { MatchPreparation } from "@/components/app/MatchPreparation";
 import { createFileRoute, Link, useNavigate } from "@tanstack/react-router";
 import { z } from "zod";
 import { BackButton } from "@/components/app/ui";
@@ -107,6 +108,7 @@ function MatchPage() {
   });
   const couple = members.data === 2;
   const [simulating, setSimulating] = useState(false);
+  const [preparedIds, setPreparedIds] = useState<string[] | null>(null);
   const spaceId = space?.spaceId;
   const [resumedSessionId, setResumedSessionId] = useState<string | null>(null);
   const [confirmingAbandon, setConfirmingAbandon] = useState(false);
@@ -220,7 +222,7 @@ function MatchPage() {
   const start = useMutation({
     mutationFn: async () => {
       // Permanent 👎 from either person vetoes a work from the Match pool by default.
-      const ids = works
+      const ids = (preparedIds ? works.filter((w) => preparedIds.includes(w.id)) : works)
         .filter((w) => isIndicated(w) && !w.interests.some((i) => i.reaction === "dislike"))
         .map((w) => w.id);
       if (ids.length < 2) throw new Error("Adicione pelo menos 2 indicações antes de começar.");
@@ -352,11 +354,11 @@ function MatchPage() {
   // Auto-start once per visit when there is no pending session.
   useEffect(() => {
     if (!open.isSuccess || open.data || initialOpenId.current !== null) return;
-    if (view === "result" || !couple) return;
+    if (view === "result" || !couple || !preparedIds) return;
     if (autoStarted.current || !works.length || start.isPending) return;
     autoStarted.current = true;
     start.mutate();
-  }, [open.isSuccess, open.data, works.length, start, view, couple]);
+  }, [open.isSuccess, open.data, works.length, start, view, couple, preparedIds]);
 
   const castVote = async (liked: boolean) => {
     if (!currentWork || cardExit || vote.isPending) return;
@@ -393,18 +395,22 @@ function MatchPage() {
   // Uniform pick among closed results, revealed with a decelerating roulette.
   const pickRandomResult = () => {
     if (results.length === 0 || rolling) return;
-    const selected = results[Math.floor(Math.random() * results.length)]!;
+    const selected = results[Math.floor(Math.random() * results.length)];
+    if (!selected) return;
+    setPickedResultId(null);setSpinId(null);
     if (window.matchMedia("(prefers-reduced-motion: reduce)").matches || results.length === 1) {
       setPickedResultId(selected.id);
       return;
     }
     setRolling(true);
     let i = 0;
-    const steps = 12 + results.indexOf(selected) + results.length * 2;
+    const steps = 14;
+    let previous = "";
     const tick = (delay: number) => {
       window.setTimeout(() => {
-        const w = results[i % results.length]!;
-        setSpinId(w.id);
+        const options = results.filter((w) => w.id !== previous);
+        const w = options[Math.floor(Math.random()*options.length)] ?? selected;
+        previous = w.id; setSpinId(w.id);
         i++;
         if (i < steps) tick(delay * 1.13);
         else {
@@ -498,7 +504,7 @@ function MatchPage() {
     </AnimatedSheet>
   );
 
-  if (simulating && members.data === 1) return <MatchSimulator works={works} onExit={() => setSimulating(false)} />;
+  if (simulating && members.data === 1) return <MatchSimulator works={works.filter((w) => preparedIds?.includes(w.id))} onExit={() => setSimulating(false)} />;
 
   if (view === "result")
     return (
@@ -539,7 +545,7 @@ function MatchPage() {
           >
             Convidar parceiro
           </Link>
-          {members.data === 1 && <Button variant="outline" className="mt-3 min-h-12" onClick={() => setSimulating(true)}>Simular Match · Modo de teste</Button>}
+          {members.data === 1 && spaceId && <MatchPreparation works={works} spaceId={spaceId} solo onStart={(ids) => {setPreparedIds(ids);setSimulating(true);}} />}
           {last.data && (
             <Link
               to="/match"
@@ -552,6 +558,8 @@ function MatchPage() {
         </div>
       </div>
     );
+
+  if (couple && !open.data && !preparedIds && spaceId) return <div className="px-4 pt-6">{header}<MatchPreparation works={works} spaceId={spaceId} onStart={setPreparedIds} /></div>;
 
   if (
     open.isLoading ||

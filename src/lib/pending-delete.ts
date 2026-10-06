@@ -12,6 +12,10 @@ const pending = new Map<string, number>();
 const deleted = new Set<string>();
 const listeners = new Set<() => void>();
 const emit = () => listeners.forEach((fn) => fn());
+export function restoreWorkDeletion(id: string) {
+  deleted.delete(id);
+  emit();
+}
 export function useWorkDeletion(id: string) {
   return useSyncExternalStore((fn) => { listeners.add(fn); return () => { listeners.delete(fn); }; },
     () => pending.has(id) ? "pending" : deleted.has(id) ? "deleted" : "active", () => "active");

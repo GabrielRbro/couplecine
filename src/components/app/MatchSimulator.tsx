@@ -31,9 +31,15 @@ export function MatchSimulator({ works, onExit }: { works: LibraryWork[]; onExit
   async function roll() {
     if (lock.current || !results.length) return;
     lock.current = true;
+    setChosen(null);setSpinning(null);
     const selected = results[Math.floor(Math.random() * results.length)];
     if (!selected) { lock.current = false; return; }
-    for (let i = 0; i < 12; i++) { setSpinning(results[i % results.length]?.id ?? selected.id); await delay(55 + i * 14); }
+    let previous = "";
+    for (let i = 0; i < 12; i++) {
+      const options = results.filter((w) => w.id !== previous);
+      const next = options[Math.floor(Math.random()*options.length)] ?? selected;
+      previous = next.id; setSpinning(next.id); await delay(55 + i * 14);
+    }
     setSpinning(null); setChosen(selected.id); lock.current = false;
   }
   const restart = () => { if (lock.current) return; setVotes([]); setFinished(false); setChosen(null); };

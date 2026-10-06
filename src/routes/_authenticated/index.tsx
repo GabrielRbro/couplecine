@@ -98,8 +98,8 @@ function ContinueCard({
       onClick={() => markShared(art.current, w.id, hero ? "backdrop" : "poster")}
       className={`pressable relative block h-52 min-w-0 overflow-hidden rounded-3xl bg-card art-edge ${className}`}
     >
-      <div ref={art} className="h-full">
-        {img && <img src={img} alt="" className="h-full w-full object-cover" />}
+      <div ref={art} className="h-full w-full">
+        {img && <img src={img} alt="" className={`h-full w-full ${layout === "half" ? "object-contain" : "object-cover"}`} />}
       </div>
       <div className="absolute inset-0 bg-gradient-to-t from-background via-background/40 to-transparent" />
       <div className={`absolute inset-x-0 bottom-0 ${hero ? "p-4" : "p-3"}`}>

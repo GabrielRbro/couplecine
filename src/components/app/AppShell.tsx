@@ -2,7 +2,7 @@ import { Link, useNavigate, useRouterState } from "@tanstack/react-router";
 import { useEffect, useState, type MouseEvent, type ReactNode } from "react";
 import { Clapperboard, Dices, Film, Heart, Home, Popcorn, X } from "lucide-react";
 import { useSpace } from "@/lib/space";
-import { closeOverlaysThen, useOverlayHistory } from "@/lib/overlay";
+import { closeOverlaysThen, useOverlayHistory, useScrollKeyboardDismiss } from "@/lib/overlay";
 import { Button } from "@/components/ui/button";
 import { HomeSkeleton } from "./ui";
 
@@ -38,6 +38,7 @@ export function AppShell({
   skeleton?: ReactNode;
   fullscreen?: boolean;
 }) {
+  useScrollKeyboardDismiss();
   return (
     <div
       className="mx-auto min-h-screen min-h-[100dvh] max-w-md"
