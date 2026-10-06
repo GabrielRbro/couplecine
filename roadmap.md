@@ -13,3 +13,4 @@ Concluído: Lotes 1–4, 5A–5D, Rodada 6, MCP.
 - [ ] P8 Sorteio animação de embaralhar
 - [ ] P9 Gemini configurável (owner), rate guard atômico, perfil Descobrir, race da busca
 - [ ] P10 a11y/emoji/logs
+- [ ] Follow-up: Gemini conectado (status/test/save/remove owner), perfil Descobrir rico, Add/Settings voltar, race busca, convite 3º membro, logs de cache, validação banco
