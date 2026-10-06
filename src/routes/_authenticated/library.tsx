@@ -152,10 +152,21 @@ function LibraryPage() {
               <PosterGridSkeleton />
             </div>
           )}
-          <div className="mt-5 grid grid-cols-2 gap-x-3 gap-y-5">
-            {list.map((w) => (
-              <MediaCard key={w.id} work={w} space={space} />
-            ))}
+          <div className="mt-5 grid grid-cols-2 gap-3">
+            <AnimatePresence initial={false} mode="popLayout">
+              {list.map((w) => (
+                <motion.div
+                  key={w.id}
+                  layout={!reduce}
+                  initial={reduce ? false : { opacity: 0, scale: 0.94 }}
+                  animate={{ opacity: 1, scale: 1 }}
+                  exit={reduce ? { opacity: 0 } : { opacity: 0, scale: 0.94 }}
+                  transition={{ type: "spring", stiffness: 420, damping: 36 }}
+                >
+                  <MediaCard work={w} space={space} />
+                </motion.div>
+              ))}
+            </AnimatePresence>
           </div>
           {!isLoading && list.length === 0 && (
             <EmptyState
