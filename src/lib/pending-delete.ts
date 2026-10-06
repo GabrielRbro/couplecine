@@ -1,3 +1,4 @@
+import { useSyncExternalStore } from "react";
 import type { QueryClient } from "@tanstack/react-query";
 import { toast } from "sonner";
 import { supabase } from "@/integrations/supabase/client";
@@ -8,6 +9,13 @@ import { supabase } from "@/integrations/supabase/client";
  */
 const UNDO_MS = 6000;
 const pending = new Map<string, number>();
+const deleted = new Set<string>();
+const listeners = new Set<() => void>();
+const emit = () => listeners.forEach((fn) => fn());
+export function useWorkDeletion(id: string) {
+  return useSyncExternalStore((fn) => { listeners.add(fn); return () => { listeners.delete(fn); }; },
+    () => pending.has(id) ? "pending" : deleted.has(id) ? "deleted" : "active", () => "active");
+}
 
 export function scheduleWorkDelete(qc: QueryClient, workId: string, title: string) {
   if (pending.has(workId)) return;
@@ -16,17 +24,21 @@ export function scheduleWorkDelete(qc: QueryClient, workId: string, title: strin
     Array.isArray(old) ? old.filter((w: { id: string }) => w.id !== workId) : old,
   );
   const timer = window.setTimeout(async () => {
-    pending.delete(workId);
     const { error } = await supabase.from("works").delete().eq("id", workId);
+    pending.delete(workId);
     if (error) {
+      emit();
       prev.forEach(([k, v]) => qc.setQueryData(k, v));
       toast.error(`Não foi possível excluir "${title}".`);
       return;
     }
+    deleted.add(workId);
+    emit();
     qc.removeQueries({ queryKey: ["work", workId] });
     qc.invalidateQueries({ queryKey: ["library"] });
   }, UNDO_MS);
   pending.set(workId, timer);
+  emit();
   toast(`"${title}" excluída`, {
     duration: UNDO_MS,
     action: {
@@ -35,6 +47,7 @@ export function scheduleWorkDelete(qc: QueryClient, workId: string, title: strin
         const t = pending.get(workId);
         if (t) window.clearTimeout(t);
         pending.delete(workId);
+        emit();
         prev.forEach(([k, v]) => qc.setQueryData(k, v));
       },
     },

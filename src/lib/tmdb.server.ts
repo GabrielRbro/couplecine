@@ -113,6 +113,8 @@ export const DETAILS_CACHE_VERSION = 2;
 
 export type TmdbDetails = {
   v?: number;
+  logoPath?: string | null;
+  logoChecked?: boolean;
   mediaType: "movie" | "tv";
   tmdbId: number;
   title: string;
@@ -140,7 +142,8 @@ export async function fetchDetails(
 ): Promise<TmdbDetails> {
   // Series use aggregate_credits (whole run); movies keep regular credits.
   const data = await call(`/${mediaType}/${tmdbId}`, {
-    append_to_response: mediaType === "tv" ? "aggregate_credits,credits" : "credits",
+    append_to_response: mediaType === "tv" ? "aggregate_credits,credits,images" : "credits,images",
+    include_image_language: "pt,en,null",
   });
   const credits = (data["credits"] as Json | undefined) ?? {};
   const agg = (data["aggregate_credits"] as Json | undefined) ?? {};
@@ -171,6 +174,8 @@ export async function fetchDetails(
 
   return {
     v: DETAILS_CACHE_VERSION,
+    logoPath: chooseLogo(data["images"] as Json | undefined),
+    logoChecked: true,
     mediaType,
     tmdbId,
     title: String(data[mediaType === "tv" ? "name" : "title"] ?? "Sem título"),
@@ -308,4 +313,15 @@ export async function findTitle(guess: {
     if (exact) return exact;
   }
   return items[0]!;
+}
+
+function chooseLogo(images: Json | undefined): string | null {
+  const logos = Array.isArray(images?.["logos"]) ? images["logos"] as Json[] : [];
+  const rank = (lang: unknown) => lang === "pt" || lang === "pt-BR" ? 0 : lang === "en" ? 1 : lang == null ? 2 : 9;
+  const logo = logos.filter((l) => rank(l["iso_639_1"]) < 9 && Number(l["aspect_ratio"]) > 1 && String(l["file_path"]).endsWith(".png"))
+    .sort((a, b) => rank(a["iso_639_1"]) - rank(b["iso_639_1"]) || Number(b["vote_average"] ?? 0) - Number(a["vote_average"] ?? 0))[0];
+  return logo ? str(logo["file_path"]) : null;
+}
+export async function fetchLogo(mediaType: "movie" | "tv", id: number) {
+  return chooseLogo(await call(`/${mediaType}/${id}/images`, { include_image_language: "pt,en,null" }));
 }

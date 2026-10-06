@@ -18,6 +18,7 @@ Concluído: Lotes 1–4, 5A–5D, Rodada 6, MCP.
 - [x] PWA instalável (manifest, ícones, SW só estáticos, aviso de atualização, Instalar em Configurações)
 
 ## Pendente
+- [ ] Rodada 8: polimento focado aprovado e validação móvel, preservando dados e áreas fora do escopo
 - [ ] Consentimento duplo do Match e Match ativo com 2 membros (bloqueado: precisa da conta real do parceiro)
 - [ ] Teste real do Gemini (bloqueado: nenhuma chave configurada)
 - [ ] Tela de Importações (feature futura)

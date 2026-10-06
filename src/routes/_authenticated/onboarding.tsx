@@ -10,6 +10,10 @@ export const Route = createFileRoute("/_authenticated/onboarding")({
     meta: [
       { title: "Criar espaço — AppCinema" },
       { name: "description", content: "Crie ou entre no espaço do casal." },
+      { property: "og:title", content: "Criar espaço — AppCinema" },
+      { property: "og:description", content: "Crie ou entre no espaço do casal." },
+      { property: "og:type", content: "website" },
+      { name: "twitter:card", content: "summary" },
     ],
   }),
   component: Onboarding,

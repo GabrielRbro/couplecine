@@ -23,7 +23,7 @@ import {
 } from "@/lib/format";
 import { firstName, useSpace, type LibraryWork, type SpaceInfo } from "@/lib/space";
 import { useSharedStyle } from "@/lib/shared-transition";
-import { scheduleWorkDelete } from "@/lib/pending-delete";
+import { scheduleWorkDelete, useWorkDeletion } from "@/lib/pending-delete";
 
 function BackOverlay() {
   const back = useBack("/library");
@@ -43,6 +43,10 @@ export const Route = createFileRoute("/_authenticated/work/$id")({
     meta: [
       { title: "Detalhes — AppCinema" },
       { name: "description", content: "Detalhes, reações e notas do casal." },
+      { property: "og:title", content: "Detalhes — AppCinema" },
+      { property: "og:description", content: "Detalhes, reações e notas do casal." },
+      { property: "og:type", content: "website" },
+      { name: "twitter:card", content: "summary" },
     ],
   }),
   // Primes the work query so the page (and its shared poster) renders with data on arrival.
@@ -120,6 +124,7 @@ function WorkPage() {
     staleTime: 3600_000,
   });
   const qc = useQueryClient();
+  const deletion = useWorkDeletion(id);
   const sharedBackdrop = useSharedStyle(id, "backdrop");
   const sharedPoster = useSharedStyle(id, "poster");
   const refresh = () => {
@@ -127,6 +132,7 @@ function WorkPage() {
     qc.invalidateQueries({ queryKey: ["library"] });
   };
 
+  if (deletion !== "active") return <div className="p-6"><BackOverlay /><p className="mt-12 text-sm text-muted-foreground">{deletion === "pending" ? "Exclusão pendente · você ainda pode desfazer." : "Esta obra foi removida da biblioteca."}</p></div>;
   if (isLoading || !space) return <DetailSkeleton />;
   if (error || !data)
     return (
@@ -166,7 +172,7 @@ function WorkPage() {
         <BackOverlay />
       </div>
       <div className="relative -mt-28 flex gap-4 px-4">
-        <div className="w-28 shrink-0 shadow-2xl" style={sharedPoster}>
+        <div className="relative z-10 w-28 shrink-0 shadow-2xl" style={sharedBackdrop.viewTransitionName ? { viewTransitionName: "detail-poster" } : sharedPoster}>
           <Poster path={work.poster_path} title={work.title} />
         </div>
         <div className="min-w-0 self-end">
@@ -195,17 +201,8 @@ function WorkPage() {
         </div>
       </div>
 
+      {isTv && (data.state || data.events.length > 0) && <div className="px-4 pt-3"><SeriesProgressStrip space={space} workId={id} state={data.state} events={data.events} seasons={m?.seasons ?? []} onChange={refresh} /></div>}
       <div className="space-y-6 px-4 pt-5">
-        {isTv && (
-          <SeriesProgressStrip
-            space={space}
-            workId={id}
-            state={data.state}
-            events={data.events}
-            seasons={m?.seasons ?? []}
-            onChange={refresh}
-          />
-        )}
         <button
           disabled
           aria-label="Assistir na TV, não configurado"
@@ -447,7 +444,7 @@ function Comparison({
         initial={myScore ? Number(myScore.score) : null}
         saving={saving}
         onClose={() => setEditing(null)}
-        onSave={(s) => setScore(s)}
+        onSave={setScore}
         onRemove={myScore ? () => setScore(null) : undefined}
       />
     </section>
@@ -630,7 +627,7 @@ function SeriesProgressStrip({
         value={state?.status ?? ""}
         onChange={(e) => writeState(e.target.value)}
         aria-label="Status da série"
-        className="min-h-11 max-w-[46%] rounded-xl border border-border bg-card px-2 text-xs"
+        className="min-h-11 max-w-[43%] rounded-full border border-border bg-transparent px-2 text-[11px]"
       >
         {!state && <option value="">Não iniciada</option>}
         {Object.entries(SERIES_STATUS_LABEL).map(([k, v]) => (
@@ -677,8 +674,8 @@ function SeriesBlock({
   // Image priority (no invented sources): season poster → TMDB still → series artwork.
   const epArt = (ep: Episode) => {
     const poster = seasonPoster(ep.seasonNumber);
-    if (poster) return { kind: "poster" as const, path: poster };
     if (ep.stillPath) return { kind: "still" as const, path: ep.stillPath };
+    if (poster) return { kind: "poster" as const, path: poster };
     return { kind: "series" as const, path: fallbackImage };
   };
 
@@ -766,7 +763,7 @@ function SeriesBlock({
   const Art = ({ ep, big }: { ep: Episode; big?: boolean }) => {
     const a = epArt(ep);
     const src = tmdbImage(a.path, a.kind === "poster" ? "w342" : big ? "w780" : "w300");
-    if (!src) return null;
+    if (!src) return <div className="match-stack-back" />;
     if (a.kind === "poster")
       return (
         <div className="relative flex h-full w-full items-center justify-center overflow-hidden">
@@ -774,7 +771,8 @@ function SeriesBlock({
           <img src={src} alt="" loading="lazy" className="relative h-[88%] rounded-md object-contain shadow-lg" />
         </div>
       );
-    return <img src={src} alt="" loading="lazy" className="h-full w-full object-cover" />;
+    const mini = tmdbImage(seasonPoster(ep.seasonNumber), "w185");
+    return <div className="relative h-full w-full"><img src={src} alt="" loading="lazy" className="h-full w-full object-cover" />{mini && <img src={mini} alt="" className="absolute bottom-1.5 right-1.5 h-[68%] aspect-[2/3] rounded-md border border-border object-cover shadow-lg" />}</div>;
   };
 
   return (
@@ -786,7 +784,7 @@ function SeriesBlock({
             {seasons.map((s) => (
               <button
                 key={s.seasonNumber}
-                onClick={() => setSeason(s.seasonNumber)}
+                onClick={() => { if (activeSeason !== s.seasonNumber) setSeason(s.seasonNumber); }}
                 className={`pressable min-h-11 shrink-0 rounded-full px-4 text-xs font-medium ${activeSeason === s.seasonNumber ? "bg-primary text-primary-foreground" : "border border-border text-muted-foreground"}`}
               >
                 T{s.seasonNumber}
@@ -908,15 +906,20 @@ function IndicationsBlock({
   const navigate = useNavigate();
   const qc = useQueryClient();
   const [confirming, setConfirming] = useState(false);
+  const [removing, setRemoving] = useState(false);
   const mine = indications.find((i) => i.indicated_by === space.userId);
   const nameOf = (id: string) =>
     id === space.userId ? "Você" : firstName(space.partner?.display_name);
 
   async function removeMine() {
-    if (!mine) return;
+    if (!mine || removing) return;
+    setRemoving(true);
     const { error } = await supabase.from("indications").delete().eq("id", mine.id);
+    setRemoving(false);
     if (error) toast.error("Não foi possível remover.");
     else {
+      qc.setQueryData(["work", workId], (old: Awaited<ReturnType<ReturnType<typeof workQuery>["queryFn"]>> | undefined) => old && ({ ...old, indications: old.indications.filter((i) => i.id !== mine.id) }));
+      qc.setQueriesData<LibraryWork[]>({ queryKey: ["library"] }, (old) => old?.map((w) => w.id === workId ? { ...w, indications: w.indications.filter((i) => i.indicated_by !== space.userId) } : w));
       toast.success("Sua indicação foi removida");
       onChange();
     }

@@ -24,6 +24,8 @@ export const Route = createFileRoute("/auth")({
       },
       { property: "og:title", content: "Entrar — AppCinema" },
       { property: "og:description", content: "A biblioteca privada de filmes e séries do casal." },
+      { property: "og:type", content: "website" },
+      { name: "twitter:card", content: "summary" },
     ],
   }),
   component: AuthPage,

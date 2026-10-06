@@ -79,20 +79,31 @@ export function useOverlayHistory(open: boolean, onClose: () => void) {
 
 /** Locks page scroll while any overlay that requested it is open. */
 let locks = 0;
-let saved = "";
+let restore: (() => void) | null = null;
 export function useScrollLock(active: boolean) {
   useEffect(() => {
     if (!active || typeof document === "undefined") return;
     if (locks++ === 0) {
-      saved = document.documentElement.style.overflow;
-      document.documentElement.style.overflow = "hidden";
-      document.body.style.overflow = "hidden";
+      const body = document.body;
+      const y = window.scrollY;
+      const x = window.scrollX;
+      const saved = { position: body.style.position, top: body.style.top, left: body.style.left,
+        width: body.style.width, overflow: body.style.overflow };
+      body.style.position = "fixed";
+      body.style.top = `-${y}px`;
+      body.style.left = `-${x}px`;
+      body.style.width = "100%";
+      body.style.overflow = "hidden";
+      document.documentElement.dataset["overlayOpen"] = "true";
+      restore = () => {
+        Object.assign(body.style, saved);
+        delete document.documentElement.dataset["overlayOpen"];
+        window.scrollTo({ left: x, top: y, behavior: "instant" });
+      };
     }
     return () => {
-      if (--locks === 0) {
-        document.documentElement.style.overflow = saved;
-        document.body.style.overflow = "";
-      }
+      locks = Math.max(0, locks - 1);
+      if (locks === 0) { restore?.(); restore = null; }
     };
   }, [active]);
 }

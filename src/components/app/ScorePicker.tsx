@@ -1,5 +1,6 @@
 import { useEffect, useState } from "react";
-import { Minus, Plus } from "lucide-react";
+import { Check, Minus, Plus, Star, ThumbsDown } from "lucide-react";
+import { Button } from "@/components/ui/button";
 import { AnimatedSheet } from "./AnimatedSheet";
 import { formatScore } from "@/lib/format";
 
@@ -24,7 +25,7 @@ export function ScorePicker({
   initial: number | null;
   saving?: boolean;
   onClose: () => void;
-  onSave: (score: number) => void;
+  onSave: (score: number) => void | Promise<void>;
   onRemove?: (() => void) | undefined;
 }) {
   return (
@@ -58,32 +59,42 @@ export function ScoreForm({
   title: string;
   initial: number | null;
   saving: boolean;
-  onSave: (score: number) => void;
+  onSave: (score: number) => void | Promise<void>;
   onRemove?: (() => void) | undefined;
   saveLabel?: string;
 }) {
-  const [value, setValue] = useState<number>(initial ?? 7);
-  const [text, setText] = useState(formatScore(initial ?? 7));
+  const [value, setValue] = useState<number>(initial ?? 5);
+  const [text, setText] = useState(formatScore(initial ?? 5));
   useEffect(() => setText(formatScore(value)), [value]);
+  const [feedback, setFeedback] = useState<number | null>(null);
   const typed = parseScore(text);
+  const confirm = async () => {
+    if (saving || feedback !== null || typed === null) return;
+    setFeedback(value);
+    await new Promise((resolve) => window.setTimeout(resolve, window.matchMedia("(prefers-reduced-motion: reduce)").matches ? 1 : 220));
+    try { await onSave(value); } finally { setFeedback(null); }
+  };
   const set = (n: number) => setValue(Math.min(10, Math.max(0, Math.round(n * 2) / 2)));
   return (
-    <div>
+    <div className="relative">
+      {feedback !== null && <div role="status" className={`score-feedback absolute inset-0 z-10 flex items-center justify-center rounded-xl bg-card/95 ${feedback <= 2 ? "text-destructive" : "text-primary"}`}>
+        {feedback <= 2 ? <ThumbsDown className="h-9 w-9" /> : feedback >= 9 ? <Star className="h-9 w-9" /> : <Check className="h-9 w-9" />}
+        <span className="sr-only">Nota confirmada · {formatScore(feedback)}</span>
+      </div>}
       <h2 id="score-title" className="line-clamp-1 text-lg font-semibold">
         {title}
       </h2>
       <p className="mt-0.5 text-xs text-muted-foreground">Nota de 0 a 10, de meio em meio ponto.</p>
       <div className="mt-5 flex items-center justify-center gap-4">
-        <button
+        <Button variant="ghost"
           type="button"
           aria-label="Diminuir meio ponto"
           onClick={() => set(value - 0.5)}
           className="pressable flex h-12 w-12 items-center justify-center rounded-full border border-border"
         >
           <Minus className="h-5 w-5" />
-        </button>
+        </Button>
         <input
-          data-autofocus
           inputMode="decimal"
           aria-label="Nota"
           value={text}
@@ -95,14 +106,14 @@ export function ScoreForm({
           onBlur={() => setText(formatScore(value))}
           className={`w-24 rounded-2xl border bg-background py-2 text-center font-display text-4xl font-semibold outline-none focus:border-primary ${typed === null ? "border-destructive" : "border-border"}`}
         />
-        <button
+        <Button variant="ghost"
           type="button"
           aria-label="Aumentar meio ponto"
           onClick={() => set(value + 0.5)}
           className="pressable flex h-12 w-12 items-center justify-center rounded-full border border-border"
         >
           <Plus className="h-5 w-5" />
-        </button>
+        </Button>
       </div>
       {typed === null && (
         <p className="mt-1 text-center text-xs text-destructive">Use um número de 0 a 10.</p>
@@ -124,23 +135,23 @@ export function ScoreForm({
       </div>
       <div className="mt-5 flex gap-2">
         {onRemove && (
-          <button
+          <Button variant="ghost"
             type="button"
             disabled={saving}
             onClick={onRemove}
             className="pressable min-h-12 rounded-xl border border-border px-4 text-sm text-muted-foreground disabled:opacity-50"
           >
             Remover
-          </button>
+          </Button>
         )}
-        <button
+        <Button variant="ghost"
           type="button"
-          disabled={saving || typed === null}
-          onClick={() => onSave(value)}
+          disabled={saving || feedback !== null || typed === null}
+          onClick={confirm}
           className="pressable min-h-12 flex-1 rounded-xl bg-primary text-sm font-semibold text-primary-foreground disabled:opacity-50"
         >
           {saving ? "Salvando…" : `${saveLabel} · ${formatScore(value)}`}
-        </button>
+        </Button>
       </div>
     </div>
   );

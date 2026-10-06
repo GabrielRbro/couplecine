@@ -3,6 +3,7 @@ import { useEffect, useState, type MouseEvent, type ReactNode } from "react";
 import { Clapperboard, Dices, Film, Heart, Home, Popcorn, X } from "lucide-react";
 import { useSpace } from "@/lib/space";
 import { closeOverlaysThen, useOverlayHistory } from "@/lib/overlay";
+import { Button } from "@/components/ui/button";
 import { HomeSkeleton } from "./ui";
 
 function PageGate({ children, skeleton }: { children: ReactNode; skeleton?: ReactNode }) {
@@ -53,8 +54,8 @@ export function AppShell({
 // Positions relative to the central button; stagger is applied via transition-delay.
 const RADIAL = [
   { to: "/watch/gallery" as const, label: "Galeria", icon: Film, x: -76, y: -22 },
-  { to: "/watch/dice" as const, label: "Sortear", icon: Dices, x: 0, y: -78 },
-  { to: "/match" as const, label: "Match", icon: Heart, x: 76, y: -22 },
+  { to: "/match" as const, label: "Match", icon: Heart, x: 0, y: -78 },
+  { to: "/watch/dice" as const, label: "Sortear", icon: Dices, x: 76, y: -22 },
 ];
 
 export function BottomNav() {
@@ -73,26 +74,31 @@ export function BottomNav() {
   }, [open]);
 
   const go = (event: MouseEvent<HTMLAnchorElement>, to: Dest) => {
+    if (path === to) {
+      event.preventDefault();
+      if (open) closeOverlaysThen(() => {});
+      return;
+    }
     if (!open) return;
     event.preventDefault();
     closeOverlaysThen(() => navigate({ to }));
   };
 
   const tab = (active: boolean) =>
-    `pressable flex flex-1 flex-col items-center gap-1 py-2 text-[11px] font-medium ${active ? "text-primary" : "text-muted-foreground"}`;
+    `nav-tab flex flex-1 flex-col items-center gap-1 py-2 text-[11px] font-medium ${active ? "text-primary" : "text-muted-foreground"}`;
   return (
     <>
-      <button
+      <Button variant="ghost"
         aria-label="Fechar menu"
         tabIndex={open ? 0 : -1}
-        className={`fixed inset-0 z-40 bg-background/80 backdrop-blur-sm transition-opacity duration-150 ${open ? "opacity-100" : "pointer-events-none opacity-0"}`}
+        className={`fixed inset-0 z-40 h-auto w-auto rounded-none p-0 bg-background/80 hover:bg-background/80 backdrop-blur-sm transition-opacity duration-150 ${open ? "opacity-100" : "pointer-events-none opacity-0"}`}
         onClick={() => setOpen(false)}
       />
       <nav
         style={{ viewTransitionName: "bottom-nav" }}
         className="fixed inset-x-0 bottom-0 z-50 mx-auto max-w-md px-4 pb-[max(env(safe-area-inset-bottom),12px)]"
       >
-        <div className="relative flex items-end rounded-2xl border border-border bg-card/95 px-2 backdrop-blur">
+        <div className="relative flex items-end rounded-2xl border border-border nav-glass px-2">
           <Link to="/" className={tab(path === "/")} onClick={(e) => go(e, "/")}>
             <Home className="h-5 w-5" /> Início
           </Link>
@@ -113,17 +119,17 @@ export function BottomNav() {
                 }}
                 className={`absolute bottom-6 z-10 flex flex-col items-center gap-1 transition-[transform,opacity] duration-200 ease-[cubic-bezier(0.22,1,0.36,1)] ${open ? "opacity-100" : "opacity-0"}`}
               >
-                <span className="pressable flex h-12 w-12 items-center justify-center rounded-full border border-border bg-secondary text-foreground">
+                <span className={`pressable flex h-12 w-12 items-center justify-center rounded-full border border-border ${item.to === "/match" ? "bg-primary text-primary-foreground shadow-lg" : "bg-secondary text-foreground"}`}>
                   <item.icon className="h-5 w-5" />
                 </span>
                 <span className="text-[11px] text-foreground">{item.label}</span>
               </Link>
             ))}
-            <button
+            <Button variant="ghost"
               aria-label={open ? "Fechar" : "Assistir"}
               aria-expanded={open}
               onClick={() => setOpen((v) => !v)}
-              className="pressable -mt-7 mb-2 flex flex-col items-center gap-1"
+              className="-mt-7 mb-2 flex h-auto flex-col items-center gap-1 p-0 hover:bg-transparent"
             >
               <span className="relative flex h-14 w-14 items-center justify-center rounded-full border-4 border-background bg-primary text-primary-foreground shadow-lg">
                 <Popcorn
@@ -135,7 +141,7 @@ export function BottomNav() {
                 />
               </span>
               <span className="text-[11px] font-medium text-foreground">Assistir</span>
-            </button>
+            </Button>
           </div>
           <Link
             to="/library"

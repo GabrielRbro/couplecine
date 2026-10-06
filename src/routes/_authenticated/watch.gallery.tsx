@@ -1,8 +1,11 @@
 import { Link, createFileRoute } from "@tanstack/react-router";
-import { useMemo, useRef, useState } from "react";
+import { useMemo, useRef, useState, useEffect } from "react";
 import { z } from "zod";
 import { useNavigate } from "@tanstack/react-router";
 import { markShared } from "@/lib/shared-transition";
+import { useQuery } from "@tanstack/react-query";
+import { useServerFn } from "@tanstack/react-start";
+import { getGalleryLogos } from "@/lib/catalog.functions";
 import { SlidersHorizontal } from "lucide-react";
 import { AnimatePresence, motion, useReducedMotion } from "motion/react";
 import { AnimatedSheet } from "@/components/app/AnimatedSheet";
@@ -24,6 +27,10 @@ export const Route = createFileRoute("/_authenticated/watch/gallery")({
     meta: [
       { title: "Galeria — AppCinema" },
       { name: "description", content: "Galeria de escolha entre as indicações do casal." },
+      { property: "og:title", content: "Galeria — AppCinema" },
+      { property: "og:description", content: "Escolham um filme ou série entre as indicações do casal." },
+      { property: "og:type", content: "website" },
+      { name: "twitter:card", content: "summary" },
     ],
   }),
   // Filters live in the URL so opening a work and coming back restores them.
@@ -41,12 +48,18 @@ export const Route = createFileRoute("/_authenticated/watch/gallery")({
 });
 
 /** Cinematic choice card: horizontal backdrop with only what matters to decide now. */
-function GalleryCard({ work, space }: { work: LibraryWork; space: SpaceInfo }) {
+function GalleryCard({ work, space, requestLogo, logo }: { work: LibraryWork; space: SpaceInfo; requestLogo: (id: string) => void; logo?: string | null }) {
   const mine = work.interests.find((i) => i.user_id === space.userId);
   const theirs = space.partner
     ? work.interests.find((i) => i.user_id === space.partner!.id)
     : undefined;
   const art = useRef<HTMLDivElement>(null);
+  useEffect(() => {
+    const el = art.current; if (!el) return;
+    const observer = new IntersectionObserver(([entry]) => { if (entry?.isIntersecting) { requestLogo(work.id); observer.disconnect(); } }, { rootMargin: "150px" });
+    observer.observe(el); return () => observer.disconnect();
+  }, [work.id, requestLogo]);
+  const [logoFailed, setLogoFailed] = useState(false);
   const backdrop = tmdbImage(work.backdrop_path, "w780");
   const poster = tmdbImage(work.poster_path, "w342");
   const meta = [
@@ -62,7 +75,7 @@ function GalleryCard({ work, space }: { work: LibraryWork; space: SpaceInfo }) {
       onClick={() => markShared(art.current, work.id, work.backdrop_path ? "backdrop" : "poster")}
       className="pressable block rounded-2xl focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-primary"
     >
-      <div ref={art} className="relative aspect-[16/10] overflow-hidden rounded-3xl bg-card shadow-[0_18px_40px_-24px_rgb(0_0_0/0.8)]">
+      <div ref={art} className="relative aspect-[16/10] overflow-hidden rounded-3xl bg-card art-edge">
         {backdrop ? (
           <img
             src={backdrop}
@@ -91,9 +104,7 @@ function GalleryCard({ work, space }: { work: LibraryWork; space: SpaceInfo }) {
         <div className="pointer-events-none absolute inset-0 bg-gradient-to-t from-background via-background/55 to-transparent" />
         <div className="absolute inset-x-0 bottom-0 flex items-end justify-between gap-3 p-4">
           <div className="min-w-0">
-            <p className="line-clamp-2 font-display text-xl font-semibold leading-tight">
-              {work.title}
-            </p>
+            {logo && !logoFailed ? <img src={tmdbImage(logo, "w500") ?? ""} alt={work.title} onError={() => setLogoFailed(true)} className="mb-2 max-h-16 max-w-[220px] w-auto object-contain object-left drop-shadow-md" /> : <p className="line-clamp-2 font-display text-xl font-semibold leading-tight">{work.title}</p>}
             <p className="mt-1 text-xs text-foreground/70">{meta.join(" · ")}</p>
           </div>
           <div className="emoji flex shrink-0 items-center gap-1.5 rounded-full bg-background/50 px-2.5 py-1 text-sm backdrop-blur">
@@ -117,10 +128,21 @@ function GalleryPage() {
   const { data: space } = useSpace();
   const { data: works = [] } = useLibrary(space?.spaceId);
   const reduce = useReducedMotion();
+  const [visibleIds, setVisibleIds] = useState<string[]>([]);
+  const [logos, setLogos] = useState<Record<string, string | null>>({});
+  const fetchLogos = useServerFn(getGalleryLogos);
+  const requestLogo = useMemo(() => (id: string) => setVisibleIds((old) => old.includes(id) ? old : [...old, id]), []);
+  const batch = visibleIds.filter((id) => !(id in logos)).slice(0, 6);
+  const logoQuery = useQuery({ queryKey: ["gallery-logos", batch.join(",")], enabled: batch.length > 0, staleTime: 3600_000,
+    queryFn: () => fetchLogos({ data: { ids: batch } }) });
+  useEffect(() => { if (logoQuery.data) setLogos((old) => ({ ...old, ...logoQuery.data })); }, [logoQuery.data]);
   const { kind, short, genre, both: bothLike } = Route.useSearch();
   const nav = useNavigate({ from: "/watch/gallery" });
-  const set = (patch: Partial<{ kind: "all" | "movie" | "tv"; short: boolean; genre: string; both: boolean }>) =>
-    nav({ search: (p) => ({ ...p, ...patch }), replace: true, viewTransition: false });
+  const set = (patch: Partial<{ kind: "all" | "movie" | "tv"; short: boolean; genre: string; both: boolean }>) => {
+    const current = { kind, short, genre, both: bothLike };
+    if (Object.entries(patch).every(([k, v]) => current[k as keyof typeof current] === v)) return;
+    nav({ to: ".", search: (p) => ({ ...p, ...patch }), replace: true, viewTransition: false });
+  };
   const setKind = (k: "all" | "movie" | "tv") => set({ kind: k });
   const setShort = (f: (v: boolean) => boolean) => set({ short: f(short) });
   const setGenre = (g: string) => set({ genre: g });
@@ -181,7 +203,7 @@ function GalleryPage() {
               exit={reduce ? { opacity: 0 } : { opacity: 0, scale: 0.97 }}
               transition={{ type: "spring", stiffness: 380, damping: 34 }}
             >
-              <GalleryCard work={w} space={space} />
+              <GalleryCard work={w} space={space} requestLogo={requestLogo} logo={logos[w.id] ?? null} />
             </motion.div>
           ))}
         </AnimatePresence>

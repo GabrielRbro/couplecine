@@ -16,6 +16,10 @@ export const Route = createFileRoute("/_authenticated/settings")({
     meta: [
       { title: "Configurações — AppCinema" },
       { name: "description", content: "Espaço do casal, convites e integrações." },
+      { property: "og:title", content: "Configurações — AppCinema" },
+      { property: "og:description", content: "Espaço do casal, convites e integrações." },
+      { property: "og:type", content: "website" },
+      { name: "twitter:card", content: "summary" },
     ],
   }),
   component: () => (

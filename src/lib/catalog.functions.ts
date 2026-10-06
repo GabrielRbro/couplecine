@@ -8,6 +8,7 @@ type AuthedClient = SupabaseClient<Database>;
 import {
   discoverFeed,
   fetchDetails,
+  fetchLogo,
   fetchSeason,
   searchMulti,
   DETAILS_CACHE_VERSION,
@@ -505,4 +506,41 @@ export const markSeenBefore = createServerFn({ method: "POST" })
       if (re) throw new Error("Não foi possível salvar a nota.");
     }
     return { workId };
+  });
+
+
+export const getTitlePreview = createServerFn({ method: "POST" })
+  .middleware([requireSupabaseAuth])
+  .inputValidator((d) => z.object({ mediaType: z.enum(["movie", "tv"]), tmdbId: z.number().int().positive(), spaceId: z.string().uuid() }).parse(d))
+  .handler(async ({ data, context }) => {
+    const { data: work, error } = await context.supabase.from("works").select("id").eq("space_id", data.spaceId).eq("media_type", data.mediaType).eq("tmdb_id", data.tmdbId).maybeSingle();
+    if (error) throw new Error("Não foi possível consultar a biblioteca.");
+    try { return { details: await fetchDetails(data.mediaType, data.tmdbId), workId: work?.id ?? null }; }
+    catch (e) { friendly(e); }
+  });
+
+export const getGalleryLogos = createServerFn({ method: "POST" })
+  .middleware([requireSupabaseAuth])
+  .inputValidator((d) => z.object({ ids: z.array(z.string().uuid()).max(6) }).parse(d))
+  .handler(async ({ data, context }) => {
+    const { data: works, error } = await context.supabase.from("works").select("id, media_type, tmdb_id").in("id", data.ids);
+    if (error) throw new Error("Não foi possível carregar as artes.");
+    const { data: caches } = await context.supabase.from("work_metadata_cache").select("work_id, payload, expires_at").in("work_id", data.ids);
+    const result: Record<string, string | null> = {};
+    const queue = [...(works ?? [])];
+    await Promise.all([0, 1].map(async () => {
+      while (queue.length) {
+        const work = queue.shift(); if (!work) break;
+        const cache = caches?.find((c) => c.work_id === work.id);
+        const payload = cache?.payload as TmdbDetails | undefined;
+        if (payload?.logoChecked && cache && new Date(cache.expires_at).getTime() > Date.now()) { result[work.id] = payload.logoPath ?? null; continue; }
+        try {
+          // Keep the entire existing JSON; a cold cache receives complete details, not a partial payload.
+          const next = payload ? { ...payload, logoPath: await fetchLogo(work.media_type, work.tmdb_id), logoChecked: true } : await fetchDetails(work.media_type, work.tmdb_id);
+          result[work.id] = next.logoPath ?? null;
+          await context.supabase.from("work_metadata_cache").upsert({ work_id: work.id, payload: next as never, expires_at: new Date(Date.now() + 7 * 864e5).toISOString() }, { onConflict: "work_id" });
+        } catch { result[work.id] = null; }
+      }
+    }));
+    return result;
   });

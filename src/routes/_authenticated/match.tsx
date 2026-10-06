@@ -6,6 +6,8 @@ import { useEffect, useMemo, useRef, useState } from "react";
 import { AlertTriangle, Dices, Heart, Play, Undo2, X } from "lucide-react";
 import { toast } from "sonner";
 import { AnimatedSheet } from "@/components/app/AnimatedSheet";
+import { MatchSimulator } from "@/components/app/MatchSimulator";
+import { Button } from "@/components/ui/button";
 import { AppShell } from "@/components/app/AppShell";
 import { EmptyState, Poster } from "@/components/app/MediaCard";
 import { Sk } from "@/components/app/ui";
@@ -18,6 +20,10 @@ export const Route = createFileRoute("/_authenticated/match")({
     meta: [
       { title: "Match — AppCinema" },
       { name: "description", content: "Votem em segredo e descubram o que os dois querem ver." },
+      { property: "og:title", content: "Match — AppCinema" },
+      { property: "og:description", content: "Votem em segredo e descubram o que os dois querem ver." },
+      { property: "og:type", content: "website" },
+      { name: "twitter:card", content: "summary" },
     ],
   }),
   // view=result opens the last revealed result without starting a new session.
@@ -40,19 +46,21 @@ function MatchPoster({
   onReady: () => void;
 }) {
   const src = tmdbImage(work.poster_path, "w500");
+  const [failed, setFailed] = useState(false);
   return (
     <div className="relative h-full w-full">
-      {src ? (
+      {src && !failed ? (
         <img
           src={src}
           alt={work.title}
           decoding="async"
-          onLoad={onReady}
-          onError={onReady}
+          loading="eager"
+          onLoad={async (e) => { try { await e.currentTarget.decode(); onReady(); } catch { setFailed(true); onReady(); } }}
+          onError={() => { setFailed(true); onReady(); }}
           className={`aspect-[2/3] w-full rounded-xl object-cover transition-opacity duration-200 ${ready ? "opacity-100" : "opacity-0"}`}
         />
       ) : (
-        <Poster path={null} title={work.title} />
+        <div className="relative aspect-[2/3]"><div className="match-stack-back" /></div>
       )}
       {!ready && <div className="match-stack-back" aria-hidden="true" />}
     </div>
@@ -98,6 +106,7 @@ function MatchPage() {
     },
   });
   const couple = members.data === 2;
+  const [simulating, setSimulating] = useState(false);
   const spaceId = space?.spaceId;
   const [resumedSessionId, setResumedSessionId] = useState<string | null>(null);
   const [confirmingAbandon, setConfirmingAbandon] = useState(false);
@@ -489,6 +498,8 @@ function MatchPage() {
     </AnimatedSheet>
   );
 
+  if (simulating && members.data === 1) return <MatchSimulator works={works} onExit={() => setSimulating(false)} />;
+
   if (view === "result")
     return (
       <div className="px-4 pt-6">
@@ -528,6 +539,7 @@ function MatchPage() {
           >
             Convidar parceiro
           </Link>
+          {members.data === 1 && <Button variant="outline" className="mt-3 min-h-12" onClick={() => setSimulating(true)}>Simular Match · Modo de teste</Button>}
           {last.data && (
             <Link
               to="/match"

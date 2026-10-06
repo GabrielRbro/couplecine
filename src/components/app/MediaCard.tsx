@@ -9,17 +9,20 @@ export function Poster({
   path,
   title,
   className = "",
+  eager = false,
 }: {
   path: string | null;
   title: string;
   className?: string;
+  eager?: boolean;
 }) {
   const src = tmdbImage(path);
   return src ? (
     <img
       src={src}
       alt={title}
-      loading="lazy"
+      loading={eager ? "eager" : "lazy"}
+      decoding="async"
       className={`aspect-[2/3] w-full rounded-xl object-cover ${className}`}
     />
   ) : (
@@ -47,7 +50,7 @@ export function MediaCard({ work, space }: { work: LibraryWork; space: SpaceInfo
       aria-label={work.title}
       className="pressable block"
     >
-      <div ref={art} className="relative overflow-hidden rounded-2xl">
+      <div ref={art} className="relative overflow-hidden rounded-2xl art-edge">
         <Poster path={work.poster_path} title={work.title} className="rounded-2xl" />
         <span className="absolute left-2 top-2 rounded-md bg-background/60 p-1 text-muted-foreground backdrop-blur">
           {work.media_type === "tv" ? <Tv className="h-3 w-3" /> : <Film className="h-3 w-3" />}
