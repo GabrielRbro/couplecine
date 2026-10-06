@@ -26,3 +26,17 @@ export function sharedStyle(id: string, kind: Kind): { viewTransitionName?: stri
 export function clearShared() {
   pending = null;
 }
+
+import { useEffect, useState } from "react";
+export function useSharedStyle(id: string, kind: Kind) {
+  const [style, setStyle] = useState(() => sharedStyle(id, kind));
+  useEffect(() => {
+    if (!style.viewTransitionName) return;
+    const t = window.setTimeout(() => {
+      setStyle({});
+      clearShared();
+    }, 900);
+    return () => window.clearTimeout(t);
+  }, [style.viewTransitionName]);
+  return style;
+}
