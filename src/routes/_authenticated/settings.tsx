@@ -9,6 +9,7 @@ import { supabase } from "@/integrations/supabase/client";
 import { useSpace } from "@/lib/space";
 import { useServerFn } from "@tanstack/react-start";
 import { getAiStatus } from "@/lib/ai.functions";
+import { promptInstall, useInstallState } from "@/lib/pwa";
 
 export const Route = createFileRoute("/_authenticated/settings")({
   head: () => ({
@@ -23,6 +24,32 @@ export const Route = createFileRoute("/_authenticated/settings")({
     </AppShell>
   ),
 });
+
+function AppInstallSection() {
+  const state = useInstallState();
+  return (
+    <section className="flex items-center justify-between gap-3 rounded-2xl border border-border bg-card p-4">
+      <div className="min-w-0">
+        <h2 className="font-semibold">Aplicativo</h2>
+        <p className="mt-0.5 text-xs text-muted-foreground">
+          {state === "installed"
+            ? "AppCinema instalado"
+            : state === "available"
+              ? "Instale na tela inicial do celular."
+              : "Menu do Chrome → Instalar app"}
+        </p>
+      </div>
+      {state === "available" && (
+        <button
+          onClick={() => void promptInstall()}
+          className="pressable min-h-11 shrink-0 rounded-xl bg-primary px-4 text-sm font-semibold text-primary-foreground"
+        >
+          Instalar AppCinema
+        </button>
+      )}
+    </section>
+  );
+}
 
 function SettingsPage() {
   const aiStatus = useServerFn(getAiStatus);
@@ -163,6 +190,8 @@ function SettingsPage() {
         </div>
         <GeminiSettings status={ai.data} onChanged={() => ai.refetch()} />
       </section>
+
+      <AppInstallSection />
 
       {demo.data ? (
         <section className="rounded-2xl border border-dashed border-border p-4">
