@@ -26,3 +26,4 @@
 - Work deletion is scheduled in module scope (`src/lib/pending-delete.ts`) so the undo timer survives route changes; closing the app keeps the work.
 - Episode toggles go through the `set_episode_watched` RPC so the watch event and series state commit together.
 - The Gemini key is stored in `private.app_secrets`, readable only through service-role definer functions; resolution is app key > GEMINI_API_KEY env. AI attempts are reserved atomically via `ai_reserve` on cache miss only.
+- PWA: `pwa.config.ts` (build-only Vite plugin via workbox-build) writes manifest + sw.js precaching only static build assets, no runtime/navigation caching; `src/lib/pwa.ts` is the sole registrar (refuses dev/preview/iframe, `?sw=off`) and prompts "Atualizar" instead of auto-reloading — keeps private data off the cache and never interrupts use.
