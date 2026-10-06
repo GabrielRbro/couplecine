@@ -1,12 +1,13 @@
 import { createFileRoute, Link } from "@tanstack/react-router";
 import { useQuery } from "@tanstack/react-query";
-import { useState } from "react";
+import { useRef, useState } from "react";
 import { Dices, RotateCcw, X } from "lucide-react";
 import { AppShell } from "@/components/app/AppShell";
 import { EmptyState, Poster } from "@/components/app/MediaCard";
 import { FilterPills, ScrollRow, TogglePill } from "@/components/app/ui";
 import { Button } from "@/components/ui/button";
 import { supabase } from "@/integrations/supabase/client";
+import { readyPoster } from "@/lib/image-ready";
 import type { Reaction } from "@/lib/format";
 import {
   isIndicated,
@@ -75,6 +76,8 @@ function DicePage() {
   const [picked, setPicked] = useState<LibraryWork | null>(null);
   const [rolling, setRolling] = useState(false);
   const [flick, setFlick] = useState<{ work: LibraryWork; n: number } | null>(null);
+  const rollLock = useRef(false);
+  const [ready, setReady] = useState<Set<string>>(new Set());
   if (!space) return null;
 
   const pool = works.filter((w) => {
@@ -91,7 +94,9 @@ function DicePage() {
     return weightOf(w, space, includeDislike) > 0;
   });
 
-  const roll = () => {
+  const roll = async () => {
+    if (rollLock.current) return;
+    rollLock.current = true;
     const total = pool.reduce((s, w) => s + weightOf(w, space, includeDislike), 0);
     let r = Math.random() * total;
     let choice = pool[pool.length - 1] ?? null;
@@ -102,30 +107,37 @@ function DicePage() {
         break;
       }
     }
-    if (!choice) return;
+    if (!choice) { rollLock.current = false; return; }
+    setRolling(true);
+    const order = [...pool].sort(() => Math.random() - 0.5).slice(0, 4);
+    const batch = [...new Map([...order, choice].map((w) => [w.id, w])).values()];
+    const decoded = await Promise.all(batch.map(async (w) => [w.id, await readyPoster(w.poster_path)] as const));
+    setReady(new Set(decoded.filter(([, ok]) => ok).map(([id]) => id)));
     // Shuffle: candidates flick past, decelerating, and land on the weighted choice.
     if (window.matchMedia("(prefers-reduced-motion: reduce)").matches || pool.length === 1) {
       setPicked(choice);
+      setRolling(false);
+      rollLock.current = false;
       return;
     }
     setRolling(true);
     setPicked(null);
-    const order = [...pool].sort(() => Math.random() - 0.5).slice(0, 10);
     let i = 0;
     const steps = 11;
     const tick = (delay: number) =>
       window.setTimeout(() => {
         i++;
         if (i < steps) {
-          setFlick({ work: order[i % order.length]!, n: i });
+          setFlick({ work: order[i % order.length] ?? choice, n: i });
           tick(delay * 1.18);
         } else {
           setFlick(null);
           setPicked(choice);
           setRolling(false);
+          rollLock.current = false;
         }
       }, delay);
-    setFlick({ work: order[0]!, n: 0 });
+    setFlick({ work: order[0] ?? choice, n: 0 });
     tick(60);
   };
   const decline = () => {
@@ -206,7 +218,7 @@ function DicePage() {
                     transform: `rotate(${flick.n % 2 ? 3 : -3}deg)`,
                   }}
                 >
-                  <Poster path={flick.work.poster_path} title={flick.work.title} className="shadow-xl" />
+                  {ready.has(flick.work.id) ? <Poster eager path={flick.work.poster_path} title={flick.work.title} className="shadow-xl" /> : <div className="match-stack-back" />}
                 </div>
               </div>
             ) : picked ? (
@@ -218,7 +230,7 @@ function DicePage() {
                   params={{ id: picked.id }}
                   className="match-picked pressable block rounded-xl border border-border bg-card p-2 shadow-sm"
                 >
-                  <Poster path={picked.poster_path} title={picked.title} />
+                  {ready.has(picked.id) ? <Poster eager path={picked.poster_path} title={picked.title} /> : <div className="relative aspect-[2/3]"><div className="match-stack-back" /></div>}
                   <p className="mt-2 text-center font-semibold">{picked.title}</p>
                   <p className="text-center text-xs text-muted-foreground">Toque para ver detalhes</p>
                 </Link>

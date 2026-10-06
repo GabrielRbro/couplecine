@@ -23,6 +23,7 @@ import { Route as DotlovableOauthConsentRouteImport } from './routes/[.]lovable.
 import { Route as AuthenticatedWatchDiceRouteImport } from './routes/_authenticated/watch.dice'
 import { Route as AuthenticatedWatchGalleryRouteImport } from './routes/_authenticated/watch.gallery'
 import { Route as AuthenticatedWorkIdRouteImport } from './routes/_authenticated/work.$id'
+import { Route as AuthenticatedTitleMediaTypeTmdbIdRouteImport } from './routes/_authenticated/title.$mediaType.$tmdbId'
 
 const AuthenticatedRouteRoute = AuthenticatedRouteRouteImport.update({
   id: '/_authenticated',
@@ -95,6 +96,12 @@ const AuthenticatedWorkIdRoute = AuthenticatedWorkIdRouteImport.update({
   path: '/work/$id',
   getParentRoute: () => AuthenticatedRouteRoute,
 } as any)
+const AuthenticatedTitleMediaTypeTmdbIdRoute =
+  AuthenticatedTitleMediaTypeTmdbIdRouteImport.update({
+    id: '/title/$mediaType/$tmdbId',
+    path: '/title/$mediaType/$tmdbId',
+    getParentRoute: () => AuthenticatedRouteRoute,
+  } as any)
 
 export interface FileRoutesByFullPath {
   '/': typeof AuthenticatedIndexRoute
@@ -110,6 +117,7 @@ export interface FileRoutesByFullPath {
   '/watch/dice': typeof AuthenticatedWatchDiceRoute
   '/watch/gallery': typeof AuthenticatedWatchGalleryRoute
   '/work/$id': typeof AuthenticatedWorkIdRoute
+  '/title/$mediaType/$tmdbId': typeof AuthenticatedTitleMediaTypeTmdbIdRoute
 }
 export interface FileRoutesByTo {
   '/auth': typeof AuthRoute
@@ -125,6 +133,7 @@ export interface FileRoutesByTo {
   '/watch/dice': typeof AuthenticatedWatchDiceRoute
   '/watch/gallery': typeof AuthenticatedWatchGalleryRoute
   '/work/$id': typeof AuthenticatedWorkIdRoute
+  '/title/$mediaType/$tmdbId': typeof AuthenticatedTitleMediaTypeTmdbIdRoute
 }
 export interface FileRoutesById {
   __root__: typeof rootRouteImport
@@ -142,6 +151,7 @@ export interface FileRoutesById {
   '/_authenticated/watch/dice': typeof AuthenticatedWatchDiceRoute
   '/_authenticated/watch/gallery': typeof AuthenticatedWatchGalleryRoute
   '/_authenticated/work/$id': typeof AuthenticatedWorkIdRoute
+  '/_authenticated/title/$mediaType/$tmdbId': typeof AuthenticatedTitleMediaTypeTmdbIdRoute
 }
 export interface FileRouteTypes {
   fileRoutesByFullPath: FileRoutesByFullPath
@@ -159,6 +169,7 @@ export interface FileRouteTypes {
     | '/watch/dice'
     | '/watch/gallery'
     | '/work/$id'
+    | '/title/$mediaType/$tmdbId'
   fileRoutesByTo: FileRoutesByTo
   to:
     | '/auth'
@@ -174,6 +185,7 @@ export interface FileRouteTypes {
     | '/watch/dice'
     | '/watch/gallery'
     | '/work/$id'
+    | '/title/$mediaType/$tmdbId'
   id:
     | '__root__'
     | '/_authenticated'
@@ -190,6 +202,7 @@ export interface FileRouteTypes {
     | '/_authenticated/watch/dice'
     | '/_authenticated/watch/gallery'
     | '/_authenticated/work/$id'
+    | '/_authenticated/title/$mediaType/$tmdbId'
   fileRoutesById: FileRoutesById
 }
 export interface RootRouteChildren {
@@ -300,6 +313,13 @@ declare module '@tanstack/react-router' {
       preLoaderRoute: typeof AuthenticatedWorkIdRouteImport
       parentRoute: typeof AuthenticatedRouteRoute
     }
+    '/_authenticated/title/$mediaType/$tmdbId': {
+      id: '/_authenticated/title/$mediaType/$tmdbId'
+      path: '/title/$mediaType/$tmdbId'
+      fullPath: '/title/$mediaType/$tmdbId'
+      preLoaderRoute: typeof AuthenticatedTitleMediaTypeTmdbIdRouteImport
+      parentRoute: typeof AuthenticatedRouteRoute
+    }
   }
 }
 
@@ -313,6 +333,7 @@ interface AuthenticatedRouteRouteChildren {
   AuthenticatedWatchDiceRoute: typeof AuthenticatedWatchDiceRoute
   AuthenticatedWatchGalleryRoute: typeof AuthenticatedWatchGalleryRoute
   AuthenticatedWorkIdRoute: typeof AuthenticatedWorkIdRoute
+  AuthenticatedTitleMediaTypeTmdbIdRoute: typeof AuthenticatedTitleMediaTypeTmdbIdRoute
 }
 
 const AuthenticatedRouteRouteChildren: AuthenticatedRouteRouteChildren = {
@@ -325,6 +346,8 @@ const AuthenticatedRouteRouteChildren: AuthenticatedRouteRouteChildren = {
   AuthenticatedWatchDiceRoute: AuthenticatedWatchDiceRoute,
   AuthenticatedWatchGalleryRoute: AuthenticatedWatchGalleryRoute,
   AuthenticatedWorkIdRoute: AuthenticatedWorkIdRoute,
+  AuthenticatedTitleMediaTypeTmdbIdRoute:
+    AuthenticatedTitleMediaTypeTmdbIdRoute,
 }
 
 const AuthenticatedRouteRouteWithChildren =

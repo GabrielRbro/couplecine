@@ -69,8 +69,9 @@ export function AnimatedSheet({
       if (event.key !== "Tab" || !panel.current) return;
       const items = [...panel.current.querySelectorAll<HTMLElement>(FOCUSABLE)];
       if (!items.length) return;
-      const first = items[0]!;
-      const last = items[items.length - 1]!;
+      const first = items[0];
+      const last = items[items.length - 1];
+       if (!first || !last) return;
       if (event.shiftKey && document.activeElement === first) {
         event.preventDefault();
         last.focus();
@@ -87,7 +88,7 @@ export function AnimatedSheet({
 
   return createPortal(
     <div
-      className={`fixed inset-0 z-[60] flex items-end bg-background/80 transition-opacity duration-200 motion-reduce:transition-none ${visible ? "opacity-100" : "opacity-0"}`}
+      className={`fixed inset-0 z-[200] flex items-end bg-background/90 transition-opacity duration-200 motion-reduce:transition-none ${visible ? "opacity-100" : "opacity-0"}`}
       onClick={() => closeRef.current()}
     >
       <div

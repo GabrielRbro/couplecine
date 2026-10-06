@@ -16,9 +16,9 @@ export function FilterPills<T extends string>({
       {options.map(([id, label]) => (
         <button
           key={id}
-          onClick={() => onChange(id)}
+          onClick={() => { if (id !== value) onChange(id); }}
           aria-pressed={value === id}
-          className={`hit pressable shrink-0 rounded-full px-3.5 py-1.5 text-xs font-medium ${value === id ? "bg-primary text-primary-foreground" : "border border-border text-muted-foreground"}`}
+          className={`hit ${value === id ? "" : "pressable"} shrink-0 rounded-full px-3.5 py-1.5 text-xs font-medium ${value === id ? "bg-primary text-primary-foreground" : "border border-border text-muted-foreground"}`}
         >
           {label}
         </button>

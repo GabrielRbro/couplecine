@@ -8,12 +8,13 @@ let pending: { id: string; kind: Kind; at: number } | null = null;
 
 export function markShared(el: HTMLElement | null, id: string, kind: Kind) {
   if (!el || typeof document === "undefined" || !("startViewTransition" in document)) return;
+  clearShared();
   pending = { id, kind, at: Date.now() };
   el.style.viewTransitionName = `shared-${kind}`;
   // Cancelled or finished: always clear the source name.
   window.setTimeout(() => {
     el.style.viewTransitionName = "";
-  }, 900);
+  }, 500);
 }
 
 /** Destination hero: returns a style only if this exact work/kind was just tapped. */
@@ -35,7 +36,7 @@ export function useSharedStyle(id: string, kind: Kind) {
     const t = window.setTimeout(() => {
       setStyle({});
       clearShared();
-    }, 900);
+    }, 500);
     return () => window.clearTimeout(t);
   }, [style.viewTransitionName]);
   return style;

@@ -14,6 +14,10 @@ export const Route = createFileRoute("/_authenticated/library")({
     meta: [
       { title: "Biblioteca — AppCinema" },
       { name: "description", content: "Indicações e obras assistidas pelo casal." },
+      { property: "og:title", content: "Biblioteca — AppCinema" },
+      { property: "og:description", content: "Indicações e obras assistidas pelo casal." },
+      { property: "og:type", content: "website" },
+      { name: "twitter:card", content: "summary" },
     ],
   }),
   // Tab/filters/search live in the URL so opening a work and going back restores them.
@@ -49,8 +53,11 @@ function LibraryPage() {
   const { tab, kind, sort, q } = Route.useSearch();
   const reduce = useReducedMotion();
   const navigate = useNavigate({ from: "/library" });
-  const set = (patch: Partial<{ tab: Tab; kind: typeof kind; sort: typeof sort; q: string }>) =>
-    navigate({ search: (prev) => ({ ...prev, ...patch }), replace: true, viewTransition: false });
+  const set = (patch: Partial<{ tab: Tab; kind: typeof kind; sort: typeof sort; q: string }>) => {
+    const current = { tab, kind, sort, q };
+    if (Object.entries(patch).every(([k, v]) => current[k as keyof typeof current] === v)) return;
+    navigate({ to: ".", search: (prev) => ({ ...prev, ...patch }), replace: true, viewTransition: false });
+  };
   const setTab = (tab: Tab) => set({ tab });
   const setKind = (kind: "all" | "movie" | "tv") => set({ kind });
   const setSort = (sort: "activity" | "title" | "year") => set({ sort });
@@ -101,7 +108,7 @@ function LibraryPage() {
           <button
             key={id}
             onClick={() => setTab(id)}
-            className={`pressable min-h-11 rounded-lg py-2 font-medium transition-colors ${tab === id ? "bg-secondary text-foreground" : "text-muted-foreground"}`}
+            className={`${tab === id ? "" : "pressable"} min-h-11 rounded-lg py-2 font-medium transition-colors ${tab === id ? "bg-secondary text-foreground" : "text-muted-foreground"}`}
           >
             {label}
           </button>
