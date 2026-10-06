@@ -107,7 +107,7 @@
   body {
     background-color: var(--color-background);
     color: var(--color-foreground);
-    font-family: var(--font-body);
+    font-family: var(--font-body), "Noto Color Emoji", "Apple Color Emoji", "Segoe UI Emoji";
     -webkit-tap-highlight-color: transparent;
   }
   h1, h2, h3, .font-display {
@@ -264,3 +264,12 @@
     animation: none !important;
   }
 }
+
+@utility emoji {
+  font-family: "Noto Color Emoji", "Apple Color Emoji", "Segoe UI Emoji", sans-serif;
+}
+
+/* Only the one tapped element is shared; the nav always paints above transition groups. */
+::view-transition-group(bottom-nav) { z-index: 100; }
+::view-transition-group(shared-poster),
+::view-transition-group(shared-backdrop) { z-index: 50; }

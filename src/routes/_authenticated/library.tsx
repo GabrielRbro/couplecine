@@ -2,6 +2,7 @@ import { createFileRoute, Link, useNavigate } from "@tanstack/react-router";
 import { useMemo } from "react";
 import { z } from "zod";
 import { Plus, Search } from "lucide-react";
+import { AnimatePresence, motion, useReducedMotion } from "motion/react";
 import { AppShell } from "@/components/app/AppShell";
 import { EmptyState, MediaCard } from "@/components/app/MediaCard";
 import { DiscoverTab } from "@/components/app/DiscoverTab";
@@ -46,6 +47,7 @@ function LibraryPage() {
   const { data: space } = useSpace();
   const { data: works = [], isLoading } = useLibrary(space?.spaceId);
   const { tab, kind, sort, q } = Route.useSearch();
+  const reduce = useReducedMotion();
   const navigate = useNavigate({ from: "/library" });
   const set = (patch: Partial<{ tab: Tab; kind: typeof kind; sort: typeof sort; q: string }>) =>
     navigate({ search: (prev) => ({ ...prev, ...patch }), replace: true, viewTransition: false });
