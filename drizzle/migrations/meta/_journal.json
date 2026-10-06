@@ -43,6 +43,13 @@
       "when": 1791208605976,
       "tag": "0005_ai_cache",
       "breakpoints": true
+    },
+    {
+      "idx": 6,
+      "version": "7",
+      "when": 1791247580988,
+      "tag": "0006_round7_stabilization",
+      "breakpoints": true
     }
   ]
 }

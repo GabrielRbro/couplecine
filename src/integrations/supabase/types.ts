@@ -958,6 +958,16 @@ export type Database = {
       }
     }
     Functions: {
+      ai_reserve: {
+        Args: { _feature: string; _limit: number }
+        Returns: boolean
+      }
+      app_secret_delete: { Args: { _name: string }; Returns: undefined }
+      app_secret_get: { Args: { _name: string }; Returns: string }
+      app_secret_set: {
+        Args: { _by: string; _name: string; _value: string }
+        Returns: undefined
+      }
       can_create_space: { Args: never; Returns: boolean }
       demo_cleanup: { Args: { _batch: string }; Returns: number }
       match_abandon: { Args: { _session: string }; Returns: undefined }
@@ -972,6 +982,17 @@ export type Database = {
         Returns: string
       }
       match_undo: { Args: { _session: string }; Returns: string }
+      set_episode_watched: {
+        Args: {
+          _episode: number
+          _next_episode: number
+          _next_season: number
+          _season: number
+          _watched: boolean
+          _work: string
+        }
+        Returns: undefined
+      }
     }
     Enums: {
       interest_reaction: "fire" | "like" | "neutral" | "dislike"
