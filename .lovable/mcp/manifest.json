@@ -1,0 +1,84 @@
+{
+  "version": 1,
+  "sdk_version": "3.0.5",
+  "path": "/mcp",
+  "auth": {
+    "type": "oauth",
+    "issuer": "https://ytehybhoubesrrgklopa.supabase.co/auth/v1",
+    "accepted_audiences": [
+      "authenticated"
+    ]
+  },
+  "mcp": {
+    "server": {
+      "name": "cinema-guide",
+      "version": "0.1.0",
+      "title": "Cinema Guide"
+    },
+    "tools": [
+      {
+        "name": "list_library",
+        "title": "Listar biblioteca",
+        "description": "Lista as obras (filmes e séries) da biblioteca do casal, mais recentes primeiro.",
+        "annotations": {
+          "readOnlyHint": true,
+          "idempotentHint": true,
+          "openWorldHint": false
+        },
+        "inputSchema": {
+          "$schema": "https://json-schema.org/draft/2020-12/schema",
+          "type": "object",
+          "properties": {
+            "media_type": {
+              "description": "Filtrar por filme (movie) ou série (tv).",
+              "type": "string",
+              "enum": [
+                "movie",
+                "tv"
+              ]
+            },
+            "query": {
+              "description": "Trecho do título para filtrar.",
+              "type": "string"
+            },
+            "limit": {
+              "description": "Máximo de obras (padrão 30).",
+              "type": "integer",
+              "minimum": 1,
+              "maximum": 100
+            }
+          },
+          "additionalProperties": false
+        },
+        "outputSchema": null
+      },
+      {
+        "name": "get_work",
+        "title": "Detalhes da obra",
+        "description": "Mostra uma obra da biblioteca com sinopse, reações e notas do casal.",
+        "annotations": {
+          "readOnlyHint": true,
+          "idempotentHint": true,
+          "openWorldHint": false
+        },
+        "inputSchema": {
+          "$schema": "https://json-schema.org/draft/2020-12/schema",
+          "type": "object",
+          "properties": {
+            "id": {
+              "type": "string",
+              "format": "uuid",
+              "pattern": "^([0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[1-8][0-9a-fA-F]{3}-[89abAB][0-9a-fA-F]{3}-[0-9a-fA-F]{12}|00000000-0000-0000-0000-000000000000|ffffffff-ffff-ffff-ffff-ffffffffffff)$",
+              "description": "ID da obra (de list_library)."
+            }
+          },
+          "required": [
+            "id"
+          ],
+          "additionalProperties": false
+        },
+        "outputSchema": null
+      }
+    ]
+  }
+}
