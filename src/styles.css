@@ -332,3 +332,7 @@ html { scrollbar-gutter: stable; }
 .ai-film-1 { animation-delay: -.4s; }.ai-film-2 { animation-delay: -.8s; }.ai-film-3 { animation-delay: -1.2s; }
 @keyframes ai-film-drift { from { transform: translateY(5px) rotate(-4deg); } to { transform: translateY(-5px) rotate(4deg); } }
 @media (prefers-reduced-motion: reduce) { .ai-film-frame { animation: none; } }
+
+::view-transition-group(detail-meta) { z-index: 3; animation: none; }
+::view-transition-old(detail-meta) { display: none; }
+::view-transition-new(detail-meta) { animation: none; mix-blend-mode: normal; }

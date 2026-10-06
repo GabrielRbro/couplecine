@@ -1,8 +1,14 @@
 import { createFileRoute } from "@tanstack/react-router";
 import { AppShell } from "@/components/app/AppShell";
+import { getTitlePreview } from "@/lib/catalog.functions";
 import { WorkDetails } from "@/components/app/WorkDetails";
 export const Route = createFileRoute("/_authenticated/title/$mediaType/$tmdbId")({
   head: () => ({ meta: [{ title: "Obra do catálogo — AppCinema" }, { name: "description", content: "Conheça filmes e séries e acompanhe a obra na biblioteca do casal." }, { property: "og:title", content: "Obra do catálogo — AppCinema" }, { property: "og:description", content: "Arte, temporadas, elenco e histórico em uma ficha única." }, { property: "og:type", content: "website" }, { name: "twitter:card", content: "summary" }] }),
+  loader: async ({context,params}) => {
+    const tmdbId = Number(params.tmdbId); const mediaType = params.mediaType; const space = context.queryClient.getQueryData<{spaceId:string}>(["space"]);
+    if (!space?.spaceId || (mediaType !== "movie" && mediaType !== "tv") || !Number.isInteger(tmdbId)) return;
+    await context.queryClient.ensureQueryData({queryKey:["title-preview",mediaType,tmdbId,space.spaceId], staleTime:3600_000,queryFn:()=>getTitlePreview({data:{mediaType,tmdbId,spaceId:space.spaceId}})});
+  },
   component: TitlePage,
 });
 function TitlePage() {

@@ -97,7 +97,13 @@ export function useScrollLock(active: boolean) {
       const preventBackgroundScroll = (event: Event) => {
         const target = event.target;
         const panel = target instanceof Element ? target.closest('[data-overlay-panel]') : null;
-        if (!panel || panel.scrollHeight <= panel.clientHeight) event.preventDefault();
+        let scroller = target instanceof Element ? target : null;
+        let scrollable = false;
+        while (scroller && panel?.contains(scroller)) {
+          if (scroller.scrollHeight > scroller.clientHeight && /auto|scroll/.test(getComputedStyle(scroller).overflowY)) { scrollable = true; break; }
+          scroller = scroller.parentElement;
+        }
+        if (!scrollable) event.preventDefault();
       };
       document.addEventListener("touchmove", preventBackgroundScroll, { passive: false });
       document.addEventListener("wheel", preventBackgroundScroll, { passive: false });

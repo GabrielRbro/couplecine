@@ -40,7 +40,7 @@ function BackOverlay() {
   );
 }
 
-function workQuery(id: string) {
+export function workQuery(id: string) {
   return {
     queryKey: ["work", id],
     staleTime: 30_000,
@@ -173,9 +173,9 @@ export function WorkDetails({ workId, mediaType, tmdbId }: { workId?: string; me
       </div>
       <div className="relative z-10 -mt-28 flex gap-4 px-4">
         <div className="relative z-10 w-28 shrink-0 shadow-2xl">
-          <div style={sharedPoster}><Poster path={work.poster_path} title={work.title} /></div>
+          <Poster path={work.poster_path} title={work.title} transitionStyle={sharedPoster} />
         </div>
-        <div className="min-w-0 self-end">
+        <div className="min-w-0 self-end" style={(sharedBackdrop.viewTransitionName || sharedPoster.viewTransitionName) ? {viewTransitionName:"detail-meta"} : undefined}>
           <h1 className="text-2xl font-semibold leading-tight">{work.title}</h1>
           {work.original_title && work.original_title !== work.title && (
             <p className="text-xs text-muted-foreground">{work.original_title}</p>
