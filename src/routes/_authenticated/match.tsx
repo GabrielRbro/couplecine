@@ -229,9 +229,7 @@ function MatchPage() {
   const start = useMutation({
     mutationFn: async () => {
       // Permanent 👎 from either person vetoes a work from the Match pool by default.
-      const ids = (preparedIds ? works.filter((w) => preparedIds.includes(w.id)) : works)
-        .filter((w) => isIndicated(w) && !w.interests.some((i) => i.reaction === "dislike"))
-        .map((w) => w.id);
+      const ids = preparedIds ?? works.filter((w) => isIndicated(w) && !w.interests.some((i) => i.reaction === "dislike")).map((w) => w.id);
       if (ids.length < 2) throw new Error("Adicione pelo menos 2 indicações antes de começar.");
       if (!spaceId || !space) throw new Error("Espaço indisponível.");
       if (!couple) throw new Error("O Match precisa de vocês dois no espaço.");
@@ -244,6 +242,8 @@ function MatchPage() {
       return data.id;
     },
     onSuccess: (id) => {
+      setPickedResultId(null);
+      qc.invalidateQueries({ queryKey: ["library", spaceId] });
       setResumedSessionId(id);
       invalidate();
     },

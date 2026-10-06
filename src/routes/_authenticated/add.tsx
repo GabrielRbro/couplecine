@@ -53,7 +53,7 @@ function AddPage() {
   if (sort !== "relevance") items.sort((a,b) => sort === "rating" ? (b.voteAverage ?? 0) - (a.voteAverage ?? 0) : sort === "oldest" ? (a.year ?? 9999) - (b.year ?? 9999) : (b.year ?? 0) - (a.year ?? 0));
   const pending = mode === "ai" ? intelligent.isFetching || q !== debounced : normal.isFetching || (q !== debounced && q.length >= 2);
   const update = (patch: Partial<{ q: string; kind: string; mode: string; sort: string }>) => navigate({ to: ".", search: (p) => ({ ...p, ...patch }), replace: true, viewTransition: false, resetScroll: false });
-  const orders = [["relevance", "Relevância"], ["newest", "Mais recentes"], ["oldest", "Mais antigos"], ["rating", "Melhor avaliados"]];
+  const orders: [string,string][] = [["relevance", "Relevância"], ["newest", "Mais recentes"], ["oldest", "Mais antigos"], ["rating", "Melhor avaliados"]];
   return <div className="px-4 pt-6">
     <div className="flex min-w-0 items-center gap-3"><BackButton /><h1 className="text-xl font-semibold">Adicionar obra</h1></div>
     <div className="mt-4 grid grid-cols-[auto_minmax(0,1fr)_auto] items-center gap-2 rounded-xl border border-border bg-card px-3">
