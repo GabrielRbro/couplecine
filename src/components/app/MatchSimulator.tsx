@@ -38,7 +38,7 @@ export function MatchSimulator({ works, onExit }: { works: LibraryWork[]; onExit
   }
   const restart = () => { if (lock.current) return; setVotes([]); setFinished(false); setChosen(null); };
   return <div className="px-4 pt-6 pb-8">
-    <div className="grid grid-cols-[minmax(0,1fr)_auto] items-center gap-2"><div><h1 className="text-2xl font-semibold">Match</h1><p className="mt-1 text-xs text-primary">Modo de teste</p></div><Button variant="ghost" size="icon" aria-label="Sair do teste" onClick={onExit}><X /></Button></div>
+    <div className="grid grid-cols-[minmax(0,1fr)_auto] items-center gap-2"><div><h1 className="text-2xl font-semibold">Match</h1><p className="mt-1 text-xs text-primary">Modo de teste</p></div><Button variant="ghost" size="icon" aria-label="Sair do teste" onClick={onExit} className="h-11 w-11"><X /></Button></div>
     {finished ? <section className="mt-6"><h2 className="text-xl font-semibold">{results.length} {results.length === 1 ? "match simulado" : "matches simulados"}</h2><p className="mt-1 text-xs text-muted-foreground">Somente suas escolhas neste teste.</p>
       <div className="mt-4 grid grid-cols-3 gap-3">{results.map((w) => <Link key={w.id} to="/work/$id" params={{ id: w.id }} className={`block rounded-xl ${spinning === w.id || chosen === w.id ? "match-picked ring-2 ring-primary" : ""}`}><Poster path={w.poster_path} title={w.title} /><p className="mt-1 line-clamp-2 text-xs">{w.title}</p></Link>)}</div>
       <Button variant="outline" className="mt-5 min-h-12 w-full" disabled={!results.length || Boolean(spinning)} onClick={roll}><Dices />Sortear entre os matches</Button>
