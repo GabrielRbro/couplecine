@@ -1,13 +1,14 @@
-import { createFileRoute, Link, useNavigate, useRouter } from "@tanstack/react-router";
+import { createFileRoute, useNavigate } from "@tanstack/react-router";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { useServerFn } from "@tanstack/react-start";
-import { useEffect, useRef, useState } from "react";
+import { useEffect, useState } from "react";
 import { ArrowLeft, Check, Trash2, Tv } from "lucide-react";
-import { DetailSkeleton } from "@/components/app/ui";
+import { DetailSkeleton, useBack } from "@/components/app/ui";
 import { toast } from "sonner";
 import { AnimatedSheet } from "@/components/app/AnimatedSheet";
 import { AppShell } from "@/components/app/AppShell";
 import { Poster } from "@/components/app/MediaCard";
+import { ScorePicker } from "@/components/app/ScorePicker";
 import { supabase } from "@/integrations/supabase/client";
 import { getSeasonEpisodes, getWorkDetails } from "@/lib/catalog.functions";
 import {
@@ -20,7 +21,22 @@ import {
   tmdbImage,
   type Reaction,
 } from "@/lib/format";
-import { firstName, useSpace, type SpaceInfo } from "@/lib/space";
+import { firstName, useSpace, type LibraryWork, type SpaceInfo } from "@/lib/space";
+import { useSharedStyle } from "@/lib/shared-transition";
+import { scheduleWorkDelete } from "@/lib/pending-delete";
+
+function BackOverlay() {
+  const back = useBack("/library");
+  return (
+    <button
+      onClick={back}
+      aria-label="Voltar"
+      className="pressable absolute left-4 top-[max(env(safe-area-inset-top),16px)] flex h-11 w-11 items-center justify-center rounded-full bg-background/70 backdrop-blur"
+    >
+      <ArrowLeft className="h-5 w-5" />
+    </button>
+  );
+}
 
 export const Route = createFileRoute("/_authenticated/work/$id")({
   head: () => ({
@@ -44,7 +60,6 @@ export const Route = createFileRoute("/_authenticated/work/$id")({
   ),
 });
 
-const SCORES = Array.from({ length: 21 }, (_, i) => i / 2);
 
 function useWork(id: string) {
   return useQuery(workQuery(id));
@@ -76,6 +91,9 @@ function workQuery(id: string) {
           .eq("work_id", id)
           .order("created_at"),
       ]);
+      // Any failed read is an error, never an empty interest/rating/history.
+      const failed = [w, i, r, p, s, e, j, n].find((x) => x.error);
+      if (failed?.error) throw new Error("Não foi possível carregar a obra. Tente de novo.");
       if (!w.data) throw new Error("Obra não encontrada");
       return {
         work: w.data,
@@ -93,7 +111,6 @@ function workQuery(id: string) {
 
 function WorkPage() {
   const { id } = Route.useParams();
-  const router = useRouter();
   const { data: space } = useSpace();
   const { data, isLoading, error } = useWork(id);
   const details = useServerFn(getWorkDetails);
@@ -103,56 +120,72 @@ function WorkPage() {
     staleTime: 3600_000,
   });
   const qc = useQueryClient();
+  const sharedBackdrop = useSharedStyle(id, "backdrop");
+  const sharedPoster = useSharedStyle(id, "poster");
   const refresh = () => {
     qc.invalidateQueries({ queryKey: ["work", id] });
     qc.invalidateQueries({ queryKey: ["library"] });
   };
 
   if (isLoading || !space) return <DetailSkeleton />;
-  if (error || !data) return <p className="p-6 text-sm text-destructive">Obra não encontrada.</p>;
+  if (error || !data)
+    return (
+      <div className="p-6 text-sm">
+        <p className="text-destructive">{error?.message ?? "Obra não encontrada."}</p>
+        <button
+          onClick={() => qc.invalidateQueries({ queryKey: ["work", id] })}
+          className="pressable mt-3 min-h-11 rounded-xl border border-border px-4"
+        >
+          Tentar de novo
+        </button>
+      </div>
+    );
   const { work } = data;
   const m = meta.data;
   const isTv = work.media_type === "tv";
+  // Season count comes from the cached summary first, so "N temp." never pops in late.
+  const cachedSeasons = (
+    qc.getQueryData<LibraryWork[]>(["library", space.spaceId]) ?? []
+  ).find((w) => w.id === id)?.work_metadata_cache[0]?.seasons?.length;
+  const seasonCount = m?.seasonCount ?? cachedSeasons ?? null;
 
   return (
     <div>
-      <div className="relative h-44 overflow-hidden">
-        {tmdbImage(work.backdrop_path, "w780") && (
+      <div className="relative h-64 overflow-hidden">
+        {tmdbImage(work.backdrop_path, "w1280") ? (
           <img
-            src={tmdbImage(work.backdrop_path, "w780")!}
+            src={tmdbImage(work.backdrop_path, "w1280")!}
             alt=""
-            style={{ viewTransitionName: `backdrop-${id}` }}
-            className="h-full w-full object-cover opacity-40"
+            style={sharedBackdrop}
+            className="h-full w-full object-cover opacity-80"
           />
+        ) : (
+          <div className="h-full w-full bg-gradient-to-br from-accent to-card" />
         )}
-        <div className="absolute inset-0 bg-gradient-to-b from-transparent to-background" />
-        <button
-          onClick={() => router.history.back()}
-          aria-label="Voltar"
-          className="pressable hit absolute left-4 top-4 flex h-10 w-10 items-center justify-center rounded-full bg-background/70"
-        >
-          <ArrowLeft className="h-5 w-5" />
-        </button>
+        <div className="absolute inset-0 bg-gradient-to-b from-background/30 via-transparent to-background" />
+        <BackOverlay />
       </div>
-      <div className="-mt-24 relative flex gap-4 px-4">
-        <div className="w-28 shrink-0" style={{ viewTransitionName: `poster-${id}` }}>
+      <div className="relative -mt-28 flex gap-4 px-4">
+        <div className="w-28 shrink-0 shadow-2xl" style={sharedPoster}>
           <Poster path={work.poster_path} title={work.title} />
         </div>
         <div className="min-w-0 self-end">
-          <h1 className="text-xl font-semibold leading-tight">{work.title}</h1>
+          <h1 className="text-2xl font-semibold leading-tight">{work.title}</h1>
           {work.original_title && work.original_title !== work.title && (
             <p className="text-xs text-muted-foreground">{work.original_title}</p>
           )}
           <p className="mt-1 text-xs text-muted-foreground">
-            {[
-              isTv ? "Série" : "Filme",
-              work.release_year,
-              isTv && m?.seasonCount
-                ? `${m.seasonCount} temp.`
-                : formatRuntime(work.runtime_minutes),
-            ]
-              .filter(Boolean)
-              .join(" · ")}
+            {isTv ? "Série" : "Filme"}
+            {work.release_year ? ` · ${work.release_year}` : ""}
+            {isTv ? (
+              <span className="inline-block min-w-[4.5rem]">
+                {seasonCount ? ` · ${seasonCount} temp.` : ""}
+              </span>
+            ) : work.runtime_minutes ? (
+              ` · ${formatRuntime(work.runtime_minutes)}`
+            ) : (
+              ""
+            )}
           </p>
           {work.genres.length > 0 && (
             <p className="mt-1 line-clamp-1 text-xs text-muted-foreground">
@@ -162,14 +195,24 @@ function WorkPage() {
         </div>
       </div>
 
-      <div className="space-y-6 px-4 pt-6">
+      <div className="space-y-6 px-4 pt-5">
+        {isTv && (
+          <SeriesProgressStrip
+            space={space}
+            workId={id}
+            state={data.state}
+            events={data.events}
+            seasons={m?.seasons ?? []}
+            onChange={refresh}
+          />
+        )}
         <button
           disabled
           aria-label="Assistir na TV, não configurado"
           title="Envio para a TV não configurado"
-          className="flex min-h-12 w-full items-center justify-center gap-2 rounded-xl bg-primary px-4 text-sm font-semibold text-primary-foreground opacity-60"
+          className="flex min-h-11 w-full items-center justify-center gap-2 rounded-xl border border-dashed border-border text-xs text-muted-foreground"
         >
-          <Tv className="h-5 w-5" /> Assistir na TV · não configurado
+          <Tv className="h-4 w-4" /> Assistir na TV · não configurado
         </button>
         <Comparison
           space={space}
@@ -289,12 +332,14 @@ function Comparison({
   onChange: () => void;
 }) {
   const [editing, setEditing] = useState<"reaction" | "score" | null>(null);
+  const [saving, setSaving] = useState(false);
   const mine = interests.find((i) => i.user_id === space.userId);
   const myScore = ratings.find((r) => r.user_id === space.userId);
   const partnerId = space.partner?.id;
   const theirs = interests.find((i) => i.user_id === partnerId);
   const theirScore = ratings.find((r) => r.user_id === partnerId);
   const avg = myScore && theirScore ? (Number(myScore.score) + Number(theirScore.score)) / 2 : null;
+  const partnerLabel = space.partner ? firstName(space.partner.display_name) : "Parceiro";
 
   async function setReaction(reaction: Reaction) {
     const { error } = await supabase
@@ -308,6 +353,7 @@ function Comparison({
     setEditing(null);
   }
   async function setScore(score: number | null) {
+    setSaving(true);
     const { error } =
       score === null
         ? await supabase.from("ratings").delete().eq("work_id", workId).eq("user_id", space.userId)
@@ -317,132 +363,90 @@ function Comparison({
               { work_id: workId, user_id: space.userId, score },
               { onConflict: "user_id,work_id" },
             );
-    if (error) toast.error("Não foi possível salvar.");
-    else onChange();
+    setSaving(false);
+    if (error) return toast.error("Não foi possível salvar.");
+    onChange();
     setEditing(null);
   }
 
-  const InterestPerson = ({
-    label,
-    r,
-    own,
-  }: {
-    label: string;
-    r: Reaction | undefined;
-    own: boolean;
-  }) => (
-    <div className="min-w-0 flex-1 text-center">
-      <p className="text-[11px] text-muted-foreground">{label}</p>
-      <button
-        disabled={!own}
-        onClick={() => setEditing("reaction")}
-        className="pressable mt-1 inline-flex min-h-11 min-w-11 items-center justify-center text-2xl"
-        aria-label={`${label}: interesse`}
-      >
-        {r ? REACTION_EMOJI[r] : "—"}
-      </button>
-    </div>
-  );
-  const ScorePerson = ({
-    label,
-    s,
-    own,
-  }: {
-    label: string;
-    s: number | undefined;
-    own: boolean;
-  }) => (
-    <div className="min-w-0 flex-1 text-center">
-      <p className="text-xs text-muted-foreground">{label}</p>
-      <button
-        disabled={!own}
-        onClick={() => setEditing("score")}
-        className="pressable mt-1 inline-flex min-h-11 min-w-11 items-center justify-center text-lg font-semibold"
-        aria-label={`${label}: avaliação`}
-      >
-        {s !== undefined ? (
-          formatScore(Number(s))
-        ) : own ? (
-          <span className="text-xs text-primary">Dar nota</span>
-        ) : (
-          "—"
-        )}
-      </button>
-    </div>
-  );
-
+  const cell = "pressable flex min-h-11 min-w-11 flex-1 flex-col items-center justify-center";
   return (
-    <section className="space-y-3">
-      <div className="grid grid-cols-2 gap-3">
-        <div className="rounded-xl border border-border bg-card p-3">
-          <h2 className="text-xs font-semibold">Interesse</h2>
-          <div className="mt-2 flex divide-x divide-border">
-            <InterestPerson label="Eu" r={mine?.reaction} own />
-            <InterestPerson
-              label={space.partner ? firstName(space.partner.display_name) : "Parceiro"}
-              r={theirs?.reaction}
-              own={false}
-            />
+    <section>
+      <div className="grid grid-cols-2 gap-2">
+        <div className="rounded-xl border border-border bg-card px-2 py-1.5">
+          <h2 className="px-1 text-[11px] font-semibold text-muted-foreground">Interesse</h2>
+          <div className="flex divide-x divide-border">
+            <button
+              onClick={() => setEditing(editing === "reaction" ? null : "reaction")}
+              aria-label="Eu: interesse"
+              aria-expanded={editing === "reaction"}
+              className={cell}
+            >
+              <span className="emoji text-xl leading-none">
+                {mine ? REACTION_EMOJI[mine.reaction] : "—"}
+              </span>
+              <span className="text-[10px] text-muted-foreground">Eu</span>
+            </button>
+            <div className={cell} aria-label={`${partnerLabel}: interesse`}>
+              <span className="emoji text-xl leading-none">
+                {theirs ? REACTION_EMOJI[theirs.reaction] : "—"}
+              </span>
+              <span className="text-[10px] text-muted-foreground">{partnerLabel}</span>
+            </div>
           </div>
         </div>
-        <div className="rounded-xl border border-border bg-card p-3">
-          <div className="flex items-baseline justify-between gap-1">
-            <h2 className="text-xs font-semibold">Avaliação</h2>
+        <div className="rounded-xl border border-border bg-card px-2 py-1.5">
+          <div className="flex items-baseline justify-between px-1">
+            <h2 className="text-[11px] font-semibold text-muted-foreground">Avaliação</h2>
             {avg !== null && (
-              <span className="text-[11px] text-muted-foreground">Média {formatScore(avg)}</span>
+              <span className="text-[10px] font-semibold text-primary">
+                Média {formatScore(avg)}
+              </span>
             )}
           </div>
-          <div className="mt-2 flex divide-x divide-border">
-            <ScorePerson label="Eu" s={myScore?.score} own />
-            <ScorePerson
-              label={space.partner ? firstName(space.partner.display_name) : "Parceiro"}
-              s={theirScore?.score}
-              own={false}
-            />
+          <div className="flex divide-x divide-border">
+            <button onClick={() => setEditing("score")} aria-label="Eu: dar nota" className={cell}>
+              <span className="text-base font-semibold leading-tight">
+                {myScore ? (
+                  formatScore(Number(myScore.score))
+                ) : (
+                  <span className="text-xs text-primary">Dar nota</span>
+                )}
+              </span>
+              <span className="text-[10px] text-muted-foreground">Eu</span>
+            </button>
+            <div className={cell} aria-label={`${partnerLabel}: avaliação`}>
+              <span className="text-base font-semibold leading-tight">
+                {theirScore ? formatScore(Number(theirScore.score)) : "—"}
+              </span>
+              <span className="text-[10px] text-muted-foreground">{partnerLabel}</span>
+            </div>
           </div>
         </div>
       </div>
-      {avg === null && (
-        <p className="-mt-1 text-[11px] text-muted-foreground">
-          Média aparece quando os dois avaliarem.
-        </p>
-      )}
       {editing === "reaction" && (
-        <div className="grid grid-cols-4 gap-2">
+        <div className="fade-enter mt-2 grid grid-cols-4 gap-2">
           {ALL_REACTIONS.map((r) => (
             <button
               key={r}
               onClick={() => setReaction(r)}
-              className={`rounded-xl border py-2 text-2xl ${mine?.reaction === r ? "border-primary" : "border-border"}`}
+              aria-label={r}
+              className={`pressable emoji min-h-11 rounded-xl border text-2xl ${mine?.reaction === r ? "border-primary bg-accent" : "border-border"}`}
             >
               {REACTION_EMOJI[r]}
             </button>
           ))}
         </div>
       )}
-      {editing === "score" && (
-        <div>
-          <div className="grid grid-cols-7 gap-1.5">
-            {SCORES.map((s) => (
-              <button
-                key={s}
-                onClick={() => setScore(s)}
-                className={`rounded-lg border py-1.5 text-xs ${Number(myScore?.score) === s ? "border-primary bg-accent" : "border-border"}`}
-              >
-                {formatScore(s)}
-              </button>
-            ))}
-          </div>
-          {myScore && (
-            <button
-              onClick={() => setScore(null)}
-              className="mt-2 text-xs text-muted-foreground underline"
-            >
-              Remover minha nota
-            </button>
-          )}
-        </div>
-      )}
+      <ScorePicker
+        open={editing === "score"}
+        title="Sua nota"
+        initial={myScore ? Number(myScore.score) : null}
+        saving={saving}
+        onClose={() => setEditing(null)}
+        onSave={(s) => setScore(s)}
+        onRemove={myScore ? () => setScore(null) : undefined}
+      />
     </section>
   );
 }
@@ -554,10 +558,91 @@ function prefetchImages(urls: string[], concurrency = 2) {
   };
 }
 
-function SeriesBlock({
+type SeasonMeta = { seasonNumber: number; name: string; episodeCount: number; posterPath?: string | null };
+
+function nextEpisode(seen: Set<string>, seasons: SeasonMeta[]) {
+  for (const s of seasons)
+    for (let e = 1; e <= s.episodeCount; e++)
+      if (!seen.has(`${s.seasonNumber}:${e}`)) return { s: s.seasonNumber, e };
+  return null;
+}
+
+/** Discreet progress line under the hero: status + progress + next episode. */
+function SeriesProgressStrip({
   space,
   workId,
   state,
+  events,
+  seasons,
+  onChange,
+}: {
+  space: SpaceInfo;
+  workId: string;
+  state: { id: string; status: string } | null;
+  events: Ev[];
+  seasons: SeasonMeta[];
+  onChange: () => void;
+}) {
+  const seen = new Set(events.map((e) => `${e.season_number}:${e.episode_number}`));
+  const next = nextEpisode(seen, seasons);
+  const total = seasons.reduce((a, s) => a + s.episodeCount, 0);
+  async function writeState(status: string) {
+    const payload = {
+      status: status as "watching",
+      next_season: next?.s ?? null,
+      next_episode: next?.e ?? null,
+      updated_by: space.userId,
+    };
+    const { error } = state
+      ? await supabase.from("series_states").update(payload).eq("id", state.id)
+      : await supabase
+          .from("series_states")
+          .insert({ ...payload, space_id: space.spaceId!, work_id: workId });
+    if (error) toast.error("Não foi possível salvar o status.");
+    else onChange();
+  }
+  return (
+    <div className="flex items-center gap-3">
+      <div className="min-w-0 flex-1">
+        <div className="h-1 overflow-hidden rounded-full bg-muted">
+          <div
+            className="h-full bg-primary transition-[width] duration-200"
+            style={{ width: total ? `${Math.min(100, (seen.size / total) * 100)}%` : "0%" }}
+          />
+        </div>
+        <p className="mt-1.5 text-xs text-muted-foreground">
+          {state || seen.size ? (
+            <>
+              {seen.size} de {total || "?"} ·{" "}
+              <span className="font-semibold text-foreground">
+                {next ? `Próximo T${next.s}E${next.e}` : total ? "Tudo em dia" : ""}
+              </span>
+            </>
+          ) : (
+            "Ainda não começaram"
+          )}
+        </p>
+      </div>
+      <select
+        value={state?.status ?? ""}
+        onChange={(e) => writeState(e.target.value)}
+        aria-label="Status da série"
+        className="min-h-11 max-w-[46%] rounded-xl border border-border bg-card px-2 text-xs"
+      >
+        {!state && <option value="">Não iniciada</option>}
+        {Object.entries(SERIES_STATUS_LABEL).map(([k, v]) => (
+          <option key={k} value={k}>
+            {v}
+          </option>
+        ))}
+      </select>
+    </div>
+  );
+}
+
+function SeriesBlock({
+  space,
+  workId,
   events,
   seasons,
   fallbackImage,
@@ -567,24 +652,13 @@ function SeriesBlock({
   workId: string;
   state: { id: string; status: string } | null;
   events: Ev[];
-  seasons: {
-    seasonNumber: number;
-    name: string;
-    episodeCount: number;
-    posterPath?: string | null;
-  }[];
+  seasons: SeasonMeta[];
   fallbackImage: string | null;
   onChange: () => void;
 }) {
   const qc = useQueryClient();
   const seen = new Set(events.map((e) => `${e.season_number}:${e.episode_number}`));
-  let next: { s: number; e: number } | null = null;
-  outer: for (const s of seasons)
-    for (let e = 1; e <= s.episodeCount; e++)
-      if (!seen.has(`${s.seasonNumber}:${e}`)) {
-        next = { s: s.seasonNumber, e };
-        break outer;
-      }
+  const next = nextEpisode(seen, seasons);
   const [season, setSeason] = useState<number | null>(null);
   const [openEp, setOpenEp] = useState<Episode | null>(null);
   const [saving, setSaving] = useState(false);
@@ -596,14 +670,15 @@ function SeriesBlock({
     staleTime: 6 * 3600_000,
   });
   const eps = useQuery({ ...seasonQuery(activeSeason), enabled: seasons.length > 0 });
-  const total = seasons.reduce((a, s) => a + s.episodeCount, 0);
   const seasonPoster = (n: number) => seasons.find((s) => s.seasonNumber === n)?.posterPath ?? null;
-  // Episode image priority: real TMDB still → season poster → series artwork.
-  const epImage = (ep: Episode, size: string) =>
-    tmdbImage(ep.stillPath, size) ??
-    tmdbImage(seasonPoster(ep.seasonNumber) ?? fallbackImage, size === "w300" ? "w342" : "w780");
+  // Image priority (no invented sources): season poster → TMDB still → series artwork.
+  const epArt = (ep: Episode) => {
+    const poster = seasonPoster(ep.seasonNumber);
+    if (poster) return { kind: "poster" as const, path: poster };
+    if (ep.stillPath) return { kind: "still" as const, path: ep.stillPath };
+    return { kind: "series" as const, path: fallbackImage };
+  };
 
-  // After the visible season loads: fetch the other seasons' DATA sequentially in background.
   const loaded = eps.isSuccess;
   useEffect(() => {
     if (!loaded || seasons.length < 2) return;
@@ -624,98 +699,89 @@ function SeriesBlock({
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [loaded, workId, seasons.length]);
 
-  // Images: active season first, then neighbours, 2 at a time.
   useEffect(() => {
     if (!eps.data) return;
-    const neighbours = [activeSeason - 1, activeSeason + 1]
-      .map((n) => qc.getQueryData<Episode[]>(["season", workId, n]) ?? [])
-      .flat();
-    const urls = [...eps.data, ...neighbours]
-      .map((ep) => tmdbImage(ep.stillPath, "w300"))
+    const urls = eps.data
+      .map((ep) => {
+        const a = epArt(ep);
+        return tmdbImage(a.path, a.kind === "poster" ? "w342" : "w300");
+      })
       .filter((u): u is string => !!u);
-    return prefetchImages(urls);
-  }, [eps.data, activeSeason, qc, workId]);
+    return prefetchImages([...new Set(urls)]);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [eps.data]);
 
-  async function writeState(status: string) {
-    const payload = {
-      status: status as "watching",
-      next_season: next?.s ?? null,
-      next_episode: next?.e ?? null,
-      updated_by: space.userId,
-    };
-    const { error } = state
-      ? await supabase.from("series_states").update(payload).eq("id", state.id)
-      : await supabase
-          .from("series_states")
-          .insert({ ...payload, space_id: space.spaceId!, work_id: workId });
-    if (error) toast.error("Não foi possível salvar o status.");
-    else onChange();
-  }
-
-  async function toggle(s: number, e: number) {
+  // One transactional RPC: watch event + series state (next episode) together.
+  async function toggle(s: number, e: number, watched: boolean) {
     const key = `${s}:${e}`;
-    const existing = events.find((x) => `${x.season_number}:${x.episode_number}` === key);
+    const after = new Set(seen);
+    if (watched) after.add(key);
+    else after.delete(key);
+    const n = nextEpisode(after, seasons);
     setSaving(true);
-    const { error } = existing
-      ? await supabase.from("watch_events").delete().eq("id", existing.id)
-      : await supabase.from("watch_events").insert({
-          space_id: space.spaceId!,
-          work_id: workId,
-          season_number: s,
-          episode_number: e,
-          created_by: space.userId,
-        });
+    const { error } = await supabase.rpc("set_episode_watched", {
+      _work: workId,
+      _season: s,
+      _episode: e,
+      _watched: watched,
+      _next_season: n?.s ?? (null as unknown as number),
+      _next_episode: n?.e ?? (null as unknown as number),
+    });
     setSaving(false);
-    if (error) {
-      toast.error("Não foi possível salvar.");
-      return;
-    }
-    if (!state) await writeState("watching");
-    else onChange();
+    if (error) return toast.error("Não foi possível salvar.");
+    // Patch only this work in the library summary instead of refetching everything.
+    qc.setQueriesData<LibraryWork[]>({ queryKey: ["library", space.spaceId] }, (old) =>
+      old?.map((w) =>
+        w.id !== workId
+          ? w
+          : {
+              ...w,
+              watch: {
+                seen_count: after.size,
+                last_watched_at: new Date().toISOString(),
+                seen_keys: [...after],
+              },
+              series_states: [
+                {
+                  status: w.series_states[0]?.status ?? "watching",
+                  next_season: n?.s ?? null,
+                  next_episode: n?.e ?? null,
+                },
+              ],
+            },
+      ),
+    );
+    qc.invalidateQueries({ queryKey: ["work", workId] });
   }
+  void onChange;
 
   const openDone = openEp ? seen.has(`${openEp.seasonNumber}:${openEp.episodeNumber}`) : false;
+
+  const Art = ({ ep, big }: { ep: Episode; big?: boolean }) => {
+    const a = epArt(ep);
+    const src = tmdbImage(a.path, a.kind === "poster" ? "w342" : big ? "w780" : "w300");
+    if (!src) return null;
+    if (a.kind === "poster")
+      return (
+        <div className="relative flex h-full w-full items-center justify-center overflow-hidden">
+          <img src={src} alt="" className="absolute inset-0 h-full w-full scale-125 object-cover opacity-40 blur-lg" />
+          <img src={src} alt="" loading="lazy" className="relative h-[88%] rounded-md object-contain shadow-lg" />
+        </div>
+      );
+    return <img src={src} alt="" loading="lazy" className="h-full w-full object-cover" />;
+  };
 
   return (
     <section>
       <h2 className="mb-3 font-semibold">Temporadas</h2>
-      <div className="rounded-xl border border-border bg-card p-4">
-        <div className="flex items-center justify-between">
-          <h3 className="text-sm font-semibold">Progresso do casal</h3>
-          <select
-            value={state?.status ?? ""}
-            onChange={(e) => writeState(e.target.value)}
-            aria-label="Status da série"
-            className="min-h-9 rounded-lg border border-border bg-secondary px-2 py-1 text-xs"
-          >
-            {!state && <option value="">Não iniciada</option>}
-            {Object.entries(SERIES_STATUS_LABEL).map(([k, v]) => (
-              <option key={k} value={k}>
-                {v}
-              </option>
-            ))}
-          </select>
-        </div>
-        <div className="mt-3 h-1.5 overflow-hidden rounded-full bg-muted">
-          <div
-            className="h-full bg-primary transition-[width] duration-200"
-            style={{ width: total ? `${Math.min(100, (seen.size / total) * 100)}%` : "0%" }}
-          />
-        </div>
-        <p className="mt-2 text-xs text-muted-foreground">
-          {seen.size} de {total || "?"} episódios ·{" "}
-          {next ? `Próximo: T${next.s}E${next.e}` : total ? "Tudo em dia" : ""}
-        </p>
-      </div>
-
       {seasons.length > 0 && (
-        <div className="mt-4">
+        <div>
           <div className="no-scrollbar -mx-4 flex gap-2 overflow-x-auto px-4">
             {seasons.map((s) => (
               <button
                 key={s.seasonNumber}
                 onClick={() => setSeason(s.seasonNumber)}
-                className={`hit pressable shrink-0 rounded-full px-3.5 py-1.5 text-xs font-medium ${activeSeason === s.seasonNumber ? "bg-primary text-primary-foreground" : "border border-border text-muted-foreground"}`}
+                className={`pressable min-h-11 shrink-0 rounded-full px-4 text-xs font-medium ${activeSeason === s.seasonNumber ? "bg-primary text-primary-foreground" : "border border-border text-muted-foreground"}`}
               >
                 T{s.seasonNumber}
               </button>
@@ -724,40 +790,33 @@ function SeriesBlock({
           <div className="no-scrollbar -mx-4 mt-2 flex gap-3 overflow-x-auto px-4 py-1.5">
             {eps.isLoading &&
               Array.from({ length: 3 }, (_, i) => (
-                <div key={i} className="w-52 shrink-0">
+                <div key={i} className="w-44 shrink-0">
                   <div className="skeleton aspect-video w-full rounded-xl" />
                   <div className="skeleton mt-2 h-3 w-3/4" />
-                  <div className="skeleton mt-1.5 h-3 w-full" />
                 </div>
               ))}
             {eps.data?.map((ep) => {
               const done = seen.has(`${ep.seasonNumber}:${ep.episodeNumber}`);
               const isNext = next?.s === ep.seasonNumber && next?.e === ep.episodeNumber;
-              const img = epImage(ep, "w300");
               return (
                 <button
                   type="button"
                   key={ep.episodeNumber}
                   onClick={() => setOpenEp(ep)}
                   aria-label={`Abrir T${ep.seasonNumber}E${ep.episodeNumber}, ${ep.name}${done ? ", assistido" : ""}`}
-                  className={`pressable w-52 shrink-0 rounded-xl text-left ${isNext ? "ring-2 ring-primary ring-offset-2 ring-offset-background" : ""}`}
+                  className="pressable w-44 shrink-0 text-left"
                 >
-                  <div className="relative aspect-video overflow-hidden rounded-xl bg-muted">
-                    {img && (
-                      <img
-                        src={img}
-                        alt=""
-                        loading="lazy"
-                        className={`h-full w-full object-cover ${done ? "opacity-50" : ""} ${ep.stillPath ? "" : "object-top"}`}
-                      />
-                    )}
+                  <div
+                    className={`relative aspect-video overflow-hidden rounded-xl bg-muted ${isNext ? "ring-2 ring-primary" : ""} ${done ? "opacity-60" : ""}`}
+                  >
+                    <Art ep={ep} />
                     {isNext && (
-                      <span className="absolute left-2 top-2 rounded-md bg-primary px-1.5 py-0.5 text-[10px] font-semibold text-primary-foreground">
+                      <span className="absolute left-1.5 top-1.5 rounded-md bg-primary px-1.5 py-0.5 text-[10px] font-semibold text-primary-foreground">
                         Próximo
                       </span>
                     )}
                     {done && (
-                      <span className="absolute right-2 top-2 flex h-6 w-6 items-center justify-center rounded-full bg-primary text-primary-foreground">
+                      <span className="absolute right-1.5 top-1.5 flex h-6 w-6 items-center justify-center rounded-full bg-primary text-primary-foreground">
                         <Check className="h-3.5 w-3.5" />
                       </span>
                     )}
@@ -765,16 +824,8 @@ function SeriesBlock({
                   <p className="mt-1.5 line-clamp-1 text-xs font-semibold">
                     T{ep.seasonNumber}E{ep.episodeNumber} · {ep.name}
                   </p>
-                  {ep.overview && (
-                    <p className="mt-0.5 line-clamp-2 text-[11px] leading-snug text-muted-foreground">
-                      {ep.overview}
-                    </p>
-                  )}
-                  <p className="mt-0.5 text-[11px] text-muted-foreground">
-                    {[formatRuntime(ep.runtimeMinutes), formatDate(ep.airDate)]
-                      .filter(Boolean)
-                      .join(" · ")}
-                    {done ? " · Assistido" : ""}
+                  <p className="text-[11px] text-muted-foreground">
+                    {formatRuntime(ep.runtimeMinutes) ?? "—"}
                   </p>
                 </button>
               );
@@ -786,15 +837,14 @@ function SeriesBlock({
       <AnimatedSheet
         open={!!openEp}
         onClose={() => setOpenEp(null)}
+        closeDisabled={saving}
         labelledBy="ep-title"
-        panelClassName="max-h-[88vh] overflow-y-auto p-0 pb-[max(env(safe-area-inset-bottom),20px)]"
+        panelClassName="max-h-[88dvh] overflow-y-auto p-0 pb-[max(env(safe-area-inset-bottom),20px)]"
       >
         {openEp && (
           <div>
             <div className="aspect-video overflow-hidden rounded-t-3xl bg-muted">
-              {epImage(openEp, "w780") && (
-                <img src={epImage(openEp, "w780")!} alt="" className="h-full w-full object-cover" />
-              )}
+              <Art ep={openEp} big />
             </div>
             <div className="p-5">
               <h3 id="ep-title" className="text-lg font-semibold leading-tight">
@@ -808,14 +858,10 @@ function SeriesBlock({
               <p className="mt-3 text-sm leading-relaxed text-muted-foreground">
                 {openEp.overview || "Sem sinopse disponível."}
               </p>
-              <div
-                className="mt-5 grid grid-cols-2 gap-2"
-                role="group"
-                aria-label="Status do episódio"
-              >
+              <div className="mt-5 grid grid-cols-2 gap-2" role="group" aria-label="Status do episódio">
                 <button
                   disabled={saving || !openDone}
-                  onClick={() => toggle(openEp.seasonNumber, openEp.episodeNumber)}
+                  onClick={() => toggle(openEp.seasonNumber, openEp.episodeNumber, false)}
                   aria-pressed={!openDone}
                   className={`pressable min-h-12 rounded-xl border text-sm font-medium ${!openDone ? "border-primary text-foreground" : "border-border text-muted-foreground"}`}
                 >
@@ -823,7 +869,7 @@ function SeriesBlock({
                 </button>
                 <button
                   disabled={saving || openDone}
-                  onClick={() => toggle(openEp.seasonNumber, openEp.episodeNumber)}
+                  onClick={() => toggle(openEp.seasonNumber, openEp.episodeNumber, true)}
                   aria-pressed={openDone}
                   className={`pressable flex min-h-12 items-center justify-center gap-1.5 rounded-xl text-sm font-semibold ${openDone ? "bg-primary text-primary-foreground" : "border border-border"}`}
                 >
@@ -856,13 +902,6 @@ function IndicationsBlock({
   const navigate = useNavigate();
   const qc = useQueryClient();
   const [confirming, setConfirming] = useState(false);
-  const timer = useRef<ReturnType<typeof setTimeout> | null>(null);
-  useEffect(
-    () => () => {
-      if (timer.current) clearTimeout(timer.current);
-    },
-    [],
-  );
   const mine = indications.find((i) => i.indicated_by === space.userId);
   const nameOf = (id: string) =>
     id === space.userId ? "Você" : firstName(space.partner?.display_name);
@@ -877,32 +916,10 @@ function IndicationsBlock({
     }
   }
 
-  // Delayed delete: the work disappears from lists right away, and is only deleted after the undo window.
   function deleteWork() {
     setConfirming(false);
-    const prev = qc.getQueriesData({ queryKey: ["library"] });
-    qc.setQueriesData({ queryKey: ["library"] }, (old: unknown) =>
-      Array.isArray(old) ? old.filter((w: { id: string }) => w.id !== workId) : old,
-    );
+    scheduleWorkDelete(qc, workId, title);
     navigate({ to: "/library" });
-    let undone = false;
-    toast(`"${title}" excluída`, {
-      duration: 6000,
-      action: {
-        label: "Desfazer",
-        onClick: () => {
-          undone = true;
-          if (timer.current) clearTimeout(timer.current);
-          prev.forEach(([k, v]) => qc.setQueryData(k, v));
-        },
-      },
-    });
-    timer.current = setTimeout(async () => {
-      if (undone) return;
-      const { error } = await supabase.from("works").delete().eq("id", workId);
-      if (error) toast.error("Não foi possível excluir a obra.");
-      qc.invalidateQueries({ queryKey: ["library"] });
-    }, 6000);
   }
 
   return (

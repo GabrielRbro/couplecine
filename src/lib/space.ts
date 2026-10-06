@@ -27,7 +27,7 @@ export function useSpace() {
         avatar_url: (user.user_metadata?.["avatar_url"] as string) ?? null,
       };
       // Profiles RLS only returns me + partner, so both queries can run in parallel.
-      const [{ data: m }, { data: profiles }] = await Promise.all([
+      const [{ data: m, error: me }, { data: profiles, error: pe }] = await Promise.all([
         supabase
           .from("space_members")
           .select("space_id")
@@ -36,6 +36,9 @@ export function useSpace() {
           .maybeSingle(),
         supabase.from("profiles").select("id, display_name, avatar_url"),
       ]);
+      // A failed read is an error, never "no space" (which would redirect to onboarding).
+      if (me) throw me;
+      if (pe) throw pe;
       if (!m)
         return {
           userId: user.id,

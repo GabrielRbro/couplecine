@@ -4,7 +4,7 @@ import { useState } from "react";
 import { Dices, RotateCcw, X } from "lucide-react";
 import { AppShell } from "@/components/app/AppShell";
 import { EmptyState, Poster } from "@/components/app/MediaCard";
-import { FilterPills, TogglePill } from "@/components/app/ui";
+import { FilterPills, ScrollRow, TogglePill } from "@/components/app/ui";
 import { Button } from "@/components/ui/button";
 import { supabase } from "@/integrations/supabase/client";
 import type { Reaction } from "@/lib/format";
@@ -74,6 +74,7 @@ function DicePage() {
   const [declined, setDeclined] = useState<Set<string>>(new Set());
   const [picked, setPicked] = useState<LibraryWork | null>(null);
   const [rolling, setRolling] = useState(false);
+  const [flick, setFlick] = useState<{ work: LibraryWork; n: number } | null>(null);
   if (!space) return null;
 
   const pool = works.filter((w) => {
@@ -101,11 +102,31 @@ function DicePage() {
         break;
       }
     }
-    setRolling(true);
-    setTimeout(() => {
+    if (!choice) return;
+    // Shuffle: candidates flick past, decelerating, and land on the weighted choice.
+    if (window.matchMedia("(prefers-reduced-motion: reduce)").matches || pool.length === 1) {
       setPicked(choice);
-      setRolling(false);
-    }, 180);
+      return;
+    }
+    setRolling(true);
+    setPicked(null);
+    const order = [...pool].sort(() => Math.random() - 0.5).slice(0, 10);
+    let i = 0;
+    const steps = 11;
+    const tick = (delay: number) =>
+      window.setTimeout(() => {
+        i++;
+        if (i < steps) {
+          setFlick({ work: order[i % order.length]!, n: i });
+          tick(delay * 1.18);
+        } else {
+          setFlick(null);
+          setPicked(choice);
+          setRolling(false);
+        }
+      }, delay);
+    setFlick({ work: order[0]!, n: 0 });
+    tick(60);
   };
   const decline = () => {
     if (!picked) return;
@@ -119,7 +140,7 @@ function DicePage() {
       <p className="mt-1 text-sm text-muted-foreground">
         🔥 pesa mais. 👎 fica de fora, a menos que vocês incluam.
       </p>
-      <div className="no-scrollbar -mx-4 mt-4 flex gap-2 overflow-x-auto px-4 py-1">
+      <ScrollRow className="mt-4">
         <FilterPills
           options={
             [
@@ -131,8 +152,8 @@ function DicePage() {
           value={kind}
           onChange={setKind}
         />
-      </div>
-      <div className="no-scrollbar -mx-4 mt-2 flex gap-2 overflow-x-auto px-4 py-1">
+      </ScrollRow>
+      <ScrollRow className="mt-2">
         <FilterPills
           options={
             [
@@ -148,7 +169,7 @@ function DicePage() {
         <TogglePill on={includeDislike} onClick={() => setIncludeDislike((v) => !v)}>
           Incluir 👎
         </TogglePill>
-      </div>
+      </ScrollRow>
 
       {pool.length === 0 && !picked ? (
         <div className="mt-6">
@@ -172,25 +193,46 @@ function DicePage() {
         </div>
       ) : (
         <>
-          <div className="mx-auto mt-7 w-48 min-h-1">
-            {picked && (
+          <div className="relative mx-auto mt-7 w-48">
+            {flick ? (
+              <div className="relative aspect-[2/3]" aria-live="off" aria-label="Embaralhando">
+                <div aria-hidden className="match-stack-back match-stack-back-far" />
+                <div aria-hidden className="match-stack-back match-stack-back-near" />
+                <div
+                  key={flick.n}
+                  className="dice-card z-[2]"
+                  style={{
+                    animation: "match-card-arrive 140ms var(--ease-out) both",
+                    transform: `rotate(${flick.n % 2 ? 3 : -3}deg)`,
+                  }}
+                >
+                  <Poster path={flick.work.poster_path} title={flick.work.title} className="shadow-xl" />
+                </div>
+              </div>
+            ) : picked ? (
               <div className="relative isolate pb-3">
                 <div aria-hidden className="absolute inset-x-3 top-2 bottom-1 -z-10 rotate-2 rounded-xl border border-border bg-secondary" />
                 <Link
                   key={picked.id}
                   to="/work/$id"
                   params={{ id: picked.id }}
-                  className={`pressable block rounded-xl border border-border bg-card p-2 shadow-sm transition-[opacity,transform] duration-200 ${rolling ? "scale-95 opacity-0" : "fade-enter"}`}
+                  className="match-picked pressable block rounded-xl border border-border bg-card p-2 shadow-sm"
                 >
                   <Poster path={picked.poster_path} title={picked.title} />
                   <p className="mt-2 text-center font-semibold">{picked.title}</p>
                   <p className="text-center text-xs text-muted-foreground">Toque para ver detalhes</p>
                 </Link>
               </div>
+            ) : (
+              <div className="relative aspect-[2/3]" aria-hidden>
+                <div className="match-stack-back match-stack-back-far" />
+                <div className="match-stack-back match-stack-back-near" />
+                <div className="match-stack-back z-[2]" />
+              </div>
             )}
           </div>
           <div className="mt-6 flex gap-2">
-            {picked && (
+            {picked && !rolling && (
               <Button
                 variant="outline"
                 onClick={decline}
@@ -202,7 +244,7 @@ function DicePage() {
             )}
             <Button
               onClick={roll}
-              disabled={pool.length === 0}
+              disabled={pool.length === 0 || rolling}
               className="pressable min-h-14 flex-1 rounded-2xl font-semibold"
             >
               <Dices

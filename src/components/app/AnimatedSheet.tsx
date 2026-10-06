@@ -1,7 +1,10 @@
 import { useEffect, useRef, useState, type ReactNode } from "react";
 import { createPortal } from "react-dom";
+import { useOverlayHistory, useScrollLock } from "@/lib/overlay";
 
 const EXIT_MS = 200;
+const FOCUSABLE =
+  'button:not([disabled]), [href], input:not([disabled]), select:not([disabled]), textarea:not([disabled]), [tabindex]:not([tabindex="-1"])';
 
 export function AnimatedSheet({
   open,
@@ -23,40 +26,77 @@ export function AnimatedSheet({
   const [mounted, setMounted] = useState(open);
   const [visible, setVisible] = useState(false);
   const renderedChildren = useRef(children);
+  const panel = useRef<HTMLDivElement>(null);
+  const opener = useRef<HTMLElement | null>(null);
   if (open) renderedChildren.current = children;
+
+  const closeRef = useRef(() => {});
+  closeRef.current = () => {
+    if (!closeDisabled) onClose();
+  };
+  // Back closes the sheet first; while closing is disabled, Back re-closes nothing.
+  useOverlayHistory(open, () => {
+    if (closeDisabled) return;
+    onClose();
+  });
+  useScrollLock(mounted);
 
   useEffect(() => {
     if (open) {
+      opener.current = document.activeElement as HTMLElement | null;
       setMounted(true);
-      const frame = requestAnimationFrame(() => setVisible(true));
+      const frame = requestAnimationFrame(() => {
+        setVisible(true);
+        const first =
+          panel.current?.querySelector<HTMLElement>("[data-autofocus]") ??
+          panel.current?.querySelector<HTMLElement>(FOCUSABLE);
+        (first ?? panel.current)?.focus({ preventScroll: true });
+      });
       return () => cancelAnimationFrame(frame);
     }
     setVisible(false);
-    const timer = window.setTimeout(() => setMounted(false), EXIT_MS);
+    const timer = window.setTimeout(() => {
+      setMounted(false);
+      opener.current?.focus?.({ preventScroll: true });
+    }, EXIT_MS);
     return () => window.clearTimeout(timer);
   }, [open]);
 
   useEffect(() => {
     if (!mounted) return;
     const onKeyDown = (event: KeyboardEvent) => {
-      if (event.key === "Escape" && !closeDisabled) onClose();
+      if (event.key === "Escape") closeRef.current();
+      if (event.key !== "Tab" || !panel.current) return;
+      const items = [...panel.current.querySelectorAll<HTMLElement>(FOCUSABLE)];
+      if (!items.length) return;
+      const first = items[0]!;
+      const last = items[items.length - 1]!;
+      if (event.shiftKey && document.activeElement === first) {
+        event.preventDefault();
+        last.focus();
+      } else if (!event.shiftKey && document.activeElement === last) {
+        event.preventDefault();
+        first.focus();
+      }
     };
     window.addEventListener("keydown", onKeyDown);
     return () => window.removeEventListener("keydown", onKeyDown);
-  }, [mounted, closeDisabled, onClose]);
+  }, [mounted]);
 
   if (!mounted || typeof document === "undefined") return null;
 
   return createPortal(
     <div
       className={`fixed inset-0 z-[60] flex items-end bg-background/80 transition-opacity duration-200 motion-reduce:transition-none ${visible ? "opacity-100" : "opacity-0"}`}
-      onClick={() => !closeDisabled && onClose()}
+      onClick={() => closeRef.current()}
     >
       <div
+        ref={panel}
         role={role}
         aria-modal="true"
         aria-labelledby={labelledBy}
-        className={`mx-auto w-full max-w-md rounded-t-3xl border border-border bg-card p-5 transition-transform duration-200 ease-[cubic-bezier(0.22,1,0.36,1)] motion-reduce:transition-none ${visible ? "translate-y-0" : "translate-y-full"} ${panelClassName}`}
+        tabIndex={-1}
+        className={`mx-auto w-full max-w-md overscroll-contain rounded-t-3xl border border-border bg-card p-5 outline-none transition-transform duration-200 ease-[cubic-bezier(0.22,1,0.36,1)] motion-reduce:transition-none ${visible ? "translate-y-0" : "translate-y-full"} ${panelClassName}`}
         onClick={(event) => event.stopPropagation()}
       >
         {renderedChildren.current}

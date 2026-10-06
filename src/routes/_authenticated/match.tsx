@@ -1,4 +1,6 @@
-import { createFileRoute, Link } from "@tanstack/react-router";
+import { createFileRoute, Link, useNavigate } from "@tanstack/react-router";
+import { z } from "zod";
+import { BackButton } from "@/components/app/ui";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { useEffect, useMemo, useRef, useState } from "react";
 import { AlertTriangle, Dices, Heart, Play, Undo2, X } from "lucide-react";
@@ -18,8 +20,10 @@ export const Route = createFileRoute("/_authenticated/match")({
       { name: "description", content: "Votem em segredo e descubram o que os dois querem ver." },
     ],
   }),
+  // view=result opens the last revealed result without starting a new session.
+  validateSearch: z.object({ view: z.enum(["result"]).optional().catch(undefined) }),
   component: () => (
-    <AppShell>
+    <AppShell fullscreen>
       <MatchPage />
     </AppShell>
   ),
@@ -77,7 +81,23 @@ function seededShuffle<T>(items: T[], seed: string) {
 function MatchPage() {
   const { data: space } = useSpace();
   const { data: works = [] } = useLibrary(space?.spaceId);
+  const { view } = Route.useSearch();
+  const navigate = useNavigate({ from: "/match" });
   const qc = useQueryClient();
+  // Match needs exactly the couple: never create a session with one member.
+  const members = useQuery({
+    queryKey: ["space-members", space?.spaceId],
+    enabled: !!space?.spaceId,
+    queryFn: async () => {
+      const { count, error } = await supabase
+        .from("space_members")
+        .select("id", { count: "exact", head: true })
+        .eq("space_id", space!.spaceId!);
+      if (error) throw error;
+      return count ?? 0;
+    },
+  });
+  const couple = members.data === 2;
   const spaceId = space?.spaceId;
   const [resumedSessionId, setResumedSessionId] = useState<string | null>(null);
   const [confirmingAbandon, setConfirmingAbandon] = useState(false);
@@ -86,6 +106,8 @@ function MatchPage() {
     direction: "left" | "right";
   } | null>(null);
   const [pickedResultId, setPickedResultId] = useState<string | null>(null);
+  const [spinId, setSpinId] = useState<string | null>(null);
+  const [rolling, setRolling] = useState(false);
   const attemptedExtensions = useRef(new Set<string>());
   const [, setRetryTick] = useState(0);
   // A session that already existed when this visit began shows Continuar/Abandonar;
@@ -114,31 +136,46 @@ function MatchPage() {
   const hasResumed = !!sid && resumedSessionId === sid;
 
   // Everything below returns only *my* data, plus a boolean "partner asked to close".
-  const me = useQuery({
-    queryKey: ["match-me", sid],
+  // Join exactly once per session/visit; afterwards only read-only data is refreshed.
+  const join = useQuery({
+    queryKey: ["match-join", sid],
     enabled: !!sid && hasResumed,
-    refetchInterval: 5000,
+    staleTime: Infinity,
+    gcTime: 0,
+    retry: 1,
     queryFn: async ({ signal }) => {
       if (!sid) throw new Error("Sessão indisponível.");
-      const { data: limit, error } = await supabase
-        .rpc("match_join", { _session: sid })
-        .abortSignal(signal);
+      const { error } = await supabase.rpc("match_join", { _session: sid }).abortSignal(signal);
       if (error) throw error;
-      const [{ data: votes }, { data: part }, { data: partnerWants }] = await Promise.all([
-        supabase
-          .from("match_votes")
-          .select("work_id, created_at")
-          .eq("session_id", sid)
-          .order("created_at"),
-        supabase
-          .from("match_participants")
-          .select("close_requested")
-          .eq("session_id", sid)
-          .maybeSingle(),
-        supabase.rpc("match_partner_wants_close", { _session: sid }),
-      ]);
+      return true;
+    },
+  });
+  // Everything below returns only *my* data, plus a boolean "partner asked to close".
+  const me = useQuery({
+    queryKey: ["match-me", sid],
+    enabled: !!sid && hasResumed && join.isSuccess,
+    refetchInterval: 6000,
+    queryFn: async ({ signal }) => {
+      if (!sid) throw new Error("Sessão indisponível.");
+      const [{ data: votes, error: ve }, { data: part, error: pe }, { data: partnerWants }] =
+        await Promise.all([
+          supabase
+            .from("match_votes")
+            .select("work_id, created_at")
+            .eq("session_id", sid)
+            .order("created_at")
+            .abortSignal(signal),
+          supabase
+            .from("match_participants")
+            .select("close_requested, card_limit")
+            .eq("session_id", sid)
+            .maybeSingle()
+            .abortSignal(signal),
+          supabase.rpc("match_partner_wants_close", { _session: sid }).abortSignal(signal),
+        ]);
+      if (ve || pe) throw ve ?? pe;
       return {
-        limit: limit ?? 0,
+        limit: part?.card_limit ?? 0,
         voted: new Set((votes ?? []).map((v) => v.work_id)),
         lastVote: votes?.at(-1)?.work_id ?? null,
         iWant: !!part?.close_requested,
@@ -179,6 +216,7 @@ function MatchPage() {
         .map((w) => w.id);
       if (ids.length < 2) throw new Error("Adicione pelo menos 2 indicações antes de começar.");
       if (!spaceId || !space) throw new Error("Espaço indisponível.");
+      if (!couple) throw new Error("O Match precisa de vocês dois no espaço.");
       const { data, error } = await supabase
         .from("match_sessions")
         .insert({ space_id: spaceId, created_by: space.userId, work_ids: ids })
@@ -258,6 +296,10 @@ function MatchPage() {
     onSuccess: () => {
       setConfirmingAbandon(false);
       setResumedSessionId(null);
+      qc.removeQueries({ queryKey: ["match-join", sid] });
+      // After abandoning, a fresh session in this same visit opens straight on the first card.
+      initialOpenId.current = null;
+      autoStarted.current = false;
       toast("Match abandonado. Nada foi revelado.");
       invalidate();
     },
@@ -301,10 +343,11 @@ function MatchPage() {
   // Auto-start once per visit when there is no pending session.
   useEffect(() => {
     if (!open.isSuccess || open.data || initialOpenId.current !== null) return;
+    if (view === "result" || !couple) return;
     if (autoStarted.current || !works.length || start.isPending) return;
     autoStarted.current = true;
     start.mutate();
-  }, [open.isSuccess, open.data, works.length, start]);
+  }, [open.isSuccess, open.data, works.length, start, view, couple]);
 
   const castVote = async (liked: boolean) => {
     if (!currentWork || cardExit || vote.isPending) return;
@@ -312,7 +355,7 @@ function MatchPage() {
     setCardExit({ work: currentWork, direction });
     const reduceMotion = window.matchMedia("(prefers-reduced-motion: reduce)").matches;
     const exitFinished = new Promise((resolve) =>
-      window.setTimeout(resolve, reduceMotion ? 1 : 210),
+      window.setTimeout(resolve, reduceMotion ? 1 : 330),
     );
     try {
       await Promise.all([vote.mutateAsync({ workId: currentWork.id, liked }), exitFinished]);
@@ -325,7 +368,10 @@ function MatchPage() {
   const partnerName = space.partner ? firstName(space.partner.display_name) : "seu parceiro";
   const header = (
     <>
-      <h1 className="text-2xl font-semibold">Match</h1>
+      <div className="-ml-2 flex items-center gap-1">
+        <BackButton />
+        <h1 className="text-2xl font-semibold">Match</h1>
+      </div>
       <p className="mt-1 text-sm text-muted-foreground">
         Cada um vota em segredo. O resultado só aparece quando os dois encerrarem.
       </p>
@@ -335,10 +381,32 @@ function MatchPage() {
   const results = (last.data?.result_work_ids ?? [])
     .map((id) => byId.get(id))
     .filter((work): work is NonNullable<typeof work> => Boolean(work));
+  // Uniform pick among closed results, revealed with a decelerating roulette.
   const pickRandomResult = () => {
-    if (results.length === 0) return;
-    const selected = results[Math.floor(Math.random() * results.length)];
-    setPickedResultId(selected?.id ?? null);
+    if (results.length === 0 || rolling) return;
+    const selected = results[Math.floor(Math.random() * results.length)]!;
+    if (window.matchMedia("(prefers-reduced-motion: reduce)").matches || results.length === 1) {
+      setPickedResultId(selected.id);
+      return;
+    }
+    setRolling(true);
+    let i = 0;
+    const steps = 12 + results.indexOf(selected) + results.length * 2;
+    const tick = (delay: number) => {
+      window.setTimeout(() => {
+        const w = results[i % results.length]!;
+        setSpinId(w.id);
+        i++;
+        if (i < steps) tick(delay * 1.13);
+        else {
+          setSpinId(null);
+          setPickedResultId(selected.id);
+          setRolling(false);
+        }
+      }, delay);
+    };
+    setPickedResultId(null);
+    tick(55);
   };
   const lastResult = last.data && (
     <section className="mt-8 border-t border-border pt-6">
@@ -359,7 +427,7 @@ function MatchPage() {
                 key={w.id}
                 to="/work/$id"
                 params={{ id: w.id }}
-                className={`pressable rounded-xl ${pickedResultId === w.id ? "ring-2 ring-primary ring-offset-2 ring-offset-background" : ""}`}
+                className={`pressable block rounded-xl transition-transform duration-150 ${spinId === w.id ? "-translate-y-1.5 scale-105 ring-2 ring-primary/70" : ""} ${pickedResultId === w.id ? "match-picked ring-2 ring-primary ring-offset-2 ring-offset-background" : spinId || pickedResultId ? "opacity-60" : ""}`}
               >
                 <Poster path={w.poster_path} title={w.title} />
                 <p className="mt-1 line-clamp-2 text-xs font-medium">{w.title}</p>
@@ -369,9 +437,11 @@ function MatchPage() {
           <button
             type="button"
             onClick={pickRandomResult}
+            disabled={rolling}
             className="pressable mt-4 flex min-h-11 w-full items-center justify-center gap-2 rounded-xl border border-border bg-secondary text-sm font-semibold"
           >
-            <Dices className="h-4 w-4" /> Sortear entre os matches
+            <Dices className={`h-4 w-4 ${rolling ? "animate-spin" : ""}`} />{" "}
+            {rolling ? "Embaralhando…" : "Sortear entre os matches"}
           </button>
           {pickedResultId && (
             <p className="fade-enter mt-3 text-center text-sm font-medium" aria-live="polite">
@@ -419,7 +489,64 @@ function MatchPage() {
     </AnimatedSheet>
   );
 
-  if (open.isLoading || (hasResumed && !me.data && !me.error) || (!open.data && start.isPending))
+  if (view === "result")
+    return (
+      <div className="px-4 pt-6">
+        {header}
+        {lastResult ?? (
+          <div className="mt-6">
+            <EmptyState title="Nenhum Match concluído ainda" />
+          </div>
+        )}
+        <button
+          onClick={() => navigate({ search: {}, replace: true })}
+          className="pressable mt-6 flex min-h-12 w-full items-center justify-center gap-2 rounded-xl bg-secondary text-sm font-semibold"
+        >
+          <Heart className="h-4 w-4" /> {open.data ? "Ir para o Match em andamento" : "Novo Match"}
+        </button>
+      </div>
+    );
+
+  if (members.isSuccess && !couple && !open.data)
+    return (
+      <div className="flex min-h-[calc(100dvh-env(safe-area-inset-top)-env(safe-area-inset-bottom))] flex-col px-4 pt-6">
+        {header}
+        <div className="flex flex-1 flex-col items-center justify-center pb-16 text-center">
+          <div className="match-stack scale-75" aria-hidden="true">
+            <div className="match-stack-back match-stack-back-far" />
+            <div className="match-stack-back match-stack-back-near" />
+            <div className="match-stack-back z-[2]" />
+          </div>
+          <h2 className="mt-2 text-xl font-semibold">O Match é a dois</h2>
+          <p className="mt-2 max-w-xs text-sm text-muted-foreground">
+            Convide seu parceiro em Configurações. Quando vocês dois estiverem no espaço, o Match
+            começa direto na primeira carta.
+          </p>
+          <Link
+            to="/settings"
+            className="pressable mt-6 flex min-h-12 items-center rounded-xl bg-primary px-6 text-sm font-semibold text-primary-foreground"
+          >
+            Convidar parceiro
+          </Link>
+          {last.data && (
+            <Link
+              to="/match"
+              search={{ view: "result" }}
+              className="pressable mt-2 min-h-11 px-4 py-3 text-sm text-muted-foreground"
+            >
+              Ver último resultado
+            </Link>
+          )}
+        </div>
+      </div>
+    );
+
+  if (
+    open.isLoading ||
+    members.isLoading ||
+    (hasResumed && !me.data && !me.error && !join.error) ||
+    (!open.data && start.isPending)
+  )
     return (
       <div className="px-4 pt-6">
         {header}
@@ -486,7 +613,7 @@ function MatchPage() {
       </div>
     );
 
-  if (!me.data) {
+  if (!me.data || join.error) {
     return (
       <div className="px-4 pt-6 text-sm text-destructive">Não foi possível retomar este Match.</div>
     );

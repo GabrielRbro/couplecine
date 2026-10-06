@@ -51,6 +51,15 @@ export function posterUrl(path: string | null, size: "w342" | "w780" | "original
 export async function searchMulti(query: string): Promise<TmdbSearchItem[]> {
   const data = await call("/search/multi", { query, include_adult: "false", page: "1" });
   const results = Array.isArray(data["results"]) ? (data["results"] as Json[]) : [];
+  // Fan-out guard: only the top 3 distinct people are expanded into credits.
+  const personIds = [
+    ...new Set(
+      results
+        .filter((r) => r["media_type"] === "person")
+        .map((r) => Number(r["id"]))
+        .filter((id) => Number.isInteger(id) && id > 0),
+    ),
+  ].slice(0, 3);
   const expanded = await Promise.all(
     results.slice(0, 20).map(async (item): Promise<TmdbSearchItem[]> => {
       const direct = mapListItem(item);
@@ -58,7 +67,8 @@ export async function searchMulti(query: string): Promise<TmdbSearchItem[]> {
       if (item["media_type"] !== "person") return [];
 
       const personId = Number(item["id"]);
-      if (!Number.isInteger(personId) || personId <= 0) return [];
+      if (!personIds.includes(personId)) return [];
+      personIds.splice(personIds.indexOf(personId), 1);
       const credits = await call(`/person/${personId}/combined_credits`);
       const cast = Array.isArray(credits["cast"]) ? (credits["cast"] as Json[]) : [];
       const crew = Array.isArray(credits["crew"]) ? (credits["crew"] as Json[]) : [];

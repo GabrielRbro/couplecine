@@ -52,51 +52,62 @@ async function ensureWork(
   userId: string,
   data: { spaceId: string; mediaType: "movie" | "tv"; tmdbId: number },
 ): Promise<string> {
-  const { data: found } = await supabase
-    .from("works")
-    .select("id")
-    .eq("space_id", data.spaceId)
-    .eq("media_type", data.mediaType)
-    .eq("tmdb_id", data.tmdbId)
-    .maybeSingle();
-  let workId = found?.id ?? null;
-  if (!workId) {
-    let d: TmdbDetails;
-    try {
-      d = await fetchDetails(data.mediaType, data.tmdbId);
-    } catch (e) {
-      friendly(e);
-    }
-    const { data: inserted, error } = await supabase
+  const findExisting = async () => {
+    const { data: found, error } = await supabase
       .from("works")
-      .insert({
-        space_id: data.spaceId,
-        media_type: data.mediaType,
-        tmdb_id: data.tmdbId,
-        title: d.title,
-        original_title: d.originalTitle,
-        overview: d.overview,
-        poster_path: d.posterPath,
-        backdrop_path: d.backdropPath,
-        release_year: d.year,
-        runtime_minutes: d.runtimeMinutes,
-        genres: d.genres,
-        created_by: userId,
-      })
       .select("id")
-      .single();
-    if (error) throw new Error("Não foi possível salvar a obra.");
-    workId = inserted.id;
-    await supabase.from("work_metadata_cache").upsert(
-      {
-        work_id: workId,
-        payload: d as never,
-        expires_at: new Date(Date.now() + 7 * 864e5).toISOString(),
-      },
-      { onConflict: "work_id" },
-    );
+      .eq("space_id", data.spaceId)
+      .eq("media_type", data.mediaType)
+      .eq("tmdb_id", data.tmdbId)
+      .maybeSingle();
+    if (error) throw new Error("Não foi possível consultar a biblioteca.");
+    return found?.id ?? null;
+  };
+  const existing = await findExisting();
+  if (existing) return existing;
+  let d: TmdbDetails;
+  try {
+    d = await fetchDetails(data.mediaType, data.tmdbId);
+  } catch (e) {
+    friendly(e);
   }
-  return workId;
+  const { data: inserted, error } = await supabase
+    .from("works")
+    .insert({
+      space_id: data.spaceId,
+      media_type: data.mediaType,
+      tmdb_id: data.tmdbId,
+      title: d.title,
+      original_title: d.originalTitle,
+      overview: d.overview,
+      poster_path: d.posterPath,
+      backdrop_path: d.backdropPath,
+      release_year: d.year,
+      runtime_minutes: d.runtimeMinutes,
+      genres: d.genres,
+      created_by: userId,
+    })
+    .select("id")
+    .single();
+  if (error) {
+    // Both people adding the same work at once: the unique constraint wins, reuse that row.
+    if (error.code === "23505") {
+      const raced = await findExisting();
+      if (raced) return raced;
+    }
+    console.error("ensureWork insert failed", error.code, error.message);
+    throw new Error("Não foi possível salvar a obra.");
+  }
+  const { error: ce } = await supabase.from("work_metadata_cache").upsert(
+    {
+      work_id: inserted.id,
+      payload: d as never,
+      expires_at: new Date(Date.now() + 7 * 864e5).toISOString(),
+    },
+    { onConflict: "work_id" },
+  );
+  if (ce) console.warn("work_metadata_cache upsert failed", ce.message);
+  return inserted.id;
 }
 
 export const addWork = createServerFn({ method: "POST" })
@@ -114,29 +125,30 @@ export const addWork = createServerFn({ method: "POST" })
   .handler(async ({ data, context }) => {
     const { supabase, userId } = context;
     const workId = await ensureWork(supabase, userId, data);
-    const { data: mine } = await supabase
+    const { data: mine, error: me } = await supabase
       .from("indications")
       .select("id")
       .eq("work_id", workId)
       .eq("indicated_by", userId)
       .maybeSingle();
+    if (me) throw new Error("Não foi possível salvar a indicação.");
     // One active indication per person: re-indicating renews it (keeps original author/date) and bumps activity via trigger.
-    if (mine)
-      await supabase
-        .from("indications")
-        .update({ renewed_at: new Date().toISOString() })
-        .eq("id", mine.id);
-    else
-      await supabase
-        .from("indications")
-        .insert({ space_id: data.spaceId, work_id: workId, indicated_by: userId });
+    const { error: we } = mine
+      ? await supabase
+          .from("indications")
+          .update({ renewed_at: new Date().toISOString() })
+          .eq("id", mine.id)
+      : await supabase
+          .from("indications")
+          .insert({ space_id: data.spaceId, work_id: workId, indicated_by: userId });
+    if (we) throw new Error("Não foi possível salvar a indicação.");
     const { error: ie } = await supabase
       .from("interests")
       .upsert(
         { work_id: workId, user_id: userId, reaction: data.reaction },
         { onConflict: "user_id,work_id" },
       );
-    if (ie) throw new Error("Não foi possível salvar sua reação.");
+    if (ie) throw new Error("A indicação foi salva, mas sua reação não. Tente de novo.");
     return { workId };
   });
 

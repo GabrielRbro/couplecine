@@ -2,6 +2,7 @@ import { createFileRoute, Link, useNavigate } from "@tanstack/react-router";
 import { useMemo } from "react";
 import { z } from "zod";
 import { Plus, Search } from "lucide-react";
+import { AnimatePresence, motion, useReducedMotion } from "motion/react";
 import { AppShell } from "@/components/app/AppShell";
 import { EmptyState, MediaCard } from "@/components/app/MediaCard";
 import { DiscoverTab } from "@/components/app/DiscoverTab";
@@ -46,6 +47,7 @@ function LibraryPage() {
   const { data: space } = useSpace();
   const { data: works = [], isLoading } = useLibrary(space?.spaceId);
   const { tab, kind, sort, q } = Route.useSearch();
+  const reduce = useReducedMotion();
   const navigate = useNavigate({ from: "/library" });
   const set = (patch: Partial<{ tab: Tab; kind: typeof kind; sort: typeof sort; q: string }>) =>
     navigate({ search: (prev) => ({ ...prev, ...patch }), replace: true, viewTransition: false });
@@ -152,10 +154,21 @@ function LibraryPage() {
               <PosterGridSkeleton />
             </div>
           )}
-          <div className="mt-5 grid grid-cols-2 gap-x-3 gap-y-5">
-            {list.map((w) => (
-              <MediaCard key={w.id} work={w} space={space} />
-            ))}
+          <div className="mt-5 grid grid-cols-2 gap-3">
+            <AnimatePresence initial={false} mode="popLayout">
+              {list.map((w) => (
+                <motion.div
+                  key={w.id}
+                  layout={!reduce}
+                  initial={reduce ? false : { opacity: 0, scale: 0.94 }}
+                  animate={{ opacity: 1, scale: 1 }}
+                  exit={reduce ? { opacity: 0 } : { opacity: 0, scale: 0.94 }}
+                  transition={{ type: "spring", stiffness: 420, damping: 36 }}
+                >
+                  <MediaCard work={w} space={space} />
+                </motion.div>
+              ))}
+            </AnimatePresence>
           </div>
           {!isLoading && list.length === 0 && (
             <EmptyState
