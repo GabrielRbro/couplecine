@@ -139,7 +139,7 @@ export function WorkDetails({ workId, mediaType, tmdbId }: { workId?: string; me
   const sharedPoster = useSharedStyle(transitionId, "poster");
   const sharedBackdrop = useSharedStyle(transitionId, "backdrop");
   const m = meta.data?.details;
-  const internal = Boolean(activeId && deletion === "active" && local.data?.work);
+  const internal = Boolean(activeId && deletion === "active" && local.data?.work && (local.data.indications.length || local.data.interests.length || local.data.prior.length || local.data.events.length || local.data.sessions.length));
   const work = local.data?.work ?? retained.current ?? (m ? {
     title: m.title, original_title: m.originalTitle, media_type: m.mediaType,
     tmdb_id: m.tmdbId, backdrop_path: m.backdropPath, poster_path: m.posterPath,

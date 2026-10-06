@@ -559,3 +559,13 @@ export const getGalleryLogos = createServerFn({ method: "POST" })
     }));
     return result;
   });
+
+/** Explicit real-Match preparation: catalog identities only, no indications or reactions. */
+export const materializeMatchCandidates = createServerFn({ method: "POST" })
+  .middleware([requireSupabaseAuth])
+  .inputValidator((d) => z.object({ spaceId: z.string().uuid(), items: z.array(z.object({mediaType:z.enum(["movie","tv"]),tmdbId:z.number().int().positive()})).max(4) }).parse(d))
+  .handler(async ({data,context}) => {
+    const ids: string[] = [];
+    for (const item of data.items) ids.push(await ensureWork(context.supabase, context.userId, {...item,spaceId:data.spaceId}));
+    return ids;
+  });
