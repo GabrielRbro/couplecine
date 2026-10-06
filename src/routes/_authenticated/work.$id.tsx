@@ -1,13 +1,14 @@
-import { createFileRoute, Link, useNavigate, useRouter } from "@tanstack/react-router";
+import { createFileRoute, useNavigate } from "@tanstack/react-router";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { useServerFn } from "@tanstack/react-start";
-import { useEffect, useRef, useState } from "react";
+import { useEffect, useState } from "react";
 import { ArrowLeft, Check, Trash2, Tv } from "lucide-react";
-import { DetailSkeleton } from "@/components/app/ui";
+import { DetailSkeleton, useBack } from "@/components/app/ui";
 import { toast } from "sonner";
 import { AnimatedSheet } from "@/components/app/AnimatedSheet";
 import { AppShell } from "@/components/app/AppShell";
 import { Poster } from "@/components/app/MediaCard";
+import { ScorePicker } from "@/components/app/ScorePicker";
 import { supabase } from "@/integrations/supabase/client";
 import { getSeasonEpisodes, getWorkDetails } from "@/lib/catalog.functions";
 import {
@@ -20,7 +21,22 @@ import {
   tmdbImage,
   type Reaction,
 } from "@/lib/format";
-import { firstName, useSpace, type SpaceInfo } from "@/lib/space";
+import { firstName, useSpace, type LibraryWork, type SpaceInfo } from "@/lib/space";
+import { useSharedStyle } from "@/lib/shared-transition";
+import { scheduleWorkDelete } from "@/lib/pending-delete";
+
+function BackOverlay() {
+  const back = useBack("/library");
+  return (
+    <button
+      onClick={back}
+      aria-label="Voltar"
+      className="pressable absolute left-4 top-[max(env(safe-area-inset-top),16px)] flex h-11 w-11 items-center justify-center rounded-full bg-background/70 backdrop-blur"
+    >
+      <ArrowLeft className="h-5 w-5" />
+    </button>
+  );
+}
 
 export const Route = createFileRoute("/_authenticated/work/$id")({
   head: () => ({
@@ -106,6 +122,8 @@ function WorkPage() {
     staleTime: 3600_000,
   });
   const qc = useQueryClient();
+  const sharedBackdrop = useSharedStyle(id, "backdrop");
+  const sharedPoster = useSharedStyle(id, "poster");
   const refresh = () => {
     qc.invalidateQueries({ queryKey: ["work", id] });
     qc.invalidateQueries({ queryKey: ["library"] });
