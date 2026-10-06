@@ -19,7 +19,7 @@ const RESULT: Record<string, string> = {
 };
 
 /** Owner manages the key (never shown back); partner only sees on/off. */
-export function GeminiSettings({ status, onChanged }: { status?: Status; onChanged: () => void }) {
+export function GeminiSettings({ status, onChanged }: { status?: Status | undefined; onChanged: () => void }) {
   const test = useServerFn(testGeminiKey);
   const save = useServerFn(saveGeminiKey);
   const remove = useServerFn(removeGeminiKey);
