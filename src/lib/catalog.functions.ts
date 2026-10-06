@@ -189,7 +189,10 @@ export const getWorkDetails = createServerFn({ method: "POST" })
       );
       return d;
     } catch (e) {
-      if (cached) return cached;
+      if (cached) {
+        console.warn("TMDB details failed; serving cached metadata for", data.workId);
+        return cached;
+      }
       friendly(e);
     }
   });
@@ -230,7 +233,10 @@ export const getSeasonEpisodes = createServerFn({ method: "POST" })
       );
       return eps;
     } catch (e) {
-      if (hit && Array.isArray(hit.payload)) return hit.payload as unknown as TmdbEpisode[];
+      if (hit && Array.isArray(hit.payload)) {
+        console.warn("TMDB season failed; serving cached season", data.workId, data.season);
+        return hit.payload as unknown as TmdbEpisode[];
+      }
       friendly(e);
     }
   });
@@ -246,7 +252,7 @@ export const getDiscover = createServerFn({ method: "POST" })
       supabase
         .from("works")
         .select(
-          "id, title, media_type, tmdb_id, activity_at, indications(indicated_by), interests(user_id, reaction)",
+          "id, title, media_type, tmdb_id, activity_at, genres, indications(indicated_by), interests(user_id, reaction), ratings(user_id, score), joint_watch_sessions(id)",
         )
         .eq("space_id", data.spaceId)
         .order("activity_at", { ascending: false }),
@@ -274,7 +280,17 @@ export const getDiscover = createServerFn({ method: "POST" })
       const items = await discoverFeed(seeds, data.page);
       const existing = new Map(all.map((w) => [key(w.media_type, w.tmdb_id), w.id]));
       let visible = items.filter((i) => !hidden.has(key(i.mediaType, i.tmdbId)));
-      if (data.page === 1) visible = await rerankWithGemini(visible, all, userId, supabase);
+      if (data.page === 1) {
+        const { data: lastMatch } = await supabase
+          .from("match_sessions")
+          .select("result_work_ids")
+          .eq("space_id", data.spaceId)
+          .eq("status", "closed")
+          .order("closed_at", { ascending: false })
+          .limit(1)
+          .maybeSingle();
+        visible = await rerankWithGemini(visible, all, userId, supabase, lastMatch?.result_work_ids ?? []);
+      }
       return {
         items: visible.map((i) => ({
           ...i,
@@ -292,28 +308,49 @@ export const getDiscover = createServerFn({ method: "POST" })
  * only TMDB candidates can be returned, and any failure keeps the TMDB order.
  */
 async function rerankWithGemini<
-  T extends { title: string; year: number | null; mediaType: string },
+  T extends { title: string; year: number | null; mediaType: string; genres?: string[] },
 >(
   candidates: T[],
-  works: { title: string; interests: { user_id: string; reaction: string }[] }[],
+  works: {
+    id: string;
+    title: string;
+    genres: string[];
+    interests: { user_id: string; reaction: string }[];
+    ratings: { user_id: string; score: number }[];
+    joint_watch_sessions: { id: string }[];
+  }[],
   userId: string,
   supabase: AuthedClient,
+  matchIds: string[],
 ): Promise<T[]> {
   const { geminiConfig, geminiJson } = await import("./gemini.server");
-  if (!geminiConfig().configured || candidates.length < 6) return candidates;
-  const pick = (pred: (r: { user_id: string; reaction: string }) => boolean, n: number) =>
-    works
-      .filter((w) => w.interests.some(pred))
-      .slice(0, n)
-      .map((w) => w.title);
+  if (!(await geminiConfig()).configured || candidates.length < 6) return candidates;
+  // Compact taste profile from data already loaded in one batch (no N+1).
+  const titles = (pred: (w: (typeof works)[number]) => boolean, n: number) =>
+    works.filter(pred).slice(0, n).map((w) => w.title);
+  const mine = (w: (typeof works)[number]) => w.interests.find((i) => i.user_id === userId)?.reaction;
+  const theirs = (w: (typeof works)[number]) => w.interests.find((i) => i.user_id !== userId)?.reaction;
+  const myScore = (w: (typeof works)[number]) => w.ratings.find((r) => r.user_id === userId)?.score;
+  const genreCount = new Map<string, number>();
+  for (const w of works)
+    if (mine(w) === "fire" || mine(w) === "like" || Number(myScore(w) ?? 0) >= 8)
+      for (const g of w.genres) genreCount.set(g, (genreCount.get(g) ?? 0) + 1);
   const profile = {
-    eu_amo: pick((r) => r.user_id === userId && r.reaction === "fire", 8),
-    eu_curto: pick((r) => r.user_id === userId && r.reaction === "like", 6),
-    eu_nao_quero: pick((r) => r.user_id === userId && r.reaction === "dislike", 5),
-    parceiro_ama: pick((r) => r.user_id !== userId && r.reaction === "fire", 5),
+    eu_amo: titles((w) => mine(w) === "fire", 8),
+    eu_curto: titles((w) => mine(w) === "like", 5),
+    eu_nao_quero: titles((w) => mine(w) === "dislike", 5),
+    minhas_notas_altas: titles((w) => Number(myScore(w) ?? 0) >= 8, 6),
+    minhas_notas_baixas: titles((w) => myScore(w) !== undefined && Number(myScore(w)) <= 4, 4),
+    generos_favoritos: [...genreCount.entries()].sort((a, b) => b[1] - a[1]).slice(0, 6).map(([g]) => g),
+    os_dois_curtem: titles((w) => ["fire", "like"].includes(mine(w) ?? "") && ["fire", "like"].includes(theirs(w) ?? ""), 6),
+    parceiro_ama: titles((w) => theirs(w) === "fire", 5),
+    assistidos_juntos: titles((w) => w.joint_watch_sessions.length > 0, 6),
+    ultimo_match: titles((w) => matchIds.includes(w.id), 5),
   };
   const pool = candidates.slice(0, 40);
-  const list = pool.map((c, i) => `${i}|${c.title}|${c.year ?? ""}|${c.mediaType}`).join("\n");
+  const list = pool
+    .map((c, i) => `${i}|${c.title}|${c.year ?? ""}|${c.mediaType}|${(c.genres ?? []).join("/")}`)
+    .join("\n");
   try {
     const res = await geminiJson<{ order?: number[] }>({
       supabase,
@@ -323,11 +360,11 @@ async function rerankWithGemini<
         'Você seleciona e ordena recomendações para UMA pessoa, ponderando compatibilidade com o parceiro. Mantenha diversidade: não repita demais gênero, franquia ou elenco; inclua alguma exploração. Use só os índices fornecidos. Responda JSON {"order":[índices]} com até 30 itens.',
       parts: [
         {
-          text: `Perfil: ${JSON.stringify(profile)}\nCandidatos (índice|título|ano|tipo):\n${list}`,
+          text: `Perfil: ${JSON.stringify(profile)}\nCandidatos (índice|título|ano|tipo|gêneros):\n${list}`,
         },
       ],
       cacheTtlHours: 24,
-      cacheSeed: `d:${JSON.stringify(profile)}:${pool.map((c) => c.title).join(",")}`,
+      cacheSeed: `d2:${JSON.stringify(profile)}:${pool.map((c) => c.title).join(",")}`,
     });
     const order = (res.order ?? []).filter((i) => Number.isInteger(i) && i >= 0 && i < pool.length);
     if (order.length < 6) return candidates;
@@ -338,7 +375,8 @@ async function rerankWithGemini<
         pool.filter((_, i) => !used.has(i)),
         candidates.slice(40),
       );
-  } catch {
+  } catch (e) {
+    console.warn("Discover rerank fell back to TMDB order:", e instanceof Error ? e.message : "error");
     return candidates;
   }
 }
