@@ -334,12 +334,14 @@ function Comparison({
   onChange: () => void;
 }) {
   const [editing, setEditing] = useState<"reaction" | "score" | null>(null);
+  const [saving, setSaving] = useState(false);
   const mine = interests.find((i) => i.user_id === space.userId);
   const myScore = ratings.find((r) => r.user_id === space.userId);
   const partnerId = space.partner?.id;
   const theirs = interests.find((i) => i.user_id === partnerId);
   const theirScore = ratings.find((r) => r.user_id === partnerId);
   const avg = myScore && theirScore ? (Number(myScore.score) + Number(theirScore.score)) / 2 : null;
+  const partnerLabel = space.partner ? firstName(space.partner.display_name) : "Parceiro";
 
   async function setReaction(reaction: Reaction) {
     const { error } = await supabase
@@ -353,6 +355,7 @@ function Comparison({
     setEditing(null);
   }
   async function setScore(score: number | null) {
+    setSaving(true);
     const { error } =
       score === null
         ? await supabase.from("ratings").delete().eq("work_id", workId).eq("user_id", space.userId)
@@ -362,132 +365,90 @@ function Comparison({
               { work_id: workId, user_id: space.userId, score },
               { onConflict: "user_id,work_id" },
             );
-    if (error) toast.error("Não foi possível salvar.");
-    else onChange();
+    setSaving(false);
+    if (error) return toast.error("Não foi possível salvar.");
+    onChange();
     setEditing(null);
   }
 
-  const InterestPerson = ({
-    label,
-    r,
-    own,
-  }: {
-    label: string;
-    r: Reaction | undefined;
-    own: boolean;
-  }) => (
-    <div className="min-w-0 flex-1 text-center">
-      <p className="text-[11px] text-muted-foreground">{label}</p>
-      <button
-        disabled={!own}
-        onClick={() => setEditing("reaction")}
-        className="pressable mt-1 inline-flex min-h-11 min-w-11 items-center justify-center text-2xl"
-        aria-label={`${label}: interesse`}
-      >
-        {r ? REACTION_EMOJI[r] : "—"}
-      </button>
-    </div>
-  );
-  const ScorePerson = ({
-    label,
-    s,
-    own,
-  }: {
-    label: string;
-    s: number | undefined;
-    own: boolean;
-  }) => (
-    <div className="min-w-0 flex-1 text-center">
-      <p className="text-xs text-muted-foreground">{label}</p>
-      <button
-        disabled={!own}
-        onClick={() => setEditing("score")}
-        className="pressable mt-1 inline-flex min-h-11 min-w-11 items-center justify-center text-lg font-semibold"
-        aria-label={`${label}: avaliação`}
-      >
-        {s !== undefined ? (
-          formatScore(Number(s))
-        ) : own ? (
-          <span className="text-xs text-primary">Dar nota</span>
-        ) : (
-          "—"
-        )}
-      </button>
-    </div>
-  );
-
+  const cell = "pressable flex min-h-11 min-w-11 flex-1 flex-col items-center justify-center";
   return (
-    <section className="space-y-3">
-      <div className="grid grid-cols-2 gap-3">
-        <div className="rounded-xl border border-border bg-card p-3">
-          <h2 className="text-xs font-semibold">Interesse</h2>
-          <div className="mt-2 flex divide-x divide-border">
-            <InterestPerson label="Eu" r={mine?.reaction} own />
-            <InterestPerson
-              label={space.partner ? firstName(space.partner.display_name) : "Parceiro"}
-              r={theirs?.reaction}
-              own={false}
-            />
+    <section>
+      <div className="grid grid-cols-2 gap-2">
+        <div className="rounded-xl border border-border bg-card px-2 py-1.5">
+          <h2 className="px-1 text-[11px] font-semibold text-muted-foreground">Interesse</h2>
+          <div className="flex divide-x divide-border">
+            <button
+              onClick={() => setEditing(editing === "reaction" ? null : "reaction")}
+              aria-label="Eu: interesse"
+              aria-expanded={editing === "reaction"}
+              className={cell}
+            >
+              <span className="emoji text-xl leading-none">
+                {mine ? REACTION_EMOJI[mine.reaction] : "—"}
+              </span>
+              <span className="text-[10px] text-muted-foreground">Eu</span>
+            </button>
+            <div className={cell} aria-label={`${partnerLabel}: interesse`}>
+              <span className="emoji text-xl leading-none">
+                {theirs ? REACTION_EMOJI[theirs.reaction] : "—"}
+              </span>
+              <span className="text-[10px] text-muted-foreground">{partnerLabel}</span>
+            </div>
           </div>
         </div>
-        <div className="rounded-xl border border-border bg-card p-3">
-          <div className="flex items-baseline justify-between gap-1">
-            <h2 className="text-xs font-semibold">Avaliação</h2>
+        <div className="rounded-xl border border-border bg-card px-2 py-1.5">
+          <div className="flex items-baseline justify-between px-1">
+            <h2 className="text-[11px] font-semibold text-muted-foreground">Avaliação</h2>
             {avg !== null && (
-              <span className="text-[11px] text-muted-foreground">Média {formatScore(avg)}</span>
+              <span className="text-[10px] font-semibold text-primary">
+                Média {formatScore(avg)}
+              </span>
             )}
           </div>
-          <div className="mt-2 flex divide-x divide-border">
-            <ScorePerson label="Eu" s={myScore?.score} own />
-            <ScorePerson
-              label={space.partner ? firstName(space.partner.display_name) : "Parceiro"}
-              s={theirScore?.score}
-              own={false}
-            />
+          <div className="flex divide-x divide-border">
+            <button onClick={() => setEditing("score")} aria-label="Eu: dar nota" className={cell}>
+              <span className="text-base font-semibold leading-tight">
+                {myScore ? (
+                  formatScore(Number(myScore.score))
+                ) : (
+                  <span className="text-xs text-primary">Dar nota</span>
+                )}
+              </span>
+              <span className="text-[10px] text-muted-foreground">Eu</span>
+            </button>
+            <div className={cell} aria-label={`${partnerLabel}: avaliação`}>
+              <span className="text-base font-semibold leading-tight">
+                {theirScore ? formatScore(Number(theirScore.score)) : "—"}
+              </span>
+              <span className="text-[10px] text-muted-foreground">{partnerLabel}</span>
+            </div>
           </div>
         </div>
       </div>
-      {avg === null && (
-        <p className="-mt-1 text-[11px] text-muted-foreground">
-          Média aparece quando os dois avaliarem.
-        </p>
-      )}
       {editing === "reaction" && (
-        <div className="grid grid-cols-4 gap-2">
+        <div className="fade-enter mt-2 grid grid-cols-4 gap-2">
           {ALL_REACTIONS.map((r) => (
             <button
               key={r}
               onClick={() => setReaction(r)}
-              className={`rounded-xl border py-2 text-2xl ${mine?.reaction === r ? "border-primary" : "border-border"}`}
+              aria-label={r}
+              className={`pressable emoji min-h-11 rounded-xl border text-2xl ${mine?.reaction === r ? "border-primary bg-accent" : "border-border"}`}
             >
               {REACTION_EMOJI[r]}
             </button>
           ))}
         </div>
       )}
-      {editing === "score" && (
-        <div>
-          <div className="grid grid-cols-7 gap-1.5">
-            {SCORES.map((s) => (
-              <button
-                key={s}
-                onClick={() => setScore(s)}
-                className={`rounded-lg border py-1.5 text-xs ${Number(myScore?.score) === s ? "border-primary bg-accent" : "border-border"}`}
-              >
-                {formatScore(s)}
-              </button>
-            ))}
-          </div>
-          {myScore && (
-            <button
-              onClick={() => setScore(null)}
-              className="mt-2 text-xs text-muted-foreground underline"
-            >
-              Remover minha nota
-            </button>
-          )}
-        </div>
-      )}
+      <ScorePicker
+        open={editing === "score"}
+        title="Sua nota"
+        initial={myScore ? Number(myScore.score) : null}
+        saving={saving}
+        onClose={() => setEditing(null)}
+        onSave={(s) => setScore(s)}
+        onRemove={myScore ? () => setScore(null) : undefined}
+      />
     </section>
   );
 }
