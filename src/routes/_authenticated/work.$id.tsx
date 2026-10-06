@@ -76,6 +76,9 @@ function workQuery(id: string) {
           .eq("work_id", id)
           .order("created_at"),
       ]);
+      // Any failed read is an error, never an empty interest/rating/history.
+      const failed = [w, i, r, p, s, e, j, n].find((x) => x.error);
+      if (failed?.error) throw new Error("Não foi possível carregar a obra. Tente de novo.");
       if (!w.data) throw new Error("Obra não encontrada");
       return {
         work: w.data,
