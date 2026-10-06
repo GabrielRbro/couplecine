@@ -25,7 +25,7 @@ export function ScorePicker({
   saving?: boolean;
   onClose: () => void;
   onSave: (score: number) => void;
-  onRemove?: () => void;
+  onRemove?: (() => void) | undefined;
 }) {
   return (
     <AnimatedSheet
@@ -59,7 +59,7 @@ export function ScoreForm({
   initial: number | null;
   saving: boolean;
   onSave: (score: number) => void;
-  onRemove?: () => void;
+  onRemove?: (() => void) | undefined;
   saveLabel?: string;
 }) {
   const [value, setValue] = useState<number>(initial ?? 7);

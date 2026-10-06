@@ -37,7 +37,10 @@ export function UnratedPile({
         { onConflict: "user_id,work_id" },
       );
     setSaving(false);
-    if (error) return toast.error("Não foi possível salvar a nota.");
+    if (error) {
+      toast.error("Não foi possível salvar a nota.");
+      return;
+    }
     setDone((d) => new Set(d).add(current.id));
     qc.setQueriesData<LibraryWork[]>({ queryKey: ["library", space.spaceId] }, (old) =>
       old?.map((w) =>
