@@ -53,9 +53,12 @@ Concluído: Lotes 1–4, 5A–5D, Rodada 6, MCP.
 - [ ] QA complementar: adicionar pelo Descobrir somente em DEMO restaurável, cache de logo frio/reload e fixture com exatamente duas obras; Match real deliberadamente não iniciado
 
 ## Rodada 11
-- [ ] Camadas shared, adição otimista e super reação
-- [ ] Ranking local, lotes IA, motion e layout busca
-- [ ] Logos independentes, sliders pointer e Duração animada
-- [ ] Episódios simples, ação direta e X externo
-- [ ] Match adaptativo/externos e poster vencedor com frost
-- [ ] Sorteio centralizado/motion e validação móvel dirigida sem dados reais
+- [x] Camadas shared, adição otimista e super reação
+- [x] Ranking local, lotes IA, motion e layout busca
+- [x] Logos independentes, sliders pointer e Duração animada
+- [x] Episódios simples, ação direta e X externo
+- [x] Match adaptativo/externos e poster vencedor com frost
+- [x] Sorteio centralizado/motion e validação móvel dirigida sem dados reais
+
+- QA dirigido: 390x844/412x915, paginação 20→40 e Back, sliders por drag (180min/nota8), modal scroll estável, rollback de adição por rede bloqueada, Gemini/TMDB externo (Dias Perfeitos/976893), Match solo adaptativo e persistência, 200 highlights sem repetição recente, sorteio central com retângulo estável e logos presentes no reload.
+- Build automático OK; typecheck final separado não disponível no relatório. Limitações: lote extra IA não chamado para poupar quota; cache server-side realmente frio e escrita Assistido/adição de sucesso não exercitados em dados reais; Match real não iniciado.
