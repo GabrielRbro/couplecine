@@ -246,29 +246,15 @@ function DicePage() {
               </div>
             )}
           </div>
-          <motion.div layout className="mx-auto mt-6 grid h-14 w-full max-w-sm grid-cols-[112px_minmax(0,1fr)] gap-2">
-            <div className="relative"><AnimatePresence>{picked && <motion.div key="decline" initial={{opacity:0,y:6,scale:.95}} animate={{opacity:1,y:0,scale:1}} exit={{opacity:0,y:6,scale:.95}} transition={{duration:reduce ? .01 : .18}}>
-              <Button
-                variant="outline"
-                onClick={decline}
-                disabled={!picked || rolling}
-                aria-label="Recusar nesta rodada"
-                className="pressable min-h-14 w-full rounded-2xl px-2"
-              >
-                <X className="h-4 w-4" /> Hoje não
-              </Button>
-            </motion.div>}</AnimatePresence></div>
-            <motion.div layout className="w-full"><Button
-              onClick={roll}
-              disabled={pool.length === 0 || rolling}
-              className="pressable min-h-14 w-full rounded-2xl font-semibold"
-            >
-              <Dices
-                className={`h-5 w-5 transition-transform duration-200 ${rolling ? "rotate-180" : ""}`}
-              />{" "}
+          <div className="mx-auto mt-6 flex h-[112px] w-56 flex-col items-center gap-2">
+            <motion.div layout className="w-full"><Button onClick={roll} disabled={pool.length === 0 || rolling} className="pressable min-h-14 w-full rounded-2xl font-semibold">
+              <Dices className={`h-5 w-5 transition-transform duration-200 ${rolling ? "rotate-180" : ""}`} />
               <AnimatePresence mode="wait" initial={false}><motion.span key={picked ? "again" : "start"} initial={{opacity:0,y:4}} animate={{opacity:1,y:0}} exit={{opacity:0,y:-4}} transition={{duration:.12}}>{picked ? "Sortear de novo" : "Sortear"}</motion.span></AnimatePresence>
             </Button></motion.div>
-          </motion.div>
+            <div className="relative h-12 w-full"><AnimatePresence>{picked && <motion.div key="decline" initial={{opacity:0,y:6,scale:.95}} animate={{opacity:1,y:0,scale:1}} exit={{opacity:0,y:6,scale:.95}} transition={{duration:reduce ? .01 : .18}}>
+              <Button variant="outline" onClick={decline} disabled={!picked || rolling} aria-label="Recusar nesta rodada" className="pressable min-h-11 w-full rounded-2xl"><X className="h-4 w-4" />Hoje não</Button>
+            </motion.div>}</AnimatePresence></div>
+          </div>
           <p className="mt-2 text-center text-xs text-muted-foreground">
             {pool.length} obras no sorteio
             {declined.size ? ` · ${declined.size} recusadas nesta rodada` : ""}
