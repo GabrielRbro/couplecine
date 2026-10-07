@@ -158,7 +158,7 @@ function DicePage() {
         🔥 pesa mais. 👎 fica de fora, a menos que vocês incluam.
       </p>
       <div className="mt-4 flex items-center justify-between gap-1">
-        <FilterPills
+        <div className="flex items-center gap-1"><FilterPills
           options={
             [
               ["all", "Todos"],
@@ -168,7 +168,7 @@ function DicePage() {
           }
           value={kind}
           onChange={setKind}
-        />
+        /></div>
         <TogglePill on={includeDislike} onClick={() => setIncludeDislike((v) => !v)}>Incluir 👎</TogglePill>
       </div>
       <ScrollRow className="mt-2">
