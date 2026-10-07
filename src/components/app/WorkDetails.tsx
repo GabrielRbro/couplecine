@@ -7,6 +7,7 @@ import { DetailSkeleton, useBack } from "@/components/app/ui";
 import { toast } from "sonner";
 import { AnimatedSheet } from "@/components/app/AnimatedSheet";
 import { Poster } from "@/components/app/MediaCard";
+import { SuperReaction } from "./SuperReaction";
 import { ScorePicker } from "@/components/app/ScorePicker";
 import { supabase } from "@/integrations/supabase/client";
 import { addWork, getSeasonEpisodes, getTitlePreview } from "@/lib/catalog.functions";
@@ -90,6 +91,8 @@ export function WorkDetails({ workId, mediaType, tmdbId }: { workId?: string; me
   const [activeId, setActiveId] = useState(workId ?? null);
   const [identity, setIdentity] = useState(mediaType && tmdbId ? { mediaType, tmdbId } : null);
   const [picking, setPicking] = useState(false);
+  const [optimisticReaction,setOptimisticReaction] = useState<"fire"|"like"|"neutral"|null>(null);
+  const [burst,setBurst] = useState<{emoji:string;origin:{x:number;y:number}}|null>(null);
   const deletion = useWorkDeletion(activeId ?? "");
   const local = useQuery({ ...workQuery(activeId ?? ""), enabled: Boolean(activeId) && deletion === "active" });
   const retained = useRef(local.data?.work ?? null);
@@ -119,33 +122,48 @@ export function WorkDetails({ workId, mediaType, tmdbId }: { workId?: string; me
       if (!identity || !space?.spaceId) throw new Error("Espaço indisponível.");
       return add({ data: { ...identity, spaceId: space.spaceId, reaction } });
     },
-    onMutate: async () => {
-      if (!identity) return [];
-      await qc.cancelQueries({ queryKey: ["discover", space?.spaceId] });
+    onMutate: (reaction) => {
       const snapshots = qc.getQueriesData({ queryKey: ["discover", space?.spaceId] });
-      qc.setQueriesData({ queryKey: ["discover", space?.spaceId] }, (old: { pages: { items: { mediaType: string; tmdbId: number }[] }[] } | undefined) => old && ({ ...old, pages: old.pages.map((page) => ({ ...page, items: page.items.filter((i) => i.mediaType !== identity.mediaType || i.tmdbId !== identity.tmdbId) })) }));
-      return snapshots;
+      const library = qc.getQueryData<LibraryWork[]>(["library",space?.spaceId]);
+      setOptimisticReaction(reaction); setPicking(false);
+      void qc.cancelQueries({ queryKey: ["discover", space?.spaceId] });
+      if (identity) qc.setQueriesData({ queryKey: ["discover", space?.spaceId] }, (old: { pages: { items: { mediaType: string; tmdbId: number }[] }[] } | undefined) => old && ({ ...old, pages: old.pages.map((page) => ({ ...page, items: page.items.filter((i) => i.mediaType !== identity.mediaType || i.tmdbId !== identity.tmdbId) })) }));
+      const details = meta.data?.details;
+      if (details && space) {
+        void qc.cancelQueries({queryKey:["library",space.spaceId]});
+        const temp: LibraryWork = {id:activeId ?? `optimistic-${details.mediaType}-${details.tmdbId}`,title:details.title,original_title:details.originalTitle,media_type:details.mediaType,poster_path:details.posterPath,backdrop_path:details.backdropPath,release_year:details.year,runtime_minutes:details.runtimeMinutes,genres:details.genres,activity_at:new Date().toISOString(),created_at:new Date().toISOString(),interests:[{user_id:space.userId,reaction}],ratings:[],indications:[{indicated_by:space.userId,created_at:new Date().toISOString(),renewed_at:null}],joint_watch_sessions:[],watch:null,series_states:[],work_metadata_cache:[]};
+        qc.setQueryData(["library",space.spaceId],[temp,...(library ?? []).filter((w)=>w.id!==temp.id)]);
+      }
+      return {snapshots,library,activeId};
     },
     onSuccess: async ({ workId: nextId }) => {
       restoreWorkDeletion(nextId);
-      await qc.fetchQuery(workQuery(nextId));
-      setActiveId(nextId); setPicking(false);
-      qc.invalidateQueries({ queryKey: ["library"] });
+      // Keep the optimistic surface until the authoritative snapshot is ready.
+      const loaded = await qc.fetchQuery(workQuery(nextId)).catch(()=>null);
+      setActiveId(nextId);
+      if (loaded) setOptimisticReaction(null);
+      void qc.invalidateQueries({ queryKey: ["library"] });
       toast.success("Indicação salva");
-    }, onError: (e, _reaction, snapshots) => { snapshots?.forEach(([key, value]) => qc.setQueryData(key, value)); toast.error(e.message); },
+    },
+    onError: (e, _reaction, context) => {
+      context?.snapshots.forEach(([key,value])=>qc.setQueryData(key,value));
+      if (context?.library) qc.setQueryData(["library",space?.spaceId],context.library); else qc.removeQueries({queryKey:["library",space?.spaceId],exact:true});
+      setActiveId(context?.activeId ?? null); setOptimisticReaction(null); setBurst(null); setPicking(true); toast.error(e.message);
+    },
   });
+  useEffect(()=>{if (optimisticReaction && !save.isPending && local.data?.indications.length) setOptimisticReaction(null);},[local.data,save.isPending,optimisticReaction]);
   const transitionId = workId ?? `tmdb-${mediaType}-${tmdbId}`;
   // Backdrops stay in ordinary hero paint; poster-only transitions cannot cover text.
   const sharedPoster = useSharedStyle(transitionId, "poster");
   const sharedBackdrop = useSharedStyle(transitionId, "backdrop");
   const m = meta.data?.details;
-  const internal = Boolean(activeId && deletion === "active" && local.data?.work && (local.data.indications.length || local.data.interests.length || local.data.prior.length || local.data.events.length || local.data.sessions.length));
+  const internal = Boolean(optimisticReaction) || Boolean(activeId && deletion === "active" && local.data?.work && (local.data.indications.length || local.data.interests.length || local.data.prior.length || local.data.events.length || local.data.sessions.length));
   const work = local.data?.work ?? retained.current ?? (m ? {
     title: m.title, original_title: m.originalTitle, media_type: m.mediaType,
     tmdb_id: m.tmdbId, backdrop_path: m.backdropPath, poster_path: m.posterPath,
     release_year: m.year, runtime_minutes: m.runtimeMinutes, genres: m.genres, overview: m.overview,
   } : null);
-  const data = internal && local.data ? local.data : { interests: [], ratings: [], indications: [], prior: [], sessions: [], state: null, events: [] };
+  const data = optimisticReaction && space ? {interests:[{user_id:space.userId,reaction:optimisticReaction}],ratings:[],indications:[{id:"optimistic",indicated_by:space.userId,created_at:new Date().toISOString(),renewed_at:null}],prior:[],sessions:[],state:null,events:[]} : internal && local.data ? local.data : { interests: [], ratings: [], indications: [], prior: [], sessions: [], state: null, events: [] };
   const id = activeId ?? "";
   if (!space || !work) {
     if (local.error || meta.error) return <div className="p-6"><BackOverlay /><p className="mt-12 text-sm text-destructive">{local.error?.message ?? meta.error?.message}</p></div>;
@@ -169,7 +187,7 @@ export function WorkDetails({ workId, mediaType, tmdbId }: { workId?: string; me
           <div className="h-full w-full bg-gradient-to-br from-accent to-card" />
         )}
         <div className="absolute inset-0 bg-gradient-to-b from-background/30 via-transparent to-background" />
-        <BackOverlay />
+        <div style={{viewTransitionName:"detail-controls"}} className="absolute inset-0 pointer-events-none [&_button]:pointer-events-auto"><BackOverlay /></div>
       </div>
       <div className="relative z-10 -mt-28 flex gap-4 px-4">
         <div className="relative z-10 w-28 shrink-0 shadow-2xl">
@@ -212,7 +230,7 @@ export function WorkDetails({ workId, mediaType, tmdbId }: { workId?: string; me
           <Tv className="h-4 w-4" /> Assistir na TV · não configurado
         </button>
         {deletion === "pending" ? <p role="status" className="text-sm text-muted-foreground">Exclusão pendente · Desfazer disponível.</p> : !internal ? <Button disabled={save.isPending} onClick={() => setPicking(true)} className="min-h-12 w-full"><Plus />Adicionar à biblioteca</Button> : null}
-        {internal && <><Comparison
+        {internal && <div aria-busy={save.isPending} className={optimisticReaction ? "pointer-events-none" : ""}><Comparison
           space={space}
           workId={id}
           interests={data.interests as { user_id: string; reaction: Reaction }[]}
@@ -236,7 +254,7 @@ export function WorkDetails({ workId, mediaType, tmdbId }: { workId?: string; me
           </div>
         </section>
 
-        </>}
+        </div>}
         {isTv ? (
           <>
             <Synopsis text={m?.overview ?? work.overview} />
@@ -290,8 +308,9 @@ export function WorkDetails({ workId, mediaType, tmdbId }: { workId?: string; me
       </div>
       <AnimatedSheet open={picking} onClose={() => setPicking(false)} closeDisabled={save.isPending} labelledBy="add-reaction-title">
         <h2 id="add-reaction-title" className="font-semibold">{work.title}</h2>
-        <div className="mt-5 grid grid-cols-3 gap-2">{ADD_REACTIONS.map((r) => <Button key={r} variant="outline" disabled={save.isPending} onClick={() => { if (r !== "dislike") save.mutate(r); }} className="h-auto min-h-16 flex-col"><span className="emoji text-2xl">{REACTION_EMOJI[r]}</span><span>{REACTION_LABEL[r]}</span></Button>)}</div>
+        <div className="mt-5 grid grid-cols-3 gap-2">{ADD_REACTIONS.map((r) => <Button key={r} variant="outline" disabled={save.isPending} onClick={(e) => { if (r !== "dislike") { const box=e.currentTarget.getBoundingClientRect(); setBurst({emoji:REACTION_EMOJI[r],origin:{x:box.x+box.width/2,y:box.y+box.height/2}}); save.mutate(r); } }} className="h-auto min-h-16 flex-col"><span className="emoji text-2xl">{REACTION_EMOJI[r]}</span><span>{REACTION_LABEL[r]}</span></Button>)}</div>
       </AnimatedSheet>
+      {burst && <SuperReaction {...burst} onComplete={()=>setBurst(null)} />}
     </div>
   );
 }
@@ -647,11 +666,11 @@ function SeriesProgressStrip({
 function EpisodeArt({ ep, posterPath, fallbackImage, big = false }: { ep: Episode; posterPath: string | null; fallbackImage: string | null; big?: boolean }) {
   // A horizontal frame always dominates; absent stills use the series backdrop, never a vertical slot.
   const src = tmdbImage(ep.stillPath ?? fallbackImage, big ? "w780" : "w300");
-  const mini = ep.stillPath ? tmdbImage(posterPath, "w185") : null;
+  void posterPath;
   return <div className="relative h-full w-full bg-muted">
     {src && <img src={src} alt="" loading={big ? "eager" : "lazy"} className="h-full w-full object-cover" />}
     {big && <div className="pointer-events-none absolute inset-0 bg-gradient-to-t from-card/70 to-transparent" />}
-    {mini && <img src={mini} alt="" className="absolute bottom-2 left-2 h-[30%] aspect-[2/3] rounded border border-border object-cover shadow-lg" />}
+
   </div>;
 }
 
@@ -694,7 +713,7 @@ function SeriesBlock({
   const epArt = (ep: Episode) => {
     const poster = seasonPoster(ep.seasonNumber);
     if (ep.stillPath) return { kind: "still" as const, path: ep.stillPath };
-    if (poster) return { kind: "poster" as const, path: poster };
+
     return { kind: "series" as const, path: fallbackImage };
   };
 
@@ -808,12 +827,11 @@ function SeriesBlock({
               const done = seen.has(`${ep.seasonNumber}:${ep.episodeNumber}`);
               const isNext = next?.s === ep.seasonNumber && next?.e === ep.episodeNumber;
               return (
-                <button
+                <div key={ep.episodeNumber} className="w-44 shrink-0"><button
                   type="button"
-                  key={ep.episodeNumber}
                   onClick={() => setOpenEp(ep)}
                   aria-label={`Abrir T${ep.seasonNumber}E${ep.episodeNumber}, ${ep.name}${done ? ", assistido" : ""}`}
-                  className="pressable w-44 shrink-0 text-left"
+                  className="pressable block w-full text-left"
                 >
                   <div
                     className={`relative aspect-video overflow-hidden rounded-xl bg-muted ${isNext ? "ring-2 ring-primary" : ""} ${done ? "opacity-60" : ""}`}
@@ -837,6 +855,8 @@ function SeriesBlock({
                     {formatRuntime(ep.runtimeMinutes) ?? "—"}
                   </p>
                 </button>
+                {workId && <Button variant={done ? "secondary" : "outline"} disabled={saving} aria-label={`${done ? "Desmarcar" : "Marcar"} T${ep.seasonNumber}E${ep.episodeNumber} assistido`} aria-pressed={done} onClick={()=>toggle(ep.seasonNumber,ep.episodeNumber,!done)} className="mt-2 min-h-11 w-full text-xs"><Check className="h-3.5 w-3.5" />{done ? "Assistido" : "Marcar assistido"}</Button>}
+                </div>
               );
             })}
           </div>
@@ -851,9 +871,9 @@ function SeriesBlock({
         panelClassName="relative max-h-[88dvh] overflow-visible p-0 pb-[max(env(safe-area-inset-bottom),20px)]"
       >
         {openEp && (
-          <div className="max-h-[82dvh] overflow-y-auto overscroll-contain rounded-t-3xl">
-            <Button variant="secondary" size="icon" aria-label="Fechar episódio" disabled={saving} onClick={() => setOpenEp(null)} className="absolute -top-4 right-3 z-20 h-11 w-11 rounded-full border border-border shadow-lg"><X /></Button>
-            <div className="relative aspect-[16/10] overflow-hidden bg-muted">
+          <>
+            <Button variant="secondary" size="icon" aria-label="Fechar episódio" disabled={saving} onClick={() => setOpenEp(null)} className="absolute -top-8 right-[max(env(safe-area-inset-right),4px)] z-20 h-11 w-11 rounded-full border border-border shadow-lg"><X /></Button>
+            <div className="max-h-[82dvh] overflow-y-auto overscroll-contain rounded-t-3xl"><div className="relative aspect-[16/10] overflow-hidden bg-muted">
               <EpisodeArt ep={openEp} posterPath={seasonPoster(openEp.seasonNumber)} fallbackImage={fallbackImage} big />
             </div>
             <div className="p-6">
@@ -887,7 +907,7 @@ function SeriesBlock({
                 </button>
               </div>
             </div>
-          </div>
+          </div></>
         )}
       </AnimatedSheet>
     </section>

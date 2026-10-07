@@ -336,3 +336,11 @@ html { scrollbar-gutter: stable; }
 ::view-transition-group(detail-meta) { z-index: 3; animation: none; }
 ::view-transition-old(detail-meta) { display: none; }
 ::view-transition-new(detail-meta) { animation: none; mix-blend-mode: normal; }
+
+/* Separate paint planes: no backdrop pixel can cover the live hero foreground. */
+::view-transition-group(root) { z-index: 2; }
+::view-transition-group(shared-backdrop) { z-index: 0; }
+::view-transition-group(shared-poster), ::view-transition-group(detail-poster) { z-index: 4; }
+::view-transition-group(detail-meta), ::view-transition-group(detail-controls) { z-index: 5; animation: none; }
+::view-transition-old(detail-controls) { display: none; }
+::view-transition-new(detail-controls) { animation: none; mix-blend-mode: normal; }
