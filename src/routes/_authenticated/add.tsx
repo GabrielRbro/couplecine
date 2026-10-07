@@ -1,5 +1,5 @@
 import { createFileRoute, Link } from "@tanstack/react-router";
-import { useInfiniteQuery, useQuery } from "@tanstack/react-query";
+import { useInfiniteQuery, useQueryClient } from "@tanstack/react-query";
 import { useServerFn } from "@tanstack/react-start";
 import { useEffect, useState } from "react";
 import { AnimatePresence, motion, useReducedMotion } from "motion/react";
@@ -10,6 +10,7 @@ import { IntelligentLoading } from "@/components/app/IntelligentLoading";
 import { Poster } from "@/components/app/MediaCard";
 import { AnimatedSheet } from "@/components/app/AnimatedSheet";
 import { Button } from "@/components/ui/button";
+import { rankSearch } from "@/lib/search-ranking";
 import { searchCatalog } from "@/lib/catalog.functions";
 import { smartSearch } from "@/lib/ai.functions";
 import { markShared } from "@/lib/shared-transition";
@@ -34,6 +35,8 @@ function AddPage() {
   const reduce = useReducedMotion();
   const search = useServerFn(searchCatalog);
   const smart = useServerFn(smartSearch);
+  const qc = useQueryClient();
+
   const [debounced, setDebounced] = useState(q);
   const [ordering, setOrdering] = useState(false);
   useEffect(() => { const t = window.setTimeout(() => setDebounced(q), mode === "ai" ? 1100 : 350); return () => clearTimeout(t); }, [q, mode]);
@@ -42,14 +45,17 @@ function AddPage() {
       if (!space?.spaceId) throw new Error("Espaço indisponível.");
       return search({ data: { query: debounced.trim(), spaceId: space.spaceId, page: pageParam } });
     }, getNextPageParam: (last, pages) => last.length >= 20 && pages.length < 20 ? pages.length + 1 : undefined });
-  const intelligent = useQuery({ queryKey: ["smart-search-view", debounced.trim(), space?.spaceId, kind], enabled: mode === "ai" && debounced.trim().length >= 3 && Boolean(space?.spaceId), staleTime: 72 * 3600_000, retry: false,
-    queryFn: () => {
+  const aiKey = ["smart-search-view", debounced.trim(), space?.spaceId, kind];
+  const intelligent = useInfiniteQuery({ queryKey: aiKey, initialPageParam: 1, enabled: mode === "ai" && debounced.trim().length >= 3 && Boolean(space?.spaceId), staleTime: 72 * 3600_000, retry: false,
+    queryFn: ({pageParam}) => {
       if (!space?.spaceId) throw new Error("Espaço indisponível.");
-      return smart({ data: { query: debounced.trim(), spaceId: space.spaceId, kind: kind === "movie" ? "movie" : kind === "tv" ? "tv" : "all" } });
-    } });
-  const data = intelligent.data;
-  const loaded = mode === "ai" ? data?.items ?? [] : q.trim().length >= 2 ? normal.data?.pages.flat() ?? [] : [];
-  const items = [...new Map(loaded.filter((r) => kind === "all" || r.mediaType === kind).map((r) => [`${r.mediaType}:${r.tmdbId}`, r])).values()];
+      const previous = qc.getQueryData<{pages:{items:{title:string;tmdbId:number;mediaType:"movie"|"tv"}[]}[]}>(aiKey)?.pages.flatMap((p)=>p.items) ?? [];
+      return smart({ data: { query: debounced.trim(), spaceId: space.spaceId, kind: kind === "movie" ? "movie" : kind === "tv" ? "tv" : "all",page:pageParam,exclude:previous.slice(0,50) } });
+    },getNextPageParam:(last,pages)=>last.ok && last.hasMore ? pages.length+1 : undefined });
+  const data = intelligent.data?.pages.at(-1);
+  const loaded = mode === "ai" ? intelligent.data?.pages.flatMap((p)=>p.items) ?? [] : q.trim().length >= 2 ? normal.data?.pages.flat() ?? [] : [];
+  let items = [...new Map(loaded.filter((r) => kind === "all" || r.mediaType === kind).map((r) => [`${r.mediaType}:${r.tmdbId}`, r])).values()];
+  if (sort === "relevance" && mode !== "ai") items = rankSearch(items,debounced);
   if (sort !== "relevance") items.sort((a,b) => sort === "rating" ? (b.voteAverage ?? 0) - (a.voteAverage ?? 0) : sort === "oldest" ? (a.year ?? 9999) - (b.year ?? 9999) : (b.year ?? 0) - (a.year ?? 0));
   const pending = mode === "ai" ? intelligent.isFetching || q !== debounced : normal.isFetching || (q !== debounced && q.length >= 2);
   const update = (patch: Partial<{ q: string; kind: string; mode: string; sort: string }>) => navigate({ to: ".", search: (p) => ({ ...p, ...patch }), replace: true, viewTransition: false, resetScroll: false });
@@ -61,11 +67,11 @@ function AddPage() {
       <input aria-label="Título, ator ou diretor" value={q} onChange={(e) => { update({ q: e.target.value }); }} placeholder="Título, ator ou diretor" className="min-w-0 bg-transparent py-3 text-sm outline-none" />
       <span className="flex h-5 w-5 items-center">{pending && <LoaderCircle className="h-4 w-4 animate-spin text-primary" />}</span>
     </div>
-    <div className="mt-2 flex items-center justify-between gap-1"><FilterPills options={[["all", "Todos"], ["movie", "Filmes"], ["tv", "Séries"]]} value={kind} onChange={(value) => update({ kind: value })} /><Button variant={mode === "ai" ? "secondary" : "ghost"} role="switch" aria-checked={mode === "ai"} aria-label="Busca inteligente" onClick={() => update({ mode: mode === "ai" ? "tmdb" : "ai" })} className="min-h-11 shrink-0 px-2 text-xs"><Sparkles className="h-3.5 w-3.5 text-primary" />IA</Button></div>
+    <div className="mt-2 flex items-center justify-between gap-1"><div className="flex items-center gap-1"><FilterPills options={[["all", "Todos"], ["movie", "Filmes"], ["tv", "Séries"]]} value={kind} onChange={(value) => update({ kind: value })} /></div><Button variant={mode === "ai" ? "default" : "outline"} role="switch" aria-checked={mode === "ai"} aria-label="Busca inteligente" onClick={() => update({ mode: mode === "ai" ? "tmdb" : "ai" })} className={`ml-auto min-h-11 shrink-0 px-3 text-xs ${mode === "ai" ? "bg-primary text-primary-foreground" : "border-primary text-muted-foreground"}`}>IA<Sparkles className="h-3.5 w-3.5" /></Button></div>
     <Button variant="ghost" onClick={() => setOrdering(true)} className="min-h-11 px-0 text-xs text-muted-foreground">{orders.find(([value]) => value === sort)?.[1] ?? "Relevância"}<ChevronDown className="h-3 w-3" /></Button>
     <AnimatedSheet open={ordering} onClose={() => setOrdering(false)} labelledBy="search-order"><h2 id="search-order" className="font-semibold">Ordenação</h2><div className="mt-3">{orders.map(([value, label]) => <Button key={value} variant={sort === value ? "secondary" : "ghost"} className="min-h-12 w-full justify-start" onClick={() => { update({ sort: value }); setOrdering(false); }}>{label}</Button>)}</div></AnimatedSheet>
     <AnimatePresence initial={false} mode="wait">
-      {mode === "ai" && pending ? <motion.div key="interpreting" initial={{ opacity: 0 }} animate={{ opacity: 1 }} exit={{ opacity: 0 }} className="min-h-28">
+      {mode === "ai" && pending && !intelligent.data ? <motion.div key="interpreting" initial={{ opacity: 0 }} animate={{ opacity: 1 }} exit={{ opacity: 0 }} className="min-h-28">
          <IntelligentLoading />
        </motion.div> : <motion.div key="results" initial={reduce ? false : { opacity: 0 }} animate={{ opacity: 1 }} exit={{ opacity: 0 }} className="mt-4 space-y-2">
         {mode === "tmdb" && pending && !normal.data && [0,1,2].map((i) => <div key={i} className="skeleton h-[88px] rounded-xl" />)}
@@ -77,7 +83,8 @@ function AddPage() {
         {!pending && q.trim().length >= 2 && items.length === 0 && <p className="text-sm text-muted-foreground">{data && !data.ok ? data.reason : "Nenhum filme ou série encontrado."}</p>}
       </motion.div>}
     </AnimatePresence>
-    {mode !== "ai" && normal.hasNextPage && <Button variant="outline" disabled={normal.isFetchingNextPage} onClick={() => normal.fetchNextPage()} className="mt-4 min-h-11 w-full">{normal.isFetchingNextPage ? "Carregando…" : "Ver mais resultados"}</Button>}
+    {((mode !== "ai" && normal.hasNextPage) || (mode === "ai" && intelligent.hasNextPage)) && <Button variant="outline" disabled={mode === "ai" ? intelligent.isFetchingNextPage : normal.isFetchingNextPage} onClick={() => mode === "ai" ? intelligent.fetchNextPage() : normal.fetchNextPage()} className="mt-4 min-h-11 w-full">{(mode === "ai" ? intelligent.isFetchingNextPage : normal.isFetchingNextPage) ? "Carregando…" : "Ver mais resultados"}</Button>}
+    {mode === "ai" && intelligent.isFetchingNextPage && <IntelligentLoading />}
     {(normal.error || intelligent.error) && <p className="mt-4 text-sm text-destructive">{normal.error?.message ?? intelligent.error?.message}</p>}
   </div>;
 }

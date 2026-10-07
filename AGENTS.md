@@ -35,3 +35,7 @@
 - Overlay scroll locks capture gestures without changing html/body overflow; disabled-close history entries are restored on Back to preserve scroll geometry and overlay ordering.
 - Match external candidates are TMDB-validated; solo candidates remain local and real candidates materialize only catalog identities without indication or interest, so stable voting IDs do not pollute library sections.
 - Shared art names clear on the active View Transition completion (animation completion fallback), never on an arbitrary short delay.
+
+- Search relevance combines bounded title matching with TMDB recognition signals; AI batches exclude previous validated identities and use query/type/batch cache keys to avoid repeat sets.
+- External additions hold an optimistic detail surface and feed/library snapshots until the authoritative work arrives; failures restore all snapshots and the picker.
+- Solo Match keeps the full shuffled pool with a variable initial window, 5–10-card pre-goal extensions and one 0–8 post-goal extension, mirroring the real RPC without writes.

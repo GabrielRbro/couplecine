@@ -550,11 +550,13 @@ export const getGalleryLogos = createServerFn({ method: "POST" })
         try {
           // Keep the entire existing JSON; a cold cache receives complete details, not a partial payload.
           const fresh = cache && new Date(cache.expires_at).getTime() > Date.now();
-          const next = payload && fresh ? { ...payload, logoPath: await fetchLogo(work.media_type, work.tmdb_id), logoChecked: true, no_logo: false } : await fetchDetails(work.media_type, work.tmdb_id);
+          const [logoPath,details] = await Promise.all([fetchLogo(work.media_type, work.tmdb_id), payload && fresh ? Promise.resolve(payload) : fetchDetails(work.media_type, work.tmdb_id)]);
+          const next = { ...details, logoPath, logoChecked: true, no_logo: !logoPath };
           next.no_logo = !next.logoPath;
           result[work.id] = next.logoPath ?? null;
-          await context.supabase.from("work_metadata_cache").upsert({ work_id: work.id, payload: next as never, expires_at: new Date(Date.now() + 7 * 864e5).toISOString() }, { onConflict: "work_id" });
-        } catch { result[work.id] = null; }
+          const {error:cacheError}=await context.supabase.from("work_metadata_cache").upsert({ work_id: work.id, payload: next as never, expires_at: new Date(Date.now() + 7 * 864e5).toISOString() }, { onConflict: "work_id" });
+          if(cacheError) throw new Error("Não foi possível guardar a arte.");
+        } catch { delete result[work.id]; }
       }
     }));
     return result;

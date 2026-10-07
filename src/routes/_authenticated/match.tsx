@@ -438,7 +438,8 @@ function MatchPage() {
       <h2 className="mt-1 text-xl font-semibold">
         Vocês deram Match em {results.length} {results.length === 1 ? "obra" : "obras"}
       </h2>
-      {pickedResultId && byId.get(pickedResultId) ? <MatchWinner work={byId.get(pickedResultId) as NonNullable<ReturnType<typeof byId.get>>} onRoll={pickRandomResult} onRestart={() => { setPickedResultId(null); setPreparedIds(null); autoStarted.current = false; navigate({ search: {}, replace: true }); }} /> : results.length === 0 ? (
+      {pickedResultId && byId.get(pickedResultId) ? <MatchWinner key={pickedResultId} work={byId.get(pickedResultId) as NonNullable<ReturnType<typeof byId.get>>} onRoll={pickRandomResult} onRestart={() => { setPickedResultId(null); setPreparedIds(null); autoStarted.current = false; navigate({ search: {}, replace: true }); }} /> : null}
+      {results.length === 0 ? (
         <p className="mt-2 text-sm text-muted-foreground">Nenhuma obra em comum desta vez.</p>
       ) : (
         <>
@@ -453,7 +454,7 @@ function MatchPage() {
                 params={{ id: w.id }}
                 className={`pressable block rounded-xl transition-transform duration-150 ${spinId === w.id ? "-translate-y-1.5 scale-105 ring-2 ring-primary/70" : ""} ${pickedResultId === w.id ? "match-picked ring-2 ring-primary ring-offset-2 ring-offset-background" : spinId || pickedResultId ? "opacity-60" : ""}`}
               >
-                <Poster path={w.poster_path} title={w.title} />
+                <div data-match-poster={w.id}><Poster path={w.poster_path} title={w.title} /></div>
                 <p className="mt-1 line-clamp-2 text-xs font-medium">{w.title}</p>
               </Link>
             ))}

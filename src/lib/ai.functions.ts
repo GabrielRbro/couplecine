@@ -105,7 +105,7 @@ const GUESS_SCHEMA_HINT =
 export const smartSearch = createServerFn({ method: "POST" })
   .middleware([requireSupabaseAuth])
   .inputValidator((d) =>
-    z.object({ query: z.string().min(3).max(300), spaceId: z.string().uuid(), kind: z.enum(["all", "movie", "tv"]).default("all") }).parse(d),
+    z.object({ query: z.string().min(3).max(300), spaceId: z.string().uuid(), kind: z.enum(["all", "movie", "tv"]).default("all"), page: z.number().int().min(1).max(5).default(1), exclude: z.array(z.object({title:z.string().max(200),tmdbId:z.number().int(),mediaType:z.enum(["movie","tv"])})).max(50).default([]) }).parse(d),
   )
   .handler(async ({ data, context }) => {
     const began = Date.now();
@@ -116,13 +116,13 @@ export const smartSearch = createServerFn({ method: "POST" })
         userId: context.userId,
         feature: "smart_search",
         system: `Você ajuda um casal a encontrar filmes e séries a partir de descrições em linguagem natural (pt-BR). ${GUESS_SCHEMA_HINT}`,
-        parts: [{ text: `${query}\nTipo: ${data.kind}` }],
+        parts: [{ text: `${query}\nTipo: ${data.kind}\nLote: ${data.page}. Traga outros candidatos reais; não repita estes títulos: ${data.exclude.map((w)=>w.title).join("; ")}` }],
         cacheTtlHours: 72,
-        cacheSeed: `q3:${query}:${data.kind}`,
+        cacheSeed: `q4:${query}:${data.kind}:${data.page}`,
       });
       const interpreted = Date.now();
-      const items = (await validate(res.items ?? [], data.spaceId, context.supabase)).filter((w) => data.kind === "all" || w.mediaType === data.kind);
-      return { ok: true as const, items, timings: { interpretMs: interpreted - began, validateMs: Date.now() - interpreted } };
+      const items = (await validate(res.items ?? [], data.spaceId, context.supabase)).filter((w) => (data.kind === "all" || w.mediaType === data.kind) && !data.exclude.some((old)=>old.tmdbId===w.tmdbId && old.mediaType===w.mediaType));
+      return { ok: true as const, items, hasMore: items.length > 0 && data.page < 5, timings: { interpretMs: interpreted - began, validateMs: Date.now() - interpreted } };
     } catch (e) {
       if (e instanceof AiUnavailable)
         return {
@@ -197,8 +197,9 @@ export const refineMatch = createServerFn({ method: "POST" })
     const eligible = (rows ?? []).filter((w) => w.indications.length && !w.interests.some((i) => i.reaction === "dislike") && (data.kind === "all" || w.media_type === data.kind));
     const fallback = eligible.map((w) => w.id);
     try {
+      const {data:library} = await context.supabase.from("works").select("title,media_type,tmdb_id").eq("space_id",data.spaceId);
       const compact = eligible.map((w) => ({ id:w.id,title:w.title,type:w.media_type,minutes:w.runtime_minutes,genres:w.genres.slice(0,3) }));
-      const result = await geminiJson<{ ids?: string[]; items?: AiTitleGuess[] }>({ supabase: context.supabase,userId:context.userId,feature:"smart_search",system:'Refine o conjunto de filmes/séries fornecido para a intenção. Retorne JSON {"ids":[ids],"items":[{"title":string,"year":number|null,"mediaType":"movie"|"tv"}]} em ordem de preferência. ids só do conjunto. items: até 4 títulos reais externos compatíveis com a intenção; nunca invente metadata, votos ou resultados. Mantenha pelo menos 2 candidatos internos se disponíveis.',parts:[{text:JSON.stringify({intent:data.query.trim().replace(/\s+/g," "),candidates:compact})}],cacheTtlHours:24,cacheSeed:`match-external-v1:${data.kind}:${data.query.trim().toLowerCase()}:${JSON.stringify(compact)}` });
+      const result = await geminiJson<{ ids?: string[]; items?: AiTitleGuess[] }>({ supabase: context.supabase,userId:context.userId,feature:"smart_search",system:'Refine o conjunto de filmes/séries fornecido para a intenção. Retorne JSON {"ids":[ids],"items":[{"title":string,"year":number|null,"mediaType":"movie"|"tv"}]} em ordem de preferência. ids só do conjunto. items: forneça 3–4 títulos reais compatíveis com a intenção que NÃO constem da biblioteca abaixo, mesmo quando há internos compatíveis; nunca invente metadata, votos ou resultados. Mantenha pelo menos 2 candidatos internos se disponíveis.',parts:[{text:JSON.stringify({intent:data.query.trim().replace(/\s+/g," "),kind:data.kind,library:library ?? [],candidates:compact})}],cacheTtlHours:24,cacheSeed:`match-external-v2:${data.kind}:${data.query.trim().toLowerCase()}:${JSON.stringify(compact)}` });
       const ids = [...new Set(result.ids ?? [])].filter((id) => fallback.includes(id));
       const external = (await validate((result.items ?? []).slice(0,4), data.spaceId, context.supabase)).filter((w) => !w.existingWorkId && (data.kind === "all" || w.mediaType === data.kind)).slice(0,4);
       return { ids: ids.length >= 2 ? ids : fallback, external, refined: ids.length >= 2 || external.length > 0, reason: null };

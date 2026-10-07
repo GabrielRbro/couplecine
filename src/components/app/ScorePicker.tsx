@@ -1,6 +1,7 @@
 import { useEffect, useState } from "react";
 import { Check, Minus, Plus, Star, ThumbsDown } from "lucide-react";
 import { Button } from "@/components/ui/button";
+import { TouchSlider } from "./TouchSlider";
 import { AnimatedSheet } from "./AnimatedSheet";
 import { formatScore } from "@/lib/format";
 
@@ -118,16 +119,7 @@ export function ScoreForm({
       {typed === null && (
         <p className="mt-1 text-center text-xs text-destructive">Use um número de 0 a 10.</p>
       )}
-      <input
-        type="range"
-        min={0}
-        max={10}
-        step={0.5}
-        value={value}
-        aria-label="Ajustar nota"
-        onChange={(e) => set(Number(e.target.value))}
-        className="mt-5 h-11 w-full accent-primary"
-      />
+      <TouchSlider label="Ajustar nota" min={0} max={10} step={0.5} value={value} valueText={formatScore(value)} onChange={set} />
       <div className="flex justify-between px-1 text-[11px] text-muted-foreground">
         <span>0</span>
         <span>5</span>
