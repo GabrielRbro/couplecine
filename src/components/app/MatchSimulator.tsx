@@ -1,4 +1,4 @@
-import { useRef, useState } from "react";
+import { useEffect, useRef, useState } from "react";
 import { Dices, Heart, RotateCcw, Undo2, X } from "lucide-react";
 import { Link } from "@tanstack/react-router";
 import { MatchWinner } from "./MatchWinner";
@@ -10,10 +10,10 @@ import { isWatched, type LibraryWork } from "@/lib/space";
 
 /** Deliberately has no database or real Match service imports. */
 export function MatchSimulator({ works, onExit, storageKey }: { works: LibraryWork[]; onExit: () => void; storageKey: string }) {
-  const [state, setState, hydrated] = useMatchLocal<{ order: string[]; votes: { id: string; liked: boolean }[]; finished: boolean; chosen: string | null; visited: string[]; spinning: string | null; rolling: boolean }>(storageKey, { order: [], votes: [], finished: false, chosen: null, visited: [], spinning: null, rolling: false });
+  const [state, setState, hydrated] = useMatchLocal<{ order: string[]; votes: { id: string; liked: boolean }[]; finished: boolean; chosen: string | null; visited: string[]; spinning: string | null; rolling: boolean; limit?: number; extendedAfterGoal?: boolean }>(storageKey, { order: [], votes: [], finished: false, chosen: null, visited: [], spinning: null, rolling: false });
   const { votes, finished, chosen, spinning } = state;
   const eligible = works.filter((w) => !isWatched(w) && !w.interests.some((i) => i.reaction === "dislike"));
-  useEffect(() => { if (hydrated && !state.order.length && eligible.length) setState((old) => ({ ...old, order: shuffled(eligible.map((w) => w.id)).slice(0,15) })); }, [hydrated, works]);
+  useEffect(() => { if (hydrated && !state.order.length && eligible.length) setState((old) => ({ ...old, order: shuffled(eligible.map((w) => w.id)),limit:Math.min(eligible.length,10+Math.floor(Math.random()*6)),extendedAfterGoal:false })); }, [hydrated, works]);
   const deck = state.order.map((id) => works.find((w) => w.id === id)).filter((w): w is LibraryWork => Boolean(w));
   const setVotes = (update: (old: typeof votes) => typeof votes) => setState((old) => ({ ...old, votes: update(old.votes) }));
   const setFinished = (value: boolean) => setState((old) => ({ ...old, finished: value }));
@@ -30,7 +30,17 @@ export function MatchSimulator({ works, onExit, storageKey }: { works: LibraryWo
     setVotes((old) => [...old, { id: current.id, liked }]);
     setDirection(null);
     lock.current = false;
-    if (votes.length + 1 >= deck.length) setFinished(true);
+    const voted = votes.length + 1;
+    const limit = state.limit ?? Math.min(15,deck.length);
+    if (voted >= limit) {
+      const likes = votes.filter((v)=>v.liked).length + Number(liked);
+      if (limit >= deck.length || (likes >= 3 && state.extendedAfterGoal)) setFinished(true);
+      else {
+        const extra = likes >= 3 ? Math.floor(Math.random()*9) : 5+Math.floor(Math.random()*6);
+        const newLimit=Math.min(deck.length,limit+extra);
+        setState((old)=>({...old,limit:newLimit,extendedAfterGoal:likes >= 3,finished:newLimit===limit}));
+      }
+    }
   }
   async function roll() {
     if (lock.current || !results.length) return;
@@ -52,13 +62,13 @@ export function MatchSimulator({ works, onExit, storageKey }: { works: LibraryWo
   }
   // An interrupted roulette resumes as a fresh local roll; votes and the winner remain untouched.
   useEffect(() => { if (hydrated && state.rolling && !lock.current) { setState((old) => ({ ...old, rolling: false, spinning: null })); void roll(); } }, [hydrated]);
-  const restart = () => { if (lock.current) return; setState({ order: shuffled(eligible.map((w) => w.id)).slice(0,15), votes: [], finished: false, chosen: null, spinning: null, rolling: false, visited: [] }); };
+  const restart = () => { if (lock.current) return; setState({ order: shuffled(eligible.map((w) => w.id)), votes: [], finished: false, chosen: null, spinning: null, rolling: false, visited: [],limit:Math.min(eligible.length,10+Math.floor(Math.random()*6)),extendedAfterGoal:false }); };
   const winner = results.find((w) => w.id === chosen);
   if (!hydrated) return null;
   return <div className="px-4 pt-6 pb-8">
     <div className="grid grid-cols-[minmax(0,1fr)_auto] items-center gap-2"><div><h1 className="text-2xl font-semibold">Match</h1><p className="mt-1 text-xs text-primary">Modo de teste</p></div><Button variant="ghost" size="icon" aria-label="Sair do teste" onClick={onExit} className="h-11 w-11"><X /></Button></div>
-    {winner ? <MatchWinner work={winner} onRoll={roll} onRestart={restart} /> : finished ? <section className="mt-6"><h2 className="text-xl font-semibold">{results.length} {results.length === 1 ? "match simulado" : "matches simulados"}</h2><p className="mt-1 text-xs text-muted-foreground">Somente suas escolhas neste teste.</p>
-      <div className="mt-4 grid grid-cols-3 gap-3">{results.map((w) => <Link key={w.id} {...(w.id.startsWith("tmdb-") ? { to: "/title/$mediaType/$tmdbId" as const, params: { mediaType: w.media_type, tmdbId: String((w as LibraryWork & { tmdb_id: number }).tmdb_id) } } : { to: "/work/$id" as const, params: { id: w.id } })} className={`block rounded-xl ${spinning === w.id || false ? "match-picked ring-2 ring-primary" : ""}`}><Poster path={w.poster_path} title={w.title} /><p className="mt-1 line-clamp-2 text-xs">{w.title}</p></Link>)}</div>
+    {winner && <MatchWinner key={winner.id} work={winner} onRoll={roll} onRestart={restart} />}{finished ? <section className="mt-6"><h2 className="text-xl font-semibold">{results.length} {results.length === 1 ? "match simulado" : "matches simulados"}</h2><p className="mt-1 text-xs text-muted-foreground">Somente suas escolhas neste teste.</p>
+      <div className="mt-4 grid grid-cols-3 gap-3">{results.map((w) => <Link key={w.id} {...(w.id.startsWith("tmdb-") ? { to: "/title/$mediaType/$tmdbId" as const, params: { mediaType: w.media_type, tmdbId: String((w as LibraryWork & { tmdb_id: number }).tmdb_id) } } : { to: "/work/$id" as const, params: { id: w.id } })} className={`block rounded-xl ${spinning === w.id || false ? "match-picked ring-2 ring-primary" : ""}`}><div data-match-poster={w.id}><Poster path={w.poster_path} title={w.title} /></div><p className="mt-1 line-clamp-2 text-xs">{w.title}</p></Link>)}</div>
       <Button variant="outline" className="mt-5 min-h-12 w-full" disabled={!results.length || state.rolling} onClick={roll}><Dices />Sortear entre os matches</Button>
       {chosen && <p role="status" className="mt-3 text-center text-sm">A sorte escolheu {results.find((w) => w.id === chosen)?.title}</p>}
       <Button variant="ghost" className="mt-3 min-h-11 w-full" onClick={restart}><RotateCcw />Reiniciar teste</Button>
@@ -71,7 +81,6 @@ export function MatchSimulator({ works, onExit, storageKey }: { works: LibraryWo
   </div>;
 }
 
-import { useEffect } from "react";
 function SimulatorPoster({ work }: { work: LibraryWork }) {
   const [ready, setReady] = useState(false);
   useEffect(() => { let active = true; readyPoster(work.poster_path).then((ok) => { if (active) setReady(ok); }); return () => { active = false; }; }, [work.poster_path]);
