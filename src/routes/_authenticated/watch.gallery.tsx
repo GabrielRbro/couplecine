@@ -88,7 +88,7 @@ function GalleryCard({ work, space, requestLogo, logo }: { work: LibraryWork; sp
       to="/work/$id"
       params={{ id: work.id }}
       aria-label={`Abrir ${work.title}`}
-      onClick={() => markShared(art.current, work.id, work.backdrop_path ? "backdrop" : "poster")}
+      onClick={() => markShared(art.current?.querySelector("img") ?? null, work.id, work.backdrop_path ? "backdrop" : "poster")}
       className="pressable block rounded-2xl focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-primary"
     >
       <div ref={art} className="relative aspect-[16/10] overflow-hidden rounded-3xl bg-card art-edge">

@@ -18,12 +18,13 @@ export function MatchWinner({ work, onRoll, onRestart }: { work: LibraryWork; on
     const to={left:(window.innerWidth-width)/2,top:Math.max(48,(window.innerHeight-height-240)/2),width,height};
     const source=document.querySelector(`[data-match-poster="${work.id}"]`)?.getBoundingClientRect();
     setGeometry({from:source ? {left:source.left,top:source.top,width:source.width,height:source.height} : to,to});
-    return ()=>{};
+    
   },[work.id]);
   const rewind=()=>{if(closing)return;setClosing(true);setArrived(false);window.setTimeout(onRoll,reduce ? 1 : 240);};
   const target = work.id.startsWith("tmdb-") ? { to: "/title/$mediaType/$tmdbId" as const, params: { mediaType: work.media_type, tmdbId: String((work as LibraryWork & { tmdb_id: number }).tmdb_id) } } : { to: "/work/$id" as const, params: { id: work.id } };
   const seasons=work.work_metadata_cache[0]?.seasons?.length;
-  const metadata=[work.release_year,work.media_type==="tv" ? "Série" : "Filme",work.media_type==="tv" ? seasons ? `${seasons} temp.` : null : formatRuntime(work.runtime_minutes),work.genres.slice(0,2).join(" · ")].filter(Boolean).join(" · ");
+  const rating=(work as LibraryWork & {voteAverage?:number}).voteAverage;
+  const metadata=[work.release_year,work.media_type==="tv" ? "Série" : "Filme",work.media_type==="tv" ? seasons ? `${seasons} temp.` : null : formatRuntime(work.runtime_minutes),work.genres.slice(0,2).join(" · "),rating ? `★ ${rating.toFixed(1)} TMDB` : null].filter(Boolean).join(" · ");
   if(!geometry || typeof document==="undefined")return null;
   return createPortal(<section role="dialog" aria-modal="true" aria-label={`Escolhido: ${work.title}`} className="fixed inset-0 z-[150] overflow-y-auto overscroll-contain">
     <motion.div className="fixed inset-0 nav-glass" initial={{opacity:0}} animate={{opacity:closing ? 0 : 1}} transition={{duration:reduce ? .01 : .4}} />

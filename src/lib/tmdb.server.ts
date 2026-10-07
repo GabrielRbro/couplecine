@@ -316,11 +316,19 @@ export async function findTitle(guess: {
     .map((r) => mapListItem(r, guess.mediaType ?? undefined))
     .filter((x): x is TmdbSearchItem => !!x);
   if (!items.length) return null;
-  if (guess.year) {
-    const exact = items.find((i) => i.year && Math.abs(i.year - guess.year!) <= 1);
-    if (exact) return exact;
-  }
-  return items[0]!;
+  const normalize = (title: string) => title.normalize("NFD").replace(/\p{Diacritic}/gu, "").toLowerCase().replace(/[^\p{L}\p{N}]+/gu, " ").trim();
+  const query = normalize(guess.title);
+  const score = (item: TmdbSearchItem) => {
+    const title = Math.max(...[item.title, item.originalTitle ?? ""].map((text) => {
+      const t = normalize(text);
+      if (t === query) return 100;
+      const a = new Set(query.split(" ")), b = new Set(t.split(" "));
+      return 70 * [...a].filter((word) => b.has(word)).length / new Set([...a, ...b]).size;
+    }));
+    return title + (guess.year && item.year ? Math.max(0, 12 - Math.abs(item.year - guess.year) * 4) : 0);
+  };
+  const best = [...items].sort((a,b) => score(b)-score(a))[0];
+  return best && score(best) >= 45 ? best : null;
 }
 
 function chooseLogo(images: Json | undefined): string | null {

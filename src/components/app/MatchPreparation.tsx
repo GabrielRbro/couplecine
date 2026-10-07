@@ -37,7 +37,7 @@ export function MatchPreparation({ works, spaceId, onStart, solo = false }: { wo
     <Button disabled={pending || ids.length + external.length < 2} onClick={async () => {
       setPending(true);
       try {
-        const extras: LibraryWork[] = external.map((w) => ({ id:`tmdb-${w.mediaType}-${w.tmdbId}`, tmdb_id:w.tmdbId, title:w.title,original_title:w.originalTitle,media_type:w.mediaType,poster_path:w.posterPath,backdrop_path:w.backdropPath,release_year:w.year,runtime_minutes:null,genres:w.genres ?? [],activity_at:"",created_at:"",interests:[],ratings:[],indications:[],joint_watch_sessions:[],watch:null,series_states:[],work_metadata_cache:[] }));
+        const extras: LibraryWork[] = external.map((w) => ({ id:`tmdb-${w.mediaType}-${w.tmdbId}`, tmdb_id:w.tmdbId, voteAverage:w.voteAverage, title:w.title,original_title:w.originalTitle,media_type:w.mediaType,poster_path:w.posterPath,backdrop_path:w.backdropPath,release_year:w.year,runtime_minutes:null,genres:w.genres ?? [],activity_at:"",created_at:"",interests:[],ratings:[],indications:[],joint_watch_sessions:[],watch:null,series_states:[],work_metadata_cache:[] }));
         if (!solo && external.length) {
           const extraIds = await materialize({data:{spaceId,items:external.map((w) => ({mediaType:w.mediaType,tmdbId:w.tmdbId}))}});
           onStart([...ids,...extraIds],extras.map((w,i)=>({...w,id:extraIds[i] ?? w.id})));
