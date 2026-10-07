@@ -152,7 +152,7 @@ function GalleryPage() {
   const batch = visibleIds.filter((id) => !(id in logos) && qc.getQueryData(["gallery-logo", id]) === undefined).slice(0, 6);
   const logoQuery = useQuery({ queryKey: ["gallery-logos", batch.join(",")], enabled: batch.length > 0, staleTime: 3600_000,
     queryFn: () => fetchLogos({ data: { ids: batch } }) });
-  useEffect(() => { if (logoQuery.data) { Object.entries(logoQuery.data).forEach(([id, logo]) => qc.setQueryData(["gallery-logo", id], logo)); setLogos((old) => ({ ...old, ...logoQuery.data })); qc.setQueriesData<LibraryWork[]>({queryKey:["library",space?.spaceId]},(old)=>old?.map((w)=>Object.prototype.hasOwnProperty.call(logoQuery.data,w.id) ? {...w,work_metadata_cache:[{...w.work_metadata_cache[0],seasons:w.work_metadata_cache[0]?.seasons ?? null,logoPath:logoQuery.data[w.id],logoChecked:true,expires_at:new Date(Date.now()+7*864e5).toISOString()}]} : w)); } }, [logoQuery.data]);
+  useEffect(() => { if (logoQuery.data) { const resolved=logoQuery.data; Object.entries(resolved).forEach(([id, logo]) => qc.setQueryData(["gallery-logo", id], logo)); setLogos((old) => ({ ...old, ...resolved })); qc.setQueriesData<LibraryWork[]>({queryKey:["library",space?.spaceId]},(old)=>old?.map((w)=>Object.prototype.hasOwnProperty.call(resolved,w.id) ? {...w,work_metadata_cache:[{...w.work_metadata_cache[0],seasons:w.work_metadata_cache[0]?.seasons ?? null,logoPath:resolved[w.id] ?? null,logoChecked:true,expires_at:new Date(Date.now()+7*864e5).toISOString()}]} : w)); } }, [logoQuery.data]);
   const { kind, duration, genre, both: bothLike } = Route.useSearch();
   const nav = useNavigate({ from: "/watch/gallery" });
   const set = (patch: Partial<{ kind: "all" | "movie" | "tv"; duration: number; genre: string; both: boolean }>) => {

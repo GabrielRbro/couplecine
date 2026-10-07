@@ -742,7 +742,7 @@ function SeriesBlock({
     const urls = eps.data
       .map((ep) => {
         const a = epArt(ep);
-        return tmdbImage(a.path, a.kind === "poster" ? "w342" : "w300");
+        return tmdbImage(a.path, "w300");
       })
       .filter((u): u is string => !!u);
     return prefetchImages([...new Set(urls)]);

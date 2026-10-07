@@ -1,7 +1,7 @@
 import { useRef } from "react";
 
 /** Pointer capture keeps Android drags continuous, including outside the thumb. */
-export function TouchSlider({ value, min, max, step, label, onChange, valueText }: { value: number; min: number; max: number; step: number; label: string; valueText?: string; onChange: (value: number) => void }) {
+export function TouchSlider({ value, min, max, step, label, onChange, valueText }: { value: number; min: number; max: number; step: number; label: string; valueText?: string | undefined; onChange: (value: number) => void }) {
   const track = useRef<HTMLDivElement>(null);
   const set = (n: number) => onChange(Math.max(min, Math.min(max, min + Math.round((n - min) / step) * step)));
   const move = (x: number) => { const rect = track.current?.getBoundingClientRect(); if (rect?.width) set(min + (x - rect.left) / rect.width * (max - min)); };
