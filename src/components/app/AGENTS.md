@@ -1,0 +1,2 @@
+- Touch sliders use pointer capture plus keyboard semantics, so drag stays continuous inside gesture-locking overlays.
+- Winner presentation retains the result grid underneath a portal frost layer and moves the selected poster from its measured grid bounds; metadata appears after arrival and rewinds before another roll.
