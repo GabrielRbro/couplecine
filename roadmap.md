@@ -51,3 +51,11 @@ Concluído: Lotes 1–4, 5A–5D, Rodada 6, MCP.
 - [x] Match persistente/roleta/hero/status e candidatos externos
 - [x] Smoke móvel 390x844 e 412x915: cinco ciclos radial/status/episódio estáveis, imagens preservadas; Back bloqueado validado isoladamente, busca paginada e sorteio estável; PWA preservada
 - [ ] QA complementar: adicionar pelo Descobrir somente em DEMO restaurável, cache de logo frio/reload e fixture com exatamente duas obras; Match real deliberadamente não iniciado
+
+## Rodada 11
+- [ ] Camadas shared, adição otimista e super reação
+- [ ] Ranking local, lotes IA, motion e layout busca
+- [ ] Logos independentes, sliders pointer e Duração animada
+- [ ] Episódios simples, ação direta e X externo
+- [ ] Match adaptativo/externos e poster vencedor com frost
+- [ ] Sorteio centralizado/motion e validação móvel dirigida sem dados reais
