@@ -8,6 +8,7 @@ import { useServerFn } from "@tanstack/react-start";
 import { getGalleryLogos } from "@/lib/catalog.functions";
 import { SlidersHorizontal } from "lucide-react";
 import { AnimatePresence, motion, useReducedMotion } from "motion/react";
+import { TouchSlider } from "@/components/app/TouchSlider";
 import { AnimatedSheet } from "@/components/app/AnimatedSheet";
 import { AppShell } from "@/components/app/AppShell";
 import { Button } from "@/components/ui/button";
@@ -151,7 +152,7 @@ function GalleryPage() {
   const batch = visibleIds.filter((id) => !(id in logos) && qc.getQueryData(["gallery-logo", id]) === undefined).slice(0, 6);
   const logoQuery = useQuery({ queryKey: ["gallery-logos", batch.join(",")], enabled: batch.length > 0, staleTime: 3600_000,
     queryFn: () => fetchLogos({ data: { ids: batch } }) });
-  useEffect(() => { if (logoQuery.data) { Object.entries(logoQuery.data).forEach(([id, logo]) => qc.setQueryData(["gallery-logo", id], logo)); setLogos((old) => ({ ...old, ...logoQuery.data })); } }, [logoQuery.data]);
+  useEffect(() => { if (logoQuery.data) { Object.entries(logoQuery.data).forEach(([id, logo]) => qc.setQueryData(["gallery-logo", id], logo)); setLogos((old) => ({ ...old, ...logoQuery.data })); qc.setQueriesData<LibraryWork[]>({queryKey:["library",space?.spaceId]},(old)=>old?.map((w)=>Object.prototype.hasOwnProperty.call(logoQuery.data,w.id) ? {...w,work_metadata_cache:[{...w.work_metadata_cache[0],seasons:w.work_metadata_cache[0]?.seasons ?? null,logoPath:logoQuery.data[w.id],logoChecked:true,expires_at:new Date(Date.now()+7*864e5).toISOString()}]} : w)); } }, [logoQuery.data]);
   const { kind, duration, genre, both: bothLike } = Route.useSearch();
   const nav = useNavigate({ from: "/watch/gallery" });
   const set = (patch: Partial<{ kind: "all" | "movie" | "tv"; duration: number; genre: string; both: boolean }>) => {
@@ -199,12 +200,12 @@ function GalleryPage() {
           value={kind}
           onChange={setKind}
         />
-        {kind === "movie" && <TogglePill on={duration > 0} onClick={() => setDurationSheet(true)}>Duração{duration ? ` · ${formatRuntime(duration)}` : ""}</TogglePill>}
-        <TogglePill on={advanced > 0} onClick={() => setSheet(true)}>
+        <AnimatePresence initial={false}>{kind === "movie" && <motion.div key="duration-chip" className="shrink-0 overflow-hidden" initial={{width:0,opacity:0,x:-8}} animate={{width:"auto",opacity:1,x:0}} exit={{width:0,opacity:0,x:-8}} transition={{duration:.2}}><TogglePill on={duration > 0} onClick={() => setDurationSheet(true)}>Duração{duration ? ` · ${formatRuntime(duration)}` : ""}</TogglePill></motion.div>}</AnimatePresence>
+        <motion.div layout><TogglePill on={advanced > 0} onClick={() => setSheet(true)}>
           <span className="inline-flex items-center gap-1">
             <SlidersHorizontal className="h-3.5 w-3.5" /> Filtros{advanced ? ` · ${advanced}` : ""}
           </span>
-        </TogglePill>
+        </TogglePill></motion.div>
       </ScrollRow>
       <div className="mt-4 space-y-4">
         <AnimatePresence initial={false} mode="popLayout">
@@ -236,7 +237,7 @@ function GalleryPage() {
           </Link>
         </div>
       )}
-      <AnimatedSheet open={durationSheet} onClose={() => setDurationSheet(false)} labelledBy="gallery-duration"><h2 id="gallery-duration" className="font-semibold">Duração máxima</h2><p className="mt-3 text-sm">{duration ? `${Math.floor(duration / 60)}h${String(duration % 60).padStart(2,"0")}` : "Sem limite"}</p><input aria-label="Duração máxima em minutos" type="range" min="40" max="240" step="10" value={duration || 240} onChange={(e) => set({ duration: Number(e.target.value) })} className="mt-5 min-h-11 w-full accent-primary" /><Button variant="outline" className="mt-3 min-h-11 w-full" onClick={() => set({duration:0})}>Sem limite</Button><Button className="mt-3 min-h-11 w-full" onClick={() => setDurationSheet(false)}>Aplicar</Button></AnimatedSheet>
+      <AnimatedSheet open={durationSheet} onClose={() => setDurationSheet(false)} labelledBy="gallery-duration"><h2 id="gallery-duration" className="font-semibold">Duração máxima</h2><p className="mt-5 text-center font-display text-4xl font-semibold text-primary">{duration ? `${Math.floor(duration / 60)}h${String(duration % 60).padStart(2,"0")}` : "Sem limite"}</p><TouchSlider label="Duração máxima em minutos" min={40} max={240} step={10} value={duration || 240} valueText={duration ? formatRuntime(duration) ?? undefined : "Sem limite"} onChange={(value)=>set({duration:value})} /><Button variant="outline" className="mt-3 min-h-11 w-full" onClick={() => set({duration:0})}>Sem limite</Button><Button className="mt-3 min-h-11 w-full" onClick={() => setDurationSheet(false)}>Aplicar</Button></AnimatedSheet>
       <AnimatedSheet open={sheet} onClose={() => setSheet(false)} labelledBy="gal-filters">
         <h2 id="gal-filters" className="text-base font-semibold">
           Filtros

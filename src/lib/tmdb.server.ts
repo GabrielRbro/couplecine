@@ -11,6 +11,8 @@ export type TmdbSearchItem = {
   overview: string | null;
   genres?: string[];
   voteAverage?: number;
+  voteCount?: number;
+  popularity?: number;
 };
 
 // TMDB's fixed genre ids (movie + tv), used to give rerankers real genre signals.
@@ -256,6 +258,8 @@ function mapListItem(item: Json, fallback?: "movie" | "tv"): TmdbSearchItem | nu
     year: year(item[tv ? "first_air_date" : "release_date"]),
     overview: str(item["overview"]),
     voteAverage: Number(item["vote_average"] ?? 0),
+    voteCount: Number(item["vote_count"] ?? 0),
+    popularity: Number(item["popularity"] ?? 0),
     genres: Array.isArray(item["genre_ids"])
       ? (item["genre_ids"] as unknown[]).map((g) => GENRES[Number(g)]).filter((g): g is string => !!g)
       : [],
