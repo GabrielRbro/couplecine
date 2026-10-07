@@ -7,6 +7,7 @@ import { EmptyState, Poster } from "@/components/app/MediaCard";
 import { FilterPills, ScrollRow, TogglePill } from "@/components/app/ui";
 import { Button } from "@/components/ui/button";
 import { supabase } from "@/integrations/supabase/client";
+import { AnimatePresence, motion, useReducedMotion } from "motion/react";
 import { readyPoster } from "@/lib/image-ready";
 import type { Reaction } from "@/lib/format";
 import {
@@ -77,6 +78,7 @@ function DicePage() {
   const [rolling, setRolling] = useState(false);
   const [flick, setFlick] = useState<{ work: LibraryWork; n: number } | null>(null);
   const rollLock = useRef(false);
+  const reduce=useReducedMotion();
   const [ready, setReady] = useState<Set<string>>(new Set());
 
 
@@ -224,7 +226,7 @@ function DicePage() {
                 </div>
               </div>
             ) : picked ? (
-              <div className="relative isolate h-full">
+              <motion.div key={picked.id} initial={{opacity:0,scale:.96}} animate={{opacity:1,scale:1}} transition={{duration:.2}} className="relative isolate h-full">
                 <div aria-hidden className="absolute inset-x-3 top-2 bottom-1 -z-10 rotate-2 rounded-xl border border-border bg-secondary" />
                 <Link
                   key={picked.id}
@@ -235,7 +237,7 @@ function DicePage() {
                   {ready.has(picked.id) ? <Poster eager path={picked.poster_path} title={picked.title} /> : <div className="relative aspect-[2/3]"><div className="match-stack-back" /></div>}
                   <div className="absolute inset-x-0 bottom-0 bg-gradient-to-t from-background via-background/80 to-transparent px-3 pb-4 pt-12"><p className="text-center text-sm font-semibold">{picked.title}</p><p className="mt-1 text-center text-xs text-muted-foreground">{picked.release_year} · {picked.media_type === "tv" ? "Série" : "Filme"}</p></div>
                 </Link>
-              </div>
+              </motion.div>
             ) : (
               <div className="relative aspect-[2/3]" aria-hidden>
                 <div className="match-stack-back match-stack-back-far" />
@@ -244,29 +246,29 @@ function DicePage() {
               </div>
             )}
           </div>
-          <div className="mt-6 grid h-14 grid-cols-[auto_minmax(0,1fr)] gap-2">
-            {(
+          <motion.div layout className="mx-auto mt-6 grid h-14 w-full max-w-sm grid-cols-[112px_minmax(0,1fr)] gap-2">
+            <div className="relative"><AnimatePresence>{picked && <motion.div key="decline" initial={{opacity:0,y:6,scale:.95}} animate={{opacity:1,y:0,scale:1}} exit={{opacity:0,y:6,scale:.95}} transition={{duration:reduce ? .01 : .18}}>
               <Button
                 variant="outline"
                 onClick={decline}
                 disabled={!picked || rolling}
                 aria-label="Recusar nesta rodada"
-                className={`pressable min-h-14 rounded-2xl px-4 ${picked ? "" : "invisible"}`}
+                className="pressable min-h-14 w-full rounded-2xl px-2"
               >
                 <X className="h-4 w-4" /> Hoje não
               </Button>
-            )}
-            <Button
+            </motion.div>}</AnimatePresence></div>
+            <motion.div layout className="w-full"><Button
               onClick={roll}
               disabled={pool.length === 0 || rolling}
-              className="pressable min-h-14 flex-1 rounded-2xl font-semibold"
+              className="pressable min-h-14 w-full rounded-2xl font-semibold"
             >
               <Dices
                 className={`h-5 w-5 transition-transform duration-200 ${rolling ? "rotate-180" : ""}`}
               />{" "}
-              {picked ? "Sortear de novo" : "Sortear"}
-            </Button>
-          </div>
+              <AnimatePresence mode="wait" initial={false}><motion.span key={picked ? "again" : "start"} initial={{opacity:0,y:4}} animate={{opacity:1,y:0}} exit={{opacity:0,y:-4}} transition={{duration:.12}}>{picked ? "Sortear de novo" : "Sortear"}</motion.span></AnimatePresence>
+            </Button></motion.div>
+          </motion.div>
           <p className="mt-2 text-center text-xs text-muted-foreground">
             {pool.length} obras no sorteio
             {declined.size ? ` · ${declined.size} recusadas nesta rodada` : ""}
