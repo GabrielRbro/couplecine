@@ -265,9 +265,9 @@ export function DiscoverTab({
             <h2 id="dismissed-title" className="text-sm font-semibold">
               Dispensados
             </h2>
-            <span className="text-xs text-muted-foreground">{dismissed.data?.length}</span>
-          </div>
-          <div className="space-y-1">
+            <span className="flex items-center gap-2 text-xs text-muted-foreground">{dismissed.data?.length}<ChevronDown className={`h-4 w-4 transition-transform ${dismissedOpen ? "rotate-180" : ""}`} /></span>
+          </Button>
+          <div id="dismissed-list" hidden={!dismissedOpen} className="space-y-1">
             {dismissed.data?.map((item) => (
               <div key={k(item)} className="flex min-h-14 items-center gap-3 py-1">
                 <div className="w-9 shrink-0 overflow-hidden rounded-md">

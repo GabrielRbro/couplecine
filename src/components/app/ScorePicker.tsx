@@ -146,6 +146,7 @@ export function ScoreForm({
           {saving ? "Salvando…" : `${saveLabel} · ${formatScore(value)}`}
         </Button>
       </div>
+      </div>
     </div>
   );
 }

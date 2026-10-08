@@ -126,7 +126,7 @@ export async function searchMulti(query: string, page = 1): Promise<TmdbSearchIt
 }
 
 /** Bump when the details strategy changes; older cached payloads are refetched. */
-export const DETAILS_CACHE_VERSION = 2;
+export const DETAILS_CACHE_VERSION = 3;
 
 export type TmdbDetails = {
   v?: number;
@@ -144,6 +144,7 @@ export type TmdbDetails = {
   runtimeMinutes: number | null;
   seasonCount: number | null;
   genres: string[];
+  crewLeads?: { name: string; role: string; profilePath: string | null }[];
   crewLead: { name: string; role: string; profilePath: string | null } | null;
   cast: { name: string; character: string; profilePath: string | null }[];
   seasons: {
@@ -211,6 +212,7 @@ export async function fetchDetails(
           : null,
     seasonCount: typeof data["number_of_seasons"] === "number" ? data["number_of_seasons"] : null,
     genres: genres.map((genre) => String(genre["name"])).filter(Boolean),
+    crewLeads: (crew.filter(m=>m["job"] === "Director").length ? crew.filter(m=>m["job"] === "Director") : createdBy).map(m=>({name:String(m["name"]),role:director ? "Diretor" : "Criação",profilePath:str(m["profile_path"])})),
     crewLead: lead
       ? {
           name: String(lead["name"]),
