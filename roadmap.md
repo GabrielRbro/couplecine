@@ -72,4 +72,12 @@ Concluído: Lotes 1–4, 5A–5D, Rodada 6, MCP.
 - [ ] Validação integral das intenções não comprovada: o primeiro smoke ainda misturou candidatos internos não relacionados e resolveu homônimos com ano errado; depois foram corrigidos fallback interno e validação exata de ano, mas não repetida chamada Gemini para poupar quota. Origem/gênero de cada resultado não verificados independentemente.
 - [ ] Itens visuais de nota, Descobrir e ficha não exercitados integralmente após edição; Android físico/glass/PWA e Match real a dois preservados, não revalidados. Não se declara conclusão dos 26 itens sem esta evidência.
 - Checks automáticos disponíveis em `/tmp/observability/build-errors.log`: builds recentes OK; houve erros intermediários de JSX/schema corrigidos. Nenhum build/typecheck manual adicional foi executado, pois a plataforma os executa automaticamente; registrar eventual diagnóstico final em separado.
-- Crédito por turno indisponível: ferramenta informa somente consumo acumulado do período (206), não o delta desta implementação.
+- Crédito da implementação anterior: 12,3 créditos, conforme informado pelo conector na revisão.
+
+## Correção focada do Match — base 28e09e2
+- [x] OFF somente indicações elegíveis da biblioteca, inclusive séries em andamento; removidos pool popular solo e funções sem uso. Preparação compartilhada solo/real; veto 👎 preservado.
+- [x] ON refina somente ao tocar Iniciar, uma solicitação por tentativa, com fallback normal, mínimo de dois candidatos e proteção contra respostas obsoletas ao mudar intenção/filtro/toggle.
+- [x] QA dirigido em 390×844/412×915 com componentes reais e mocks: série indicada em andamento aceita apesar do histórico; veto excluído; OFF sem externos/chamadas; ON chama uma vez no botão, não ao digitar; externos só ON; falha/resultado vazio retorna ao pool normal; resposta obsoleta não inicia; vazio OFF honesto; ON pode iniciar com dois externos e zero internos.
+- [x] Smoke autenticado 412×915: filtro Séries OFF iniciou simulador com Dark; zero chamadas RPC bloqueadas, zero erros de página. Apenas estado client-only; nenhuma gravação de obra/nota/episódio/reação ou Match real.
+- Checks: build automático OK; `git diff --check` limpo. Não executado build/typecheck manual adicional; a plataforma executa os checks automaticamente.
+- Limites: Gemini real não chamado; qualidade/cache do provedor e Match real a dois não exercitados. Imagens dos fixtures usam fallback por não terem poster. Custo da implementação anterior corrigido para 12,3 créditos; não é o custo desta correção.

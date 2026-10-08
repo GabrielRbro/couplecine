@@ -47,18 +47,6 @@ export const searchCatalog = createServerFn({ method: "POST" })
     }
   });
 
-/** Read-only solo pool. No metadata/materialization writes and no AI calls. */
-export const getSoloMatchCandidates = createServerFn({ method: "POST" })
-  .middleware([requireSupabaseAuth])
-  .inputValidator((d) => z.object({ spaceId: z.string().uuid(), kind: z.enum(["all", "movie", "tv"]) }).parse(d))
-  .handler(async ({ data, context }) => {
-    const { data: works, error } = await context.supabase.from("works").select("media_type,tmdb_id").eq("space_id", data.spaceId);
-    if (error) throw new Error("Não foi possível preparar candidatos.");
-    const excluded = new Set((works ?? []).map(w => `${w.media_type}:${w.tmdb_id}`));
-    const { soloMatchFeed } = await import("./tmdb.server");
-    return (await soloMatchFeed(data.kind)).filter(w => !excluded.has(`${w.mediaType}:${w.tmdbId}`)).slice(0, 30);
-  });
-
 // Finds the space's single work for (media_type, tmdb_id) or creates it from TMDB.
 async function ensureWork(
   supabase: AuthedClient,
