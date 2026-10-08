@@ -154,9 +154,7 @@ function DicePage() {
   return (
     <div className="px-4 pt-6">
       <h1 className="text-2xl font-semibold">Sortear</h1>
-      <p className="mt-1 text-sm text-muted-foreground">
-        🔥 pesa mais. 👎 fica de fora, a menos que vocês incluam.
-      </p>
+
       <div className="mt-4 flex items-center justify-between gap-1">
         <div className="flex items-center gap-1"><FilterPills
           options={
@@ -175,9 +173,9 @@ function DicePage() {
         <FilterPills
           options={
             [
-              ["jointFresh", "Ainda não juntos"],
-              ["nobody", "Nenhum dos dois viu"],
-              ["rewatch", "Rever juntos"],
+              ["jointFresh", "Não juntos"],
+              ["nobody", "Inéditos"],
+              ["rewatch", "Rever"],
               ["any", "Qualquer"],
             ] as const
           }
@@ -209,7 +207,7 @@ function DicePage() {
         </div>
       ) : (
         <>
-          <div className="relative mx-auto mt-7 w-56 aspect-[2/3]">
+          <div className="relative mx-auto mt-10 w-60 aspect-[2/3]">
             {flick ? (
               <div className="relative aspect-[2/3]" aria-live="off" aria-label="Embaralhando">
                 <div aria-hidden className="match-stack-back match-stack-back-far" />
@@ -246,7 +244,7 @@ function DicePage() {
               </div>
             )}
           </div>
-          <div className="mx-auto mt-6 flex h-[112px] w-56 flex-col items-center gap-2">
+          <div className="mx-auto mt-6 flex h-[112px] w-60 flex-col items-center gap-2">
             <motion.div layout className="w-full"><Button onClick={roll} disabled={pool.length === 0 || rolling} className="pressable min-h-14 w-full rounded-2xl font-semibold">
               <Dices className={`h-5 w-5 transition-transform duration-200 ${rolling ? "rotate-180" : ""}`} />
               <AnimatePresence mode="wait" initial={false}><motion.span key={picked ? "again" : "start"} initial={{opacity:0,y:4}} animate={{opacity:1,y:0}} exit={{opacity:0,y:-4}} transition={{duration:.12}}>{picked ? "Sortear de novo" : "Sortear"}</motion.span></AnimatePresence>

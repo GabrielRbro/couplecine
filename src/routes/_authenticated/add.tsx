@@ -3,10 +3,11 @@ import { useInfiniteQuery, useQueryClient } from "@tanstack/react-query";
 import { useServerFn } from "@tanstack/react-start";
 import { useEffect, useState } from "react";
 import { AnimatePresence, motion, useReducedMotion } from "motion/react";
-import { ChevronDown, LoaderCircle, Search, Sparkles } from "lucide-react";
+import { ChevronDown, LoaderCircle, Search, Sparkles, X } from "lucide-react";
 import { BackButton, FilterPills, ScrollRow } from "@/components/app/ui";
 import { AppShell } from "@/components/app/AppShell";
 import { IntelligentLoading } from "@/components/app/IntelligentLoading";
+import { ScrollToTop } from "@/components/app/ScrollToTop";
 import { Poster } from "@/components/app/MediaCard";
 import { AnimatedSheet } from "@/components/app/AnimatedSheet";
 import { Button } from "@/components/ui/button";
@@ -62,12 +63,13 @@ function AddPage() {
   const orders: [string,string][] = [["relevance", "Relevância"], ["newest", "Mais recentes"], ["oldest", "Mais antigos"], ["rating", "Melhor avaliados"]];
   return <div className="px-4 pt-6">
     <div className="flex min-w-0 items-center gap-3"><BackButton /><h1 className="text-xl font-semibold">Adicionar obra</h1></div>
-    <div className="mt-4 grid grid-cols-[auto_minmax(0,1fr)_auto] items-center gap-2 rounded-xl border border-border bg-card px-3">
+    <div className="mt-4 grid grid-cols-[auto_minmax(0,1fr)_auto_auto_auto] items-center gap-2 rounded-xl border border-border bg-card px-3">
       <Search className="h-4 w-4 shrink-0 text-muted-foreground" />
       <input aria-label="Título, ator ou diretor" value={q} onChange={(e) => { update({ q: e.target.value }); }} placeholder="Título, ator ou diretor" className="min-w-0 bg-transparent py-3 text-sm outline-none" />
-      <span className="flex h-5 w-5 items-center">{pending && <LoaderCircle className="h-4 w-4 animate-spin text-primary" />}</span>
+      <Button variant="ghost" size="icon" title="Limpar busca" aria-label="Limpar busca" disabled={!q} onClick={() => update({q:""})} className={`h-9 w-9 ${q ? "text-muted-foreground" : "invisible"}`}><X className="h-3.5 w-3.5" /></Button>
+       <span className="flex h-5 w-5 items-center">{pending && <LoaderCircle className="h-4 w-4 animate-spin text-primary" />}</span>
     </div>
-    <div className="mt-2 flex items-center justify-between gap-1"><div className="flex items-center gap-1"><FilterPills options={[["all", "Todos"], ["movie", "Filmes"], ["tv", "Séries"]]} value={kind} onChange={(value) => update({ kind: value })} /></div><Button variant={mode === "ai" ? "default" : "outline"} role="switch" aria-checked={mode === "ai"} aria-label="Busca inteligente" onClick={() => update({ mode: mode === "ai" ? "tmdb" : "ai" })} className={`ml-auto min-h-11 shrink-0 px-3 text-xs ${mode === "ai" ? "bg-primary text-primary-foreground" : "border-primary text-muted-foreground"}`}>IA<Sparkles className="h-3.5 w-3.5" /></Button></div>
+    <div className="mt-2 flex items-center justify-between gap-1"><div className="flex items-center gap-1"><FilterPills options={[["all", "Todos"], ["movie", "Filmes"], ["tv", "Séries"]]} value={kind} onChange={(value) => update({ kind: value })} /></div></div>
     <Button variant="ghost" onClick={() => setOrdering(true)} className="min-h-11 px-0 text-xs text-muted-foreground">{orders.find(([value]) => value === sort)?.[1] ?? "Relevância"}<ChevronDown className="h-3 w-3" /></Button>
     <AnimatedSheet open={ordering} onClose={() => setOrdering(false)} labelledBy="search-order"><h2 id="search-order" className="font-semibold">Ordenação</h2><div className="mt-3">{orders.map(([value, label]) => <Button key={value} variant={sort === value ? "secondary" : "ghost"} className="min-h-12 w-full justify-start" onClick={() => { update({ sort: value }); setOrdering(false); }}>{label}</Button>)}</div></AnimatedSheet>
     <AnimatePresence initial={false} mode="wait">
