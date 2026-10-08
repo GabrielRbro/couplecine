@@ -75,6 +75,9 @@ Concluído: Lotes 1–4, 5A–5D, Rodada 6, MCP.
 - Crédito da implementação anterior: 12,3 créditos, conforme informado pelo conector na revisão.
 
 ## Correção focada do Match — base 28e09e2
-- [ ] OFF somente indicações elegíveis da biblioteca, inclusive séries em andamento; remover pool popular solo e funções sem uso.
-- [ ] ON refina somente ao tocar Iniciar, uma solicitação por tentativa, com fallback/minimum de dois candidatos e proteção contra respostas obsoletas.
-- [ ] QA dirigido local/mocks: série em andamento, veto, OFF sem externos, ON sem Gemini real; conferir checks automáticos e registrar limites.
+- [x] OFF somente indicações elegíveis da biblioteca, inclusive séries em andamento; removidos pool popular solo e funções sem uso. Preparação compartilhada solo/real; veto 👎 preservado.
+- [x] ON refina somente ao tocar Iniciar, uma solicitação por tentativa, com fallback normal, mínimo de dois candidatos e proteção contra respostas obsoletas ao mudar intenção/filtro/toggle.
+- [x] QA dirigido em 390×844/412×915 com componentes reais e mocks: série indicada em andamento aceita apesar do histórico; veto excluído; OFF sem externos/chamadas; ON chama uma vez no botão, não ao digitar; externos só ON; falha/resultado vazio retorna ao pool normal; resposta obsoleta não inicia; vazio OFF honesto; ON pode iniciar com dois externos e zero internos.
+- [x] Smoke autenticado 412×915: filtro Séries OFF iniciou simulador com Dark; zero chamadas RPC bloqueadas, zero erros de página. Apenas estado client-only; nenhuma gravação de obra/nota/episódio/reação ou Match real.
+- Checks: build automático OK; `git diff --check` limpo. Não executado build/typecheck manual adicional; a plataforma executa os checks automaticamente.
+- Limites: Gemini real não chamado; qualidade/cache do provedor e Match real a dois não exercitados. Imagens dos fixtures usam fallback por não terem poster. Custo da implementação anterior corrigido para 12,3 créditos; não é o custo desta correção.
