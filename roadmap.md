@@ -72,4 +72,9 @@ Concluído: Lotes 1–4, 5A–5D, Rodada 6, MCP.
 - [ ] Validação integral das intenções não comprovada: o primeiro smoke ainda misturou candidatos internos não relacionados e resolveu homônimos com ano errado; depois foram corrigidos fallback interno e validação exata de ano, mas não repetida chamada Gemini para poupar quota. Origem/gênero de cada resultado não verificados independentemente.
 - [ ] Itens visuais de nota, Descobrir e ficha não exercitados integralmente após edição; Android físico/glass/PWA e Match real a dois preservados, não revalidados. Não se declara conclusão dos 26 itens sem esta evidência.
 - Checks automáticos disponíveis em `/tmp/observability/build-errors.log`: builds recentes OK; houve erros intermediários de JSX/schema corrigidos. Nenhum build/typecheck manual adicional foi executado, pois a plataforma os executa automaticamente; registrar eventual diagnóstico final em separado.
-- Crédito por turno indisponível: ferramenta informa somente consumo acumulado do período (206), não o delta desta implementação.
+- Crédito da implementação anterior: 12,3 créditos, conforme informado pelo conector na revisão.
+
+## Correção focada do Match — base 28e09e2
+- [ ] OFF somente indicações elegíveis da biblioteca, inclusive séries em andamento; remover pool popular solo e funções sem uso.
+- [ ] ON refina somente ao tocar Iniciar, uma solicitação por tentativa, com fallback/minimum de dois candidatos e proteção contra respostas obsoletas.
+- [ ] QA dirigido local/mocks: série em andamento, veto, OFF sem externos, ON sem Gemini real; conferir checks automáticos e registrar limites.

@@ -6,15 +6,15 @@ import { nextHighlight, shuffled, useMatchLocal } from "@/lib/match-local";
 import { Button } from "@/components/ui/button";
 import { Poster } from "./MediaCard";
 import { readyPoster } from "@/lib/image-ready";
-import { isWatched, type LibraryWork } from "@/lib/space";
+import { isIndicated, type LibraryWork } from "@/lib/space";
 
 /** Deliberately has no database or real Match service imports. */
 export function MatchSimulator({ works, onExit, storageKey }: { works: LibraryWork[]; onExit: () => void; storageKey: string }) {
   const [state, setState, hydrated] = useMatchLocal<{ order: string[]; votes: { id: string; liked: boolean }[]; finished: boolean; chosen: string | null; visited: string[]; spinning: string | null; rolling: boolean; limit?: number; extendedAfterGoal?: boolean }>(storageKey, { order: [], votes: [], finished: false, chosen: null, visited: [], spinning: null, rolling: false });
   const { votes, finished, chosen, spinning } = state;
-  const eligible = works.filter((w) => !isWatched(w) && !w.interests.some((i) => i.reaction === "dislike"));
+  const eligible = works.filter((w) => (isIndicated(w) || w.id.startsWith("tmdb-")) && !w.interests.some((i) => i.reaction === "dislike"));
   useEffect(() => { if (hydrated && !state.order.length && eligible.length) setState((old) => ({ ...old, order: shuffled(eligible.map((w) => w.id)),limit:Math.min(eligible.length,10+Math.floor(Math.random()*6)),extendedAfterGoal:false })); }, [hydrated, works]);
-  const deck = state.order.map((id) => works.find((w) => w.id === id)).filter((w): w is LibraryWork => Boolean(w));
+  const deck = state.order.map((id) => eligible.find((w) => w.id === id)).filter((w): w is LibraryWork => Boolean(w));
   const setVotes = (update: (old: typeof votes) => typeof votes) => setState((old) => ({ ...old, votes: update(old.votes) }));
   const setFinished = (value: boolean) => setState((old) => ({ ...old, finished: value }));
   const [direction, setDirection] = useState<"left" | "right" | null>(null);

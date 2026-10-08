@@ -255,12 +255,6 @@ async function list(path: string, page: number, fallback?: "movie" | "tv") {
   return results.map((r) => mapListItem(r, fallback)).filter((x): x is TmdbSearchItem => !!x);
 }
 
-export async function soloMatchFeed(kind: "all" | "movie" | "tv"): Promise<TmdbSearchItem[]> {
-  const types: ("movie" | "tv")[] = kind === "all" ? ["movie", "tv"] : [kind];
-  const pages = await Promise.all(types.map(type => list(`/${type}/popular`, 1, type)));
-  return pages.flat().filter(w => w.posterPath && w.year && w.tmdbId > 0);
-}
-
 /** Recommendations from a few seed works, interleaved with trending as fallback. */
 export async function discoverFeed(
   seeds: { mediaType: "movie" | "tv"; tmdbId: number }[],
