@@ -62,7 +62,7 @@ export function posterUrl(path: string | null, size: "w342" | "w780" | "original
   return path ? `https://image.tmdb.org/t/p/${size}${path}` : null;
 }
 
-/** Hard cap: 1 search + at most 3 credits OR 2 keyword requests (never both). */
+/** Hard cap: 1 search + at most 3 credits OR one additional title page. */
 export async function searchMulti(query: string, page = 1): Promise<TmdbSearchItem[]> {
   const role=/dire(c|ç)ão|diretor|directed|director/i.test(query) ? "Directing" : /ator|atriz|actor|actress/i.test(query) ? "Acting" : null;
   const cleaned=query.replace(/\b(diretor|director|directed|ator|atriz|actor|actress)\b/gi,"").trim();
@@ -84,14 +84,9 @@ export async function searchMulti(query: string, page = 1): Promise<TmdbSearchIt
   }));
   let candidates=personIntent ? expanded.flat() : [...direct,...expanded.flat()];
   if (!personIntent && page === 1 && cleaned.length>=3) {
-    // TMDB keyword discovery adds canonical franchise titles absent from literal-title search.
-    const keywords=await call("/search/keyword",{query:cleaned,page:"1"}).catch(()=>({} as Json));
-    const exact=(Array.isArray(keywords["results"]) ? keywords["results"] as Json[] : []).find(k=>fold(String(k["name"])) === fold(cleaned) || fold(String(k["name"])).startsWith(`${fold(cleaned)} `));
-    if (exact) {
-      const discovered=await call("/discover/movie",{with_keywords:String(exact["id"]),sort_by:"vote_count.desc",include_adult:"false",page:"1"}).catch(()=>({} as Json));
-      const extra=(Array.isArray(discovered["results"]) ? discovered["results"] as Json[] : []).map(r=>mapListItem(r,"movie")).filter((r):r is TmdbSearchItem=>Boolean(r));
-      candidates.push(...extra);
-    }
+    // Rank beyond TMDB's literal first page without title-specific IDs or heuristics.
+    const next=await call("/search/multi",{query:cleaned,include_adult:"false",page:"2"}).catch(()=>({} as Json));
+    candidates.push(...(Array.isArray(next["results"]) ? next["results"] as Json[] : []).map(r=>mapListItem(r)).filter((r):r is TmdbSearchItem=>Boolean(r)));
   }
   const unique=[...new Map(candidates.map(w=>[`${w.mediaType}:${w.tmdbId}`,w])).values()];
   const {rankSearch}=await import("./search-ranking");
