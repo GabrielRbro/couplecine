@@ -9,6 +9,7 @@ import { isIndicated, type LibraryWork } from "@/lib/space";
 
 export function MatchPreparation({ works, spaceId, onStart, solo = false }: { works: LibraryWork[]; spaceId: string; onStart: (ids: string[], extras: LibraryWork[]) => void; solo?: boolean }) {
   const [ai,setAi] = useState(false);
+  const [aiReady,setAiReady] = useState(false);
   const [base,setBase] = useState<Awaited<ReturnType<typeof getSoloMatchCandidates>>>([]);
   const [basePending,setBasePending] = useState(false);
   const fetchBase = useServerFn(getSoloMatchCandidates);
@@ -31,18 +32,19 @@ export function MatchPreparation({ works, spaceId, onStart, solo = false }: { wo
   },[solo,spaceId,kind]);
   useEffect(() => {
     if (!ai) return;
+    setAiReady(false);
     const timer=window.setTimeout(()=>{void run();},700);
     return ()=>window.clearTimeout(timer);
   },[ai,intent,kind]);
   async function run() {
-    if (!ai || pending) return;
+    if (!ai) return;
     setPending(true);
     const version = ++request.current;
     try {
       const result = await refine({ data: { spaceId, kind: kind === "movie" ? "movie" : kind === "tv" ? "tv" : "all", query:intent.trim().length >= 3 ? intent.trim() : "Escolha variada para assistir hoje", ids:pool.slice(0,40).map((w) => w.id) } });
-      if (version === request.current && ai) { setRefined(result.refined ? result.ids : null); setExternal(result.external);setMessage(result.reason); }
+      if (version === request.current && ai) { setRefined(result.refined ? result.ids : null); setExternal(result.external);setMessage(result.reason);setAiReady(true); }
     } catch { if (version === request.current && ai) {setExternal([]);setRefined(null);setMessage("IA indisponível · o Match normal continua disponível.");} }
-    finally { setPending(false); }
+    finally { if(version === request.current) {setPending(false);setAiReady(true);} }
   }
   return <section className="mt-6 space-y-3">
     <FilterPills options={[["all","Todos"],["movie","Filmes"],["tv","Séries"]]} value={kind} onChange={(v) => {if (v === kind) return; request.current++;setKind(v);setRefined(null);setExternal([]);setMessage(null);}} />
@@ -53,7 +55,7 @@ export function MatchPreparation({ works, spaceId, onStart, solo = false }: { wo
       <Button variant={ai ? "default" : "ghost"} size="icon" role="switch" aria-checked={ai} aria-label="IA no Match" title="IA no Match" onClick={()=>{request.current++;setAi(v=>!v);setExternal([]);setRefined(null);setMessage(null);}} className={`h-9 w-9 ${ai ? "text-primary-foreground" : "text-foreground"}`}><Sparkles /></Button>
     </div>
     {message && <p role="status" className="text-xs text-muted-foreground">{message}</p>}
-    <Button disabled={pending || basePending || ids.length + (ai ? external.length : base.length) < 2} onClick={async () => {
+    <Button disabled={pending || basePending || (ai && !aiReady) || ids.length + (ai ? external.length : base.length) < 2} onClick={async () => {
       setPending(true);
       try {
         const selected = ai ? external : solo ? base : [];
