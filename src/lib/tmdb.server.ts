@@ -86,7 +86,7 @@ export async function searchMulti(query: string, page = 1): Promise<TmdbSearchIt
   if (!people.length && page === 1 && cleaned.length>=3) {
     // TMDB keyword discovery adds canonical franchise titles absent from literal-title search.
     const keywords=await call("/search/keyword",{query:cleaned,page:"1"}).catch(()=>({} as Json));
-    const exact=(Array.isArray(keywords["results"]) ? keywords["results"] as Json[] : []).find(k=>fold(String(k["name"])) === fold(cleaned));
+    const exact=(Array.isArray(keywords["results"]) ? keywords["results"] as Json[] : []).find(k=>fold(String(k["name"])) === fold(cleaned) || fold(String(k["name"])).startsWith(`${fold(cleaned)} `));
     if (exact) {
       const discovered=await call("/discover/movie",{with_keywords:String(exact["id"]),sort_by:"vote_count.desc",include_adult:"false",page:"1"}).catch(()=>({} as Json));
       const extra=(Array.isArray(discovered["results"]) ? discovered["results"] as Json[] : []).map(r=>mapListItem(r,"movie")).filter((r):r is TmdbSearchItem=>Boolean(r));

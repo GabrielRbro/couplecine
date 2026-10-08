@@ -223,8 +223,9 @@ function DicePage() {
                   {ready.has(flick.work.id) ? <Poster eager path={flick.work.poster_path} title={flick.work.title} className="shadow-xl" /> : <div className="match-stack-back" />}
                 </div>
               </div>
-            ) : picked ? (
-              <motion.div key={picked.id} initial={{opacity:0,scale:.96}} animate={{opacity:1,scale:1}} transition={{duration:.2}} className="relative isolate h-full">
+            ) : (
+              <AnimatePresence mode="wait" initial={false}>{picked ? (
+              <motion.div key={picked.id} initial={{opacity:0,scale:.96}} animate={{opacity:1,scale:1}} exit={{opacity:0,scale:.97,y:5}} transition={{duration:.16}} className="relative isolate h-full">
                 <div aria-hidden className="absolute inset-x-3 top-2 bottom-1 -z-10 rotate-2 rounded-xl border border-border bg-secondary" />
                 <Link
                   key={picked.id}
@@ -237,11 +238,12 @@ function DicePage() {
                 </Link>
               </motion.div>
             ) : (
-              <div className="relative aspect-[2/3]" aria-hidden>
+              <motion.div key="empty" initial={{opacity:0}} animate={{opacity:1}} exit={{opacity:0}} transition={{duration:.16}} className="relative aspect-[2/3]" aria-hidden>
                 <div className="match-stack-back match-stack-back-far" />
                 <div className="match-stack-back match-stack-back-near" />
                 <div className="match-stack-back z-[2]" />
-              </div>
+              </motion.div>
+            )}</AnimatePresence>
             )}
           </div>
           <div className="mx-auto mt-6 flex h-[112px] w-60 flex-col items-center gap-2">
