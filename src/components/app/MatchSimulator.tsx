@@ -18,6 +18,7 @@ export function MatchSimulator({ works, onExit, storageKey }: { works: LibraryWo
   const setVotes = (update: (old: typeof votes) => typeof votes) => setState((old) => ({ ...old, votes: update(old.votes) }));
   const setFinished = (value: boolean) => setState((old) => ({ ...old, finished: value }));
   const [direction, setDirection] = useState<"left" | "right" | null>(null);
+  const [isNewWinner, setIsNewWinner] = useState(false);
   const lock = useRef(false);
   const current = deck[votes.length];
   const results = deck.filter((w) => votes.some((v) => v.id === w.id && v.liked));
@@ -44,6 +45,7 @@ export function MatchSimulator({ works, onExit, storageKey }: { works: LibraryWo
   }
   async function roll() {
     if (lock.current || !results.length) return;
+    setIsNewWinner(false);
     lock.current = true;
     setState((old) => ({ ...old, chosen: null, spinning: null, rolling: true }));
     await delay(180);
@@ -58,20 +60,25 @@ export function MatchSimulator({ works, onExit, storageKey }: { works: LibraryWo
       await delay(55 + i * 14);
     }
     setState((old) => ({ ...old, spinning: null, chosen: selected.id, rolling: false }));
+    setIsNewWinner(true);
     lock.current = false;
   }
   // An interrupted roulette resumes as a fresh local roll; votes and the winner remain untouched.
   useEffect(() => { if (hydrated && state.rolling && !lock.current) { setState((old) => ({ ...old, rolling: false, spinning: null })); void roll(); } }, [hydrated]);
-  const restart = () => { if (lock.current) return; setState({ order: shuffled(eligible.map((w) => w.id)), votes: [], finished: false, chosen: null, spinning: null, rolling: false, visited: [],limit:Math.min(eligible.length,10+Math.floor(Math.random()*6)),extendedAfterGoal:false }); };
+  const restart = () => { if (lock.current) return; setIsNewWinner(false); setState({ order: shuffled(eligible.map((w) => w.id)), votes: [], finished: false, chosen: null, spinning: null, rolling: false, visited: [],limit:Math.min(eligible.length,10+Math.floor(Math.random()*6)),extendedAfterGoal:false }); };
   const winner = results.find((w) => w.id === chosen);
   if (!hydrated) return null;
   return <div className="px-4 pt-6 pb-8">
     <div className="grid grid-cols-[minmax(0,1fr)_auto] items-center gap-2"><div><h1 className="text-2xl font-semibold">Match</h1><p className="mt-1 text-xs text-primary">Modo de teste</p></div><Button variant="ghost" size="icon" aria-label="Sair do teste" onClick={onExit} className="h-11 w-11"><X /></Button></div>
-    {winner && <MatchWinner key={winner.id} work={winner} onRoll={roll} onRestart={restart} />}{finished ? <section className="mt-6"><h2 className="text-xl font-semibold">{results.length} {results.length === 1 ? "match simulado" : "matches simulados"}</h2><p className="mt-1 text-xs text-muted-foreground">Somente suas escolhas neste teste.</p>
-      <div className="mt-4 grid grid-cols-3 gap-3">{results.map((w) => <Link key={w.id} {...(w.id.startsWith("tmdb-") ? { to: "/title/$mediaType/$tmdbId" as const, params: { mediaType: w.media_type, tmdbId: String((w as LibraryWork & { tmdb_id: number }).tmdb_id) } } : { to: "/work/$id" as const, params: { id: w.id } })} className={`block rounded-xl ${spinning === w.id || false ? "match-picked ring-2 ring-primary" : ""}`}><div data-match-poster={w.id}><Poster path={w.poster_path} title={w.title} /></div><p className="mt-1 line-clamp-2 text-xs">{w.title}</p></Link>)}</div>
-      <Button variant="outline" className="mt-5 min-h-12 w-full" disabled={!results.length || state.rolling} onClick={roll}><Dices />Sortear entre os matches</Button>
-      {chosen && <p role="status" className="mt-3 text-center text-sm">A sorte escolheu {results.find((w) => w.id === chosen)?.title}</p>}
-      <Button variant="ghost" className="mt-3 min-h-11 w-full" onClick={restart}><RotateCcw />Reiniciar teste</Button>
+    {winner && <MatchWinner key={winner.id} work={winner} onRoll={roll} onRestart={restart} isNew={isNewWinner} onClose={()=>setState(old=>({...old,chosen:null}))} onOpen={()=>setIsNewWinner(false)} />}{finished ? <section className="mt-6 flex flex-col min-h-[400px]"><h2 className="text-xl font-semibold">{results.length} {results.length === 1 ? "match simulado" : "matches simulados"}</h2><p className="mt-1 text-xs text-muted-foreground">Somente suas escolhas neste teste.</p>
+      <div className="mt-4 grid grid-cols-3 gap-3 flex-1">{results.map((w) => <Link key={w.id} {...(w.id.startsWith("tmdb-") ? { to: "/title/$mediaType/$tmdbId" as const, params: { mediaType: w.media_type, tmdbId: String((w as LibraryWork & { tmdb_id: number }).tmdb_id) } } : { to: "/work/$id" as const, params: { id: w.id } })} className={`block rounded-xl ${spinning === w.id || false ? "match-picked ring-2 ring-primary" : ""}`}><div data-match-poster={w.id}><Poster path={w.poster_path} title={w.title} /></div><p className="mt-1 line-clamp-2 text-xs">{w.title}</p></Link>)}</div>
+      <div className="sticky bottom-0 z-20 -mx-4 mt-6 bg-background/95 pb-[env(safe-area-inset-bottom)] backdrop-blur">
+        <div className="px-4 py-3 space-y-3">
+          <Button variant="outline" className="min-h-12 w-full" disabled={!results.length || state.rolling} onClick={roll}><Dices />Sortear entre os matches</Button>
+          {chosen && <p role="status" className="text-center text-sm">A sorte escolheu {results.find((w) => w.id === chosen)?.title}</p>}
+          <Button variant="ghost" className="min-h-11 w-full" onClick={restart}><RotateCcw />Reiniciar teste</Button>
+        </div>
+      </div>
     </section> : current ? <>
       <div className="match-stack mx-auto mt-7"><div className="match-stack-back match-stack-back-far" /><div className="match-stack-back match-stack-back-near" /><div key={current.id} data-exit-direction={direction ?? undefined} className={`match-stack-current ${direction === "left" ? "match-card-exit-left" : direction === "right" ? "match-card-exit-right" : "match-card-arrive"}`}><SimulatorPoster work={current} /></div></div>
       <p className="mt-4 text-center font-semibold">{current.title}</p>

@@ -187,21 +187,25 @@ export const analyzeImport = createServerFn({ method: "POST" })
     }
   });
 
-/** Optional preparation only: reads the caller's eligible library, never votes or results. */
+/**
+ * refineMatch: Resolves internal candidates via search-ranking (local) and discovers external ones via AI.
+ * External-only AI without internal IDs: Gemini only receives titles to find new suggestions.
+ */
 export const refineMatch = createServerFn({ method: "POST" })
   .middleware([requireSupabaseAuth])
   .inputValidator((d) => z.object({ spaceId: z.string().uuid(), ids: z.array(z.string().uuid()).max(40), query: z.string().min(3).max(180), kind: z.enum(["all", "movie", "tv"]) }).parse(d))
   .handler(async ({ data, context }) => {
-    const { data: rows, error } = await context.supabase.from("works").select("id,tmdb_id,media_type,title,runtime_minutes,genres,interests(reaction),indications(id)").eq("space_id",data.spaceId).in("id",data.ids);
+    const { data: rows, error } = data.ids.length ? await context.supabase.from("works").select("id,tmdb_id,media_type,title,runtime_minutes,genres,interests(reaction),indications(id)").eq("space_id",data.spaceId).in("id",data.ids) : {data:[],error:null};
     if (error) throw new Error("Não foi possível preparar candidatos.");
-    const eligible = (rows ?? []).filter((w) => w.indications.length && !w.interests.some((i) => i.reaction === "dislike") && (data.kind === "all" || w.media_type === data.kind));
-    const fallback = eligible.map((w) => w.id);
+    const eligible = (rows ?? []).filter(w=>w.indications.length && !w.interests.some(i=>i.reaction === "dislike") && (data.kind === "all" || w.media_type === data.kind));
+    const fallback=eligible.map(w=>w.id);
     try {
-      const {data:library} = await context.supabase.from("works").select("title,media_type,tmdb_id").eq("space_id",data.spaceId);
-      const compact = eligible.map((w) => ({ id:w.id,title:w.title,type:w.media_type,minutes:w.runtime_minutes,genres:w.genres.slice(0,3) }));
-      const result = await geminiJson<{ ids?: string[]; items?: AiTitleGuess[] }>({ supabase: context.supabase,userId:context.userId,feature:"smart_search",system:'Refine o conjunto de filmes/séries fornecido para a intenção. Retorne JSON {"ids":[ids],"items":[{"title":string,"year":number|null,"mediaType":"movie"|"tv"}]} em ordem de preferência. ids só do conjunto. items: forneça 3–4 títulos reais compatíveis com a intenção que NÃO constem da biblioteca abaixo, mesmo quando há internos compatíveis; nunca invente metadata, votos ou resultados. Mantenha pelo menos 2 candidatos internos se disponíveis.',parts:[{text:JSON.stringify({intent:data.query.trim().replace(/\s+/g," "),kind:data.kind,library:library ?? [],candidates:compact})}],cacheTtlHours:24,cacheSeed:`match-external-v2:${data.kind}:${data.query.trim().toLowerCase()}:${JSON.stringify(compact)}` });
-      const ids = [...new Set(result.ids ?? [])].filter((id) => fallback.includes(id));
-      const external = (await validate((result.items ?? []).slice(0,4), data.spaceId, context.supabase)).filter((w) => !w.existingWorkId && (data.kind === "all" || w.mediaType === data.kind)).slice(0,4);
-      return { ids: ids.length >= 2 ? ids : fallback, external, refined: ids.length >= 2 || external.length > 0, reason: null };
-    } catch { return { ids:fallback, external: [], refined:false, reason:"IA indisponível · o Match normal continua disponível." }; }
+      const {data:library} = await context.supabase.from("works").select("title,media_type").eq("space_id",data.spaceId).limit(100);
+      const compact=eligible.map((w,index)=>({index,title:w.title,type:w.media_type,minutes:w.runtime_minutes,genres:w.genres.slice(0,3)}));
+      const intent=data.query.trim().replace(/\s+/g," ").toLowerCase();
+      const result=await geminiJson<{order?:number[];items?:AiTitleGuess[]}>({supabase:context.supabase,userId:context.userId,feature:"smart_search",system:'Refine os candidatos pela intenção, incluindo origem/idioma, gênero e formato. Retorne JSON {"order":[índices compatíveis em ordem],"items":[{"title":string,"year":number|null,"mediaType":"movie"|"tv"}]}. order só índices fornecidos, nunca IDs. items: 4 títulos reais novos ainda fora da biblioteca, compatíveis com intenção e tipo, MESMO quando não há candidatos internos. Drama coreano deve respeitar origem coreana; terror japonês deve respeitar origem japonesa e gênero. Não invente metadados, votos ou resultados.',parts:[{text:JSON.stringify({intent,kind:data.kind,library:library ?? [],candidates:compact})}],cacheTtlHours:24,cacheSeed:`match-intent-v3:${data.kind}:${intent}:${JSON.stringify(compact)}`});
+      const ids=[...new Set(result.order ?? [])].filter(i=>Number.isInteger(i) && i>=0 && i<eligible.length).flatMap(i=>eligible[i] ? [eligible[i].id] : []);
+      const external=(await validate((result.items ?? []).slice(0,4),data.spaceId,context.supabase)).filter(w=>!w.existingWorkId && (data.kind === "all" || w.mediaType === data.kind)).slice(0,4);
+      return {ids:ids.length || external.length ? ids : fallback,external,refined:ids.length>0 || external.length>0,reason:null};
+    } catch {return {ids:fallback,external:[],refined:false,reason:"IA indisponível · o Match normal continua disponível."};}
   });

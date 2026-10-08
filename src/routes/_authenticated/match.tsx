@@ -131,6 +131,7 @@ function MatchPage() {
   const initialOpenId = useRef<string | null | undefined>(undefined);
   const autoStarted = useRef(false);
   const [loadedCardId, setLoadedCardId] = useState<string | null>(null);
+  const [isNewWinner, setIsNewWinner] = useState(false);
 
   const open = useQuery({
     queryKey: ["match-open", spaceId],
@@ -404,9 +405,9 @@ function MatchPage() {
     if (results.length === 0 || rolling) return;
     const selected = results[Math.floor(Math.random() * results.length)];
     if (!selected) return;
-    setPickedResultId(null);setSpinId(null);
+    setIsNewWinner(false);setPickedResultId(null);setSpinId(null);
     if (window.matchMedia("(prefers-reduced-motion: reduce)").matches || results.length === 1) {
-      setPickedResultId(selected.id);
+      setIsNewWinner(true);setPickedResultId(selected.id);
       return;
     }
     setRolling(true);
@@ -424,7 +425,7 @@ function MatchPage() {
         if (i < steps) tick(delay * 1.13);
         else {
           setSpinId(null);
-          setPickedResultId(selected.id);
+          setIsNewWinner(true);setPickedResultId(selected.id);
           setRolling(false);
         }
       }, delay);
@@ -438,7 +439,7 @@ function MatchPage() {
       <h2 className="mt-1 text-xl font-semibold">
         Vocês deram Match em {results.length} {results.length === 1 ? "obra" : "obras"}
       </h2>
-      {pickedResultId && byId.get(pickedResultId) ? <MatchWinner key={pickedResultId} work={byId.get(pickedResultId) as NonNullable<ReturnType<typeof byId.get>>} onRoll={pickRandomResult} onRestart={() => { setPickedResultId(null); setPreparedIds(null); autoStarted.current = false; navigate({ search: {}, replace: true }); }} /> : null}
+      {pickedResultId && byId.get(pickedResultId) ? <MatchWinner key={pickedResultId} work={byId.get(pickedResultId) as NonNullable<ReturnType<typeof byId.get>>} onRoll={pickRandomResult} onRestart={() => { setIsNewWinner(false); setPickedResultId(null); setPreparedIds(null); autoStarted.current = false; navigate({ search: {}, replace: true }); }} isNew={isNewWinner} onClose={()=>setPickedResultId(null)} onOpen={()=>setIsNewWinner(false)} /> : null}
       {results.length === 0 ? (
         <p className="mt-2 text-sm text-muted-foreground">Nenhuma obra em comum desta vez.</p>
       ) : (
@@ -459,20 +460,24 @@ function MatchPage() {
               </Link>
             ))}
           </div>
-          <button
-            type="button"
-            onClick={pickRandomResult}
-            disabled={rolling}
-            className="pressable mt-4 flex min-h-11 w-full items-center justify-center gap-2 rounded-xl border border-border bg-secondary text-sm font-semibold"
-          >
-            <Dices className={`h-4 w-4 ${rolling ? "animate-spin" : ""}`} />{" "}
-            {rolling ? "Embaralhando…" : "Sortear entre os matches"}
-          </button>
-          {pickedResultId && (
-            <p className="fade-enter mt-3 text-center text-sm font-medium" aria-live="polite">
-              A sorte escolheu {byId.get(pickedResultId)?.title}
-            </p>
-          )}
+          <div className="sticky bottom-0 z-20 -mx-4 mt-6 bg-background/95 pb-[env(safe-area-inset-bottom)] backdrop-blur">
+            <div className="px-4 py-3">
+              <button
+                type="button"
+                onClick={pickRandomResult}
+                disabled={rolling}
+                className="pressable flex min-h-11 w-full items-center justify-center gap-2 rounded-xl border border-border bg-secondary text-sm font-semibold"
+              >
+                <Dices className={`h-4 w-4 ${rolling ? "animate-spin" : ""}`} />{" "}
+                {rolling ? "Embaralhando…" : "Sortear entre os matches"}
+              </button>
+              {pickedResultId && (
+                <p className="fade-enter mt-3 text-center text-sm font-medium" aria-live="polite">
+                  A sorte escolheu {byId.get(pickedResultId)?.title}
+                </p>
+              )}
+            </div>
+          </div>
         </>
       )}
     </section>
@@ -555,7 +560,7 @@ function MatchPage() {
           >
             Convidar parceiro
           </Link>
-          {members.data === 1 && spaceId && <MatchPreparation works={works} spaceId={spaceId} solo onStart={(ids, extras) => {setPreparation({preparedIds:ids,simulating:true,extras});}} />}
+          {members.data === 1 && spaceId && <MatchPreparation works={works} spaceId={spaceId} solo onStart={(ids, extras) => {sessionStorage.removeItem(`match-solo:${space.userId}`);setPreparation({preparedIds:ids,simulating:true,extras});}} />}
           {last.data && (
             <Link
               to="/match"

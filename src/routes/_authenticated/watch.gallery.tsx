@@ -10,6 +10,7 @@ import { SlidersHorizontal } from "lucide-react";
 import { AnimatePresence, motion, useReducedMotion } from "motion/react";
 import { TouchSlider } from "@/components/app/TouchSlider";
 import { AnimatedSheet } from "@/components/app/AnimatedSheet";
+import { ScrollToTop } from "@/components/app/ScrollToTop";
 import { AppShell } from "@/components/app/AppShell";
 import { Button } from "@/components/ui/button";
 import { FilterPills, ScrollRow, TogglePill } from "@/components/app/ui";
@@ -182,7 +183,7 @@ function GalleryPage() {
           (space.partner ? 2 : 1)),
   );
   return (
-    <div className="px-4 pt-6">
+    <div className="px-4 pt-6"><ScrollToTop />
       <span className="text-[10px] font-semibold uppercase tracking-[0.18em] text-primary/80">
         Modo de escolha
       </span>

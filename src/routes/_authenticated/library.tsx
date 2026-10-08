@@ -1,10 +1,13 @@
 import { createFileRoute, Link, useNavigate } from "@tanstack/react-router";
-import { useMemo } from "react";
+import { useMemo, useState } from "react";
 import { z } from "zod";
-import { Plus, Search } from "lucide-react";
+import { Plus, Search, ChevronDown } from "lucide-react";
 import { AnimatePresence, motion, useReducedMotion } from "motion/react";
 import { AppShell } from "@/components/app/AppShell";
 import { EmptyState, MediaCard } from "@/components/app/MediaCard";
+import { ScrollToTop } from "@/components/app/ScrollToTop";
+import { AnimatedSheet } from "@/components/app/AnimatedSheet";
+import { Button } from "@/components/ui/button";
 import { DiscoverTab } from "@/components/app/DiscoverTab";
 import { FilterPills, PosterGridSkeleton } from "@/components/app/ui";
 import { isIndicated, isWatched, useLibrary, useSpace } from "@/lib/space";
@@ -52,6 +55,7 @@ function LibraryPage() {
   const { data: works = [], isLoading } = useLibrary(space?.spaceId);
   const { tab, kind, sort, q } = Route.useSearch();
   const reduce = useReducedMotion();
+  const [ordering,setOrdering] = useState(false);
   const navigate = useNavigate({ from: "/library" });
   const set = (patch: Partial<{ tab: Tab; kind: typeof kind; sort: typeof sort; q: string }>) => {
     const current = { tab, kind, sort, q };
@@ -76,7 +80,7 @@ function LibraryPage() {
   if (!space) return null;
 
   return (
-    <div className="px-4 pt-6">
+    <div className="px-4 pt-6"><ScrollToTop />
       <div className="flex items-center justify-between">
         <h1 className="text-2xl font-semibold">Biblioteca</h1>
         <Link
@@ -145,16 +149,8 @@ function LibraryPage() {
               value={kind}
               onChange={setKind}
             />
-            <select
-              value={sort}
-              onChange={(e) => setSort(e.target.value as typeof sort)}
-              aria-label="Ordenar"
-              className="ml-auto min-h-10 rounded-lg border border-border bg-card px-2 text-xs"
-            >
-              <option value="activity">Recentes</option>
-              <option value="title">A–Z</option>
-              <option value="year">Ano</option>
-            </select>
+            <Button variant="ghost" aria-label="Ordenar" onClick={()=>setOrdering(true)} className="ml-auto min-h-11 px-2 text-xs">{sort === "title" ? "A–Z" : sort === "year" ? "Ano" : "Recentes"}<ChevronDown className="h-3 w-3" /></Button>
+            <AnimatedSheet open={ordering} onClose={()=>setOrdering(false)} labelledBy="library-order"><h2 id="library-order" className="font-semibold">Ordenar</h2>{([["activity","Recentes"],["title","A–Z"],["year","Ano"]] as const).map(([value,label])=><Button key={value} variant={sort===value ? "secondary" : "ghost"} className="min-h-12 w-full justify-start" onClick={()=>{setSort(value);setOrdering(false);}}>{label}</Button>)}</AnimatedSheet>
           </div>
           {isLoading && (
             <div className="mt-5">

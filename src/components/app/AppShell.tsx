@@ -93,8 +93,8 @@ export function BottomNav() {
       <Button variant="ghost"
         aria-label="Fechar menu"
         tabIndex={open ? 0 : -1}
-        style={{ background: "linear-gradient(to bottom, color-mix(in oklch, var(--background) 80%, transparent) 0 calc(100% - var(--nav-space)), transparent calc(100% - var(--nav-space)) 100%)" }}
-        className={`fixed inset-0 z-40 h-auto w-auto rounded-none p-0 transition-opacity duration-150 ${open ? "opacity-100" : "pointer-events-none opacity-0"}`}
+        
+        className={`fixed inset-0 z-40 h-auto w-auto bg-background/80 rounded-none p-0 transition-opacity duration-150 ${open ? "opacity-100" : "pointer-events-none opacity-0"}`}
         onClick={() => setOpen(false)}
       />
       <nav

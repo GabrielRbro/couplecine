@@ -62,57 +62,38 @@ export function posterUrl(path: string | null, size: "w342" | "w780" | "original
   return path ? `https://image.tmdb.org/t/p/${size}${path}` : null;
 }
 
+/** Hard cap: 1 search + at most 3 credits OR one additional title page. */
 export async function searchMulti(query: string, page = 1): Promise<TmdbSearchItem[]> {
-  const data = await call("/search/multi", { query, include_adult: "false", page: String(page) });
-  const results = Array.isArray(data["results"]) ? (data["results"] as Json[]) : [];
-  // Fan-out guard: only the top 3 distinct people are expanded into credits.
-  const personIds = [
-    ...new Set(
-      results
-        .filter((r) => r["media_type"] === "person")
-        .map((r) => Number(r["id"]))
-        .filter((id) => Number.isInteger(id) && id > 0),
-    ),
-  ].slice(0, 3);
-  const expanded = await Promise.all(
-    results.slice(0, 20).map(async (item): Promise<TmdbSearchItem[]> => {
-      const direct = mapListItem(item);
-      if (direct) return [direct];
-      if (item["media_type"] !== "person") return [];
-
-      const personId = Number(item["id"]);
-      if (!personIds.includes(personId)) return [];
-      personIds.splice(personIds.indexOf(personId), 1);
-      const credits = await call(`/person/${personId}/combined_credits`);
-      const cast = Array.isArray(credits["cast"]) ? (credits["cast"] as Json[]) : [];
-      const crew = Array.isArray(credits["crew"]) ? (credits["crew"] as Json[]) : [];
-      const knownFor = Array.isArray(item["known_for"]) ? (item["known_for"] as Json[]) : [];
-      const department = String(item["known_for_department"] ?? "");
-      const relevant =
-        department === "Directing"
-          ? crew.filter((credit) => credit["job"] === "Director")
-          : department === "Acting"
-            ? cast
-            : [...cast, ...crew.filter((credit) => credit["job"] === "Director")];
-
-      return [...knownFor, ...relevant]
-        .filter((credit) => credit["adult"] !== true)
-        .map((credit) => mapListItem(credit))
-        .filter((credit): credit is TmdbSearchItem => Boolean(credit))
-        .slice(0, 12);
-    }),
-  );
-
-  const unique = new Map<string, TmdbSearchItem>();
-  for (const item of expanded.flat()) {
-    const resultKey = `${item.mediaType}:${item.tmdbId}`;
-    if (!unique.has(resultKey)) unique.set(resultKey, item);
+  const role=/dire(c|ç)ão|diretor|directed|director/i.test(query) ? "Directing" : /ator|atriz|actor|actress/i.test(query) ? "Acting" : null;
+  const cleaned=query.replace(/\b(diretor|director|directed|ator|atriz|actor|actress)\b/gi,"").trim();
+  const data=await call("/search/multi",{query:cleaned,include_adult:"false",page:String(page)});
+  const raw=Array.isArray(data["results"]) ? data["results"] as Json[] : [];
+  const people=raw.filter(r=>r["media_type"] === "person" && (!role || r["known_for_department"] === role)).sort((a,b)=>Number(b["popularity"] ?? 0)-Number(a["popularity"] ?? 0));
+  const principal=people[0];
+  const personIntent=principal && (role || people.length>0 && raw.filter(r=>mapListItem(r)).length<10);
+  // A dominant directing result means the user's intent is that director, not every namesake.
+  const selected=personIntent && principal?.["known_for_department"] === "Directing" ? [principal] : people.slice(0,3);
+  const direct=raw.map(r=>mapListItem(r)).filter((r):r is TmdbSearchItem=>Boolean(r));
+  const expanded=await Promise.all(selected.map(async person=>{
+    const credits=await call(`/person/${Number(person["id"])}/combined_credits`);
+    const cast=Array.isArray(credits["cast"]) ? credits["cast"] as Json[] : [];
+    const crew=Array.isArray(credits["crew"]) ? credits["crew"] as Json[] : [];
+    const directing=role === "Directing" || person["known_for_department"] === "Directing";
+    return (directing ? crew.filter(c=>c["job"] === "Director") : cast).filter(c=>c["adult"] !== true).map(c=>mapListItem(c)).filter((c):c is TmdbSearchItem=>Boolean(c));
+  }));
+  let candidates=personIntent ? expanded.flat() : [...direct,...expanded.flat()];
+  if (!personIntent && page === 1 && cleaned.length>=3) {
+    // Rank beyond TMDB's literal first page without title-specific IDs or heuristics.
+    const next=await call("/search/multi",{query:cleaned,include_adult:"false",page:"2"}).catch(()=>({} as Json));
+    candidates.push(...(Array.isArray(next["results"]) ? next["results"] as Json[] : []).map(r=>mapListItem(r)).filter((r):r is TmdbSearchItem=>Boolean(r)));
   }
-  return [...unique.values()].slice(0, 20);
+  const unique=[...new Map(candidates.map(w=>[`${w.mediaType}:${w.tmdbId}`,w])).values()];
+  const {rankSearch}=await import("./search-ranking");
+  return rankSearch(unique,personIntent ? "" : cleaned).slice(0,20);
 }
 
 /** Bump when the details strategy changes; older cached payloads are refetched. */
-export const DETAILS_CACHE_VERSION = 2;
+export const DETAILS_CACHE_VERSION = 3;
 
 export type TmdbDetails = {
   v?: number;
@@ -130,6 +111,7 @@ export type TmdbDetails = {
   runtimeMinutes: number | null;
   seasonCount: number | null;
   genres: string[];
+  crewLeads?: { name: string; role: string; profilePath: string | null }[];
   crewLead: { name: string; role: string; profilePath: string | null } | null;
   cast: { name: string; character: string; profilePath: string | null }[];
   seasons: {
@@ -197,6 +179,7 @@ export async function fetchDetails(
           : null,
     seasonCount: typeof data["number_of_seasons"] === "number" ? data["number_of_seasons"] : null,
     genres: genres.map((genre) => String(genre["name"])).filter(Boolean),
+    crewLeads: (crew.filter(m=>m["job"] === "Director").length ? crew.filter(m=>m["job"] === "Director") : createdBy).map(m=>({name:String(m["name"]),role:director ? "Diretor" : "Criação",profilePath:str(m["profile_path"])})),
     crewLead: lead
       ? {
           name: String(lead["name"]),
@@ -272,6 +255,12 @@ async function list(path: string, page: number, fallback?: "movie" | "tv") {
   return results.map((r) => mapListItem(r, fallback)).filter((x): x is TmdbSearchItem => !!x);
 }
 
+export async function soloMatchFeed(kind: "all" | "movie" | "tv"): Promise<TmdbSearchItem[]> {
+  const types: ("movie" | "tv")[] = kind === "all" ? ["movie", "tv"] : [kind];
+  const pages = await Promise.all(types.map(type => list(`/${type}/popular`, 1, type)));
+  return pages.flat().filter(w => w.posterPath && w.year && w.tmdbId > 0);
+}
+
 /** Recommendations from a few seed works, interleaved with trending as fallback. */
 export async function discoverFeed(
   seeds: { mediaType: "movie" | "tv"; tmdbId: number }[],
@@ -327,7 +316,7 @@ export async function findTitle(guess: {
     }));
     return title + (guess.year && item.year ? Math.max(0, 12 - Math.abs(item.year - guess.year) * 4) : 0);
   };
-  const best = [...items].sort((a,b) => score(b)-score(a))[0];
+  const best = items.filter(item => !guess.year || item.year === guess.year).sort((a,b) => score(b)-score(a))[0];
   return best && score(best) >= 45 ? best : null;
 }
 

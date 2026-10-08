@@ -63,7 +63,7 @@
 
 :root {
   --radius: 0.9rem;
-  --background: oklch(0.13 0.006 285);
+  --background: oklch(0.17 0.006 285);
   --foreground: oklch(0.96 0.004 285);
   --card: oklch(0.18 0.008 285);
   --card-foreground: oklch(0.96 0.004 285);
@@ -344,3 +344,13 @@ html { scrollbar-gutter: stable; }
 ::view-transition-group(detail-meta), ::view-transition-group(detail-controls) { z-index: 5; animation: none; }
 ::view-transition-old(detail-controls) { display: none; }
 ::view-transition-new(detail-controls) { animation: none; mix-blend-mode: normal; }
+
+/* Focused handoff polish: accessibility keeps pinch zoom and editable selection intact. */
+body { -webkit-user-select: none; user-select: none; }
+input, textarea, [contenteditable="true"] { -webkit-user-select: text; user-select: text; }
+.scroll-top-control { bottom: calc(var(--nav-space) + 12px); right: max(20px, calc((100vw - 448px) / 2 + 20px)); }
+::view-transition-old(root) { animation: none; opacity: 0; }
+::view-transition-new(root) { animation: none; mix-blend-mode: normal; }
+::view-transition-group(shared-backdrop) { z-index: 3; }
+::view-transition-old(shared-backdrop), ::view-transition-new(shared-backdrop) { mix-blend-mode: normal; }
+::view-transition-new(shared-backdrop) { animation: none; opacity: 1; }

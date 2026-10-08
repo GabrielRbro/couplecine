@@ -78,11 +78,12 @@ export function ScoreForm({
   const set = (n: number) => setValue(Math.min(10, Math.max(0, Math.round(n * 2) / 2)));
   return (
     <div className="relative">
-      {feedback !== null && <div role="status" data-score-tone={feedback <= 2 ? "low" : feedback >= 9 ? "high" : "normal"} className={`score-feedback absolute inset-0 z-10 flex items-center justify-center rounded-xl bg-card/95 ${feedback <= 2 ? "text-destructive" : "text-primary"}`}>
+      {feedback !== null && <div role="status" data-score-tone={feedback <= 2 ? "low" : feedback >= 9 ? "high" : "normal"} className={`score-feedback absolute inset-0 z-10 flex items-center justify-center rounded-xl bg-card ${feedback <= 2 ? "text-destructive" : "text-primary"}`}>
         {feedback <= 2 ? <ThumbsDown className="h-9 w-9" /> : feedback >= 9 ? <Star className="h-9 w-9" /> : <Check className="h-9 w-9" />}
         <span className="sr-only">Confirmando nota · {formatScore(feedback)}</span>
       </div>}
-      <h2 id="score-title" className="line-clamp-1 text-lg font-semibold">
+      <div className={feedback !== null ? "invisible" : ""}>
+       <h2 id="score-title" className="line-clamp-1 text-lg font-semibold">
         {title}
       </h2>
       <p className="mt-0.5 text-xs text-muted-foreground">Nota de 0 a 10, de meio em meio ponto.</p>
@@ -144,6 +145,7 @@ export function ScoreForm({
         >
           {saving ? "Salvando…" : `${saveLabel} · ${formatScore(value)}`}
         </Button>
+      </div>
       </div>
     </div>
   );

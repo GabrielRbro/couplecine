@@ -246,8 +246,7 @@ export function WorkDetails({ workId, mediaType, tmdbId }: { workId?: string; me
               title={work.title}
               indications={data.indications}
               onChange={refresh}
-            />
-            <PriorWatch space={space} workId={id} prior={data.prior} onChange={refresh} />
+            ><PriorWatch space={space} workId={id} prior={data.prior} onChange={refresh} /></IndicationsBlock>
             {!isTv && (
               <MovieWatched space={space} workId={id} sessions={data.sessions} onChange={refresh} />
             )}
@@ -266,6 +265,8 @@ export function WorkDetails({ workId, mediaType, tmdbId }: { workId?: string; me
               events={data.events}
               seasons={seasons}
               fallbackImage={work.backdrop_path}
+              title={work.title}
+              logoPath={m?.logoPath ?? null}
               onChange={refresh}
             />
           </>
@@ -277,13 +278,9 @@ export function WorkDetails({ workId, mediaType, tmdbId }: { workId?: string; me
           <section>
             <h2 className="mb-3 font-semibold">Elenco</h2>
             <div className="no-scrollbar -mx-4 flex items-start gap-3 overflow-x-auto px-4">
-              {m.crewLead && (
+              {(m.crewLeads?.length || m.crewLead) && (
                 <>
-                  <Person
-                    name={m.crewLead.name}
-                    top={m.crewLead.role}
-                    path={m.crewLead.profilePath}
-                  />
+                  {(m.crewLeads ?? (m.crewLead ? [m.crewLead] : [])).map(lead=><Person key={lead.name} name={lead.name} top={lead.role} path={lead.profilePath} />)}
                   <div className="h-24 w-px shrink-0 self-center bg-border" />
                 </>
               )}
@@ -681,6 +678,8 @@ function SeriesBlock({
   events,
   seasons,
   fallbackImage,
+  title,
+  logoPath,
   onChange,
 }: {
   space: SpaceInfo;
@@ -690,6 +689,8 @@ function SeriesBlock({
   events: Ev[];
   seasons: SeasonMeta[];
   fallbackImage: string | null;
+  title: string;
+  logoPath: string | null;
   onChange: () => void;
 }) {
   const qc = useQueryClient();
@@ -827,7 +828,7 @@ function SeriesBlock({
               const done = seen.has(`${ep.seasonNumber}:${ep.episodeNumber}`);
               const isNext = next?.s === ep.seasonNumber && next?.e === ep.episodeNumber;
               return (
-                <div key={ep.episodeNumber} className="w-44 shrink-0"><button
+                <div key={ep.episodeNumber} className="relative w-44 shrink-0"><button
                   type="button"
                   onClick={() => setOpenEp(ep)}
                   aria-label={`Abrir T${ep.seasonNumber}E${ep.episodeNumber}, ${ep.name}${done ? ", assistido" : ""}`}
@@ -842,11 +843,7 @@ function SeriesBlock({
                         Próximo
                       </span>
                     )}
-                    {done && (
-                      <span className="absolute right-1.5 top-1.5 flex h-6 w-6 items-center justify-center rounded-full bg-primary text-primary-foreground">
-                        <Check className="h-3.5 w-3.5" />
-                      </span>
-                    )}
+
                   </div>
                   <p className="mt-1.5 line-clamp-1 text-xs font-semibold">
                     T{ep.seasonNumber}E{ep.episodeNumber} · {ep.name}
@@ -855,7 +852,7 @@ function SeriesBlock({
                     {formatRuntime(ep.runtimeMinutes) ?? "—"}
                   </p>
                 </button>
-                {workId && <Button variant={done ? "secondary" : "outline"} disabled={saving} aria-label={`${done ? "Desmarcar" : "Marcar"} T${ep.seasonNumber}E${ep.episodeNumber} assistido`} aria-pressed={done} onClick={()=>toggle(ep.seasonNumber,ep.episodeNumber,!done)} className="mt-2 min-h-11 w-full text-xs"><Check className="h-3.5 w-3.5" />{done ? "Assistido" : "Marcar assistido"}</Button>}
+                <Button variant="ghost" size="icon" disabled={saving || !workId} aria-label={`${done ? "Desmarcar" : "Marcar"} T${ep.seasonNumber}E${ep.episodeNumber} assistido`} aria-pressed={done} onClick={()=>toggle(ep.seasonNumber,ep.episodeNumber,!done)} className={`absolute right-0 top-0 z-10 h-11 w-11 rounded-full ${done ? "nav-glass text-primary" : "bg-background/40 text-foreground/60"}`}><Check className="h-4 w-4" /></Button>
                 </div>
               );
             })}
@@ -875,6 +872,7 @@ function SeriesBlock({
             <Button variant="secondary" size="icon" aria-label="Fechar episódio" disabled={saving} onClick={() => setOpenEp(null)} className="absolute -top-8 right-[max(env(safe-area-inset-right),4px)] z-20 h-11 w-11 rounded-full border border-border shadow-lg"><X /></Button>
             <div className="max-h-[82dvh] overflow-y-auto overscroll-contain rounded-t-3xl"><div className="relative aspect-[16/10] overflow-hidden bg-muted">
               <EpisodeArt ep={openEp} posterPath={seasonPoster(openEp.seasonNumber)} fallbackImage={fallbackImage} big />
+              <div className="absolute bottom-4 left-5 right-5">{logoPath ? <img src={tmdbImage(logoPath,"w300") ?? ""} alt={title} className="max-h-12 max-w-[45%] object-contain object-left" /> : <p className="text-sm font-semibold">{title}</p>}</div>
             </div>
             <div className="p-6">
               <h3 id="ep-title" className="text-lg font-semibold leading-tight">
@@ -920,12 +918,14 @@ function IndicationsBlock({
   space,
   workId,
   title,
+  children,
   indications,
   onChange,
 }: {
   space: SpaceInfo;
   workId: string;
   title: string;
+  children?: React.ReactNode;
   indications: Ind[];
   onChange: () => void;
 }) {
@@ -986,6 +986,7 @@ function IndicationsBlock({
           <Trash2 className="h-3.5 w-3.5" /> Excluir obra
         </button>
       </div>
+      <div className="mt-3">{children}</div>
       <AnimatedSheet
         open={confirming}
         onClose={() => setConfirming(false)}

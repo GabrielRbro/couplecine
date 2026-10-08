@@ -3,10 +3,11 @@ import { Button } from "@/components/ui/button";
 import { Link } from "@tanstack/react-router";
 import { useRef, useState } from "react";
 import { AnimatePresence, motion, useReducedMotion } from "motion/react";
+import { SuperReaction } from "./SuperReaction";
 import { ScoreForm } from "@/components/app/ScorePicker";
 import { useInfiniteQuery, useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { useServerFn } from "@tanstack/react-start";
-import { Check, Film, Plus, RotateCcw, Tv, X } from "lucide-react";
+import { Check, Film, Plus, RotateCcw, Tv, X, ChevronDown } from "lucide-react";
 import { toast } from "sonner";
 import { AnimatedSheet } from "@/components/app/AnimatedSheet";
 import { EmptyState, Poster } from "@/components/app/MediaCard";
@@ -48,6 +49,10 @@ export function DiscoverTab({
   const [gone, setGone] = useState<Set<string>>(new Set());
   const goneRef = useRef(gone);
   const [restored, setRestored] = useState<Map<string, Item>>(new Map());
+  const [dismissedOpen,setDismissedOpen] = useState(false);
+  const [burst,setBurst] = useState<{emoji:string;origin:{x:number;y:number}}|null>(null);
+  const cardOrigin = useRef({x:0,y:0});
+  const openReact = (item: Item) => { const card=document.querySelector(`[data-discover-card="${k(item)}"]`); const box=card?.getBoundingClientRect(); if(box)cardOrigin.current={x:box.left+box.width/2,y:box.bottom-22};setSheet({item,mode:"react"}); };
   const [sheet, setSheet] = useState<SheetState>(null);
   const setGoneState = (next: Set<string>) => {
     goneRef.current = next;
@@ -167,7 +172,7 @@ export function DiscoverTab({
   const indicate = useMutation({
     mutationFn: ({ i, reaction }: { i: Item; reaction: "fire" | "like" | "neutral" }) =>
       add({ data: { spaceId: space.spaceId, mediaType: i.mediaType, tmdbId: i.tmdbId, reaction } }),
-    onMutate: ({ i }) => optimisticallyRemove(i),
+    onMutate: ({ i, reaction }) => {setBurst({emoji:REACTION_EMOJI[reaction],origin:cardOrigin.current});return optimisticallyRemove(i);},
     onSuccess: (_d, { i }) => {
       toast.success(`${i.title} indicado`);
       refreshLibrary();
@@ -204,6 +209,8 @@ export function DiscoverTab({
 
   return (
     <div className="mt-5">
+      {burst && <SuperReaction {...burst} onComplete={()=>setBurst(null)} />}
+      <Button variant="ghost" title="Atualizar sugestões" aria-label="Atualizar sugestões" disabled={feed.isFetching} onClick={() => void feed.refetch()} className="mb-3 ml-auto flex min-h-11 gap-2 text-xs"><RotateCcw className={feed.isFetching ? "h-4 w-4 animate-spin" : "h-4 w-4"} />Atualizar</Button>
       {restored.size > 0 && (
         <section className="mb-6" aria-labelledby="restored-title">
           <div className="mb-3 flex items-center justify-between">
@@ -214,7 +221,7 @@ export function DiscoverTab({
           </div>
           <DiscoverGrid
             items={[...restored.values()]}
-            onReact={(item) => setSheet({ item, mode: "react" })}
+            onReact={openReact}
             onSeen={(item) => setSheet({ item, mode: "seen" })}
             onDismiss={(item) => dismiss.mutate(item)}
           />
@@ -237,7 +244,7 @@ export function DiscoverTab({
       ) : (
         <DiscoverGrid
           items={items}
-          onReact={(item) => setSheet({ item, mode: "react" })}
+          onReact={openReact}
           onSeen={(item) => setSheet({ item, mode: "seen" })}
           onDismiss={(item) => dismiss.mutate(item)}
         />
@@ -254,13 +261,13 @@ export function DiscoverTab({
       )}
       {(dismissed.data?.length ?? 0) > 0 && (
         <section className="mt-7 border-t border-border pt-5" aria-labelledby="dismissed-title">
-          <div className="mb-2 flex items-center justify-between">
+          <Button variant="ghost" aria-expanded={dismissedOpen} aria-controls="dismissed-list" onClick={()=>setDismissedOpen(v=>!v)} className="mb-2 flex min-h-11 w-full items-center justify-between">
             <h2 id="dismissed-title" className="text-sm font-semibold">
               Dispensados
             </h2>
-            <span className="text-xs text-muted-foreground">{dismissed.data?.length}</span>
-          </div>
-          <div className="space-y-1">
+            <span className="flex items-center gap-2 text-xs text-muted-foreground">{dismissed.data?.length}<ChevronDown className={`h-4 w-4 transition-transform ${dismissedOpen ? "rotate-180" : ""}`} /></span>
+          </Button>
+          <div id="dismissed-list" hidden={!dismissedOpen} className="space-y-1">
             {dismissed.data?.map((item) => (
               <div key={k(item)} className="flex min-h-14 items-center gap-3 py-1">
                 <div className="w-9 shrink-0 overflow-hidden rounded-md">
@@ -368,6 +375,7 @@ function DiscoverGrid({
         {items.map((i) => (
           <motion.div
             key={k(i)}
+            data-discover-card={k(i)}
             layout={!reduce}
             initial={reduce ? false : { opacity: 0, scale: 0.94 }}
             animate={{ opacity: 1, scale: 1 }}
