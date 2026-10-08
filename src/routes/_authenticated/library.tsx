@@ -119,7 +119,7 @@ function LibraryPage() {
         ))}
       </div>
       {/* One shared filter row for the three tabs; Ordenar only applies to the local lists. */}
-      <div className="mt-4 flex items-center gap-2">
+      <div className="mt-4 flex min-h-11 items-center gap-2">
         <FilterPills
           options={
             [
