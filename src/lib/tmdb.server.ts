@@ -66,7 +66,6 @@ export function posterUrl(path: string | null, size: "w342" | "w780" | "original
 export async function searchMulti(query: string, page = 1): Promise<TmdbSearchItem[]> {
   const role=/dire(c|ç)ão|diretor|directed|director/i.test(query) ? "Directing" : /ator|atriz|actor|actress/i.test(query) ? "Acting" : null;
   const cleaned=query.replace(/\b(diretor|director|directed|ator|atriz|actor|actress)\b/gi,"").trim();
-  const fold=(s:string)=>s.normalize("NFD").replace(/\p{Diacritic}/gu,"").toLowerCase().trim();
   const data=await call("/search/multi",{query:cleaned,include_adult:"false",page:String(page)});
   const raw=Array.isArray(data["results"]) ? data["results"] as Json[] : [];
   const people=raw.filter(r=>r["media_type"] === "person" && (!role || r["known_for_department"] === role)).sort((a,b)=>Number(b["popularity"] ?? 0)-Number(a["popularity"] ?? 0));
