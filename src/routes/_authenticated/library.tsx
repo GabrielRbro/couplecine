@@ -142,21 +142,6 @@ function LibraryPage() {
         <DiscoverTab space={space} kind={kind} q={q} />
       ) : (
         <>
-
-            <FilterPills
-              options={
-                [
-                  ["all", "Todos"],
-                  ["movie", "Filmes"],
-                  ["tv", "Séries"],
-                ] as const
-              }
-              value={kind}
-              onChange={setKind}
-            />
-            <Button variant="ghost" aria-label="Ordenar" onClick={()=>setOrdering(true)} className="ml-auto min-h-11 px-2 text-xs">{sort === "title" ? "A–Z" : sort === "year" ? "Ano" : "Recentes"}<ChevronDown className="h-3 w-3" /></Button>
-            <AnimatedSheet open={ordering} onClose={()=>setOrdering(false)} labelledBy="library-order"><h2 id="library-order" className="font-semibold">Ordenar</h2>{([["activity","Recentes"],["title","A–Z"],["year","Ano"]] as const).map(([value,label])=><Button key={value} variant={sort===value ? "secondary" : "ghost"} className="min-h-12 w-full justify-start" onClick={()=>{setSort(value);setOrdering(false);}}>{label}</Button>)}</AnimatedSheet>
-          </div>
           {isLoading && (
             <div className="mt-5">
               <PosterGridSkeleton />
