@@ -439,7 +439,7 @@ function MatchPage() {
       <h2 className="mt-1 text-xl font-semibold">
         Vocês deram Match em {results.length} {results.length === 1 ? "obra" : "obras"}
       </h2>
-      {pickedResultId && byId.get(pickedResultId) ? <MatchWinner key={pickedResultId} work={byId.get(pickedResultId) as NonNullable<ReturnType<typeof byId.get>>} onRoll={pickRandomResult} onRestart={() => { setIsNewWinner(false); setPickedResultId(null); setPreparedIds(null); autoStarted.current = false; navigate({ search: {}, replace: true }); }} isNew={isNewWinner} /> : null}
+      {pickedResultId && byId.get(pickedResultId) ? <MatchWinner key={pickedResultId} work={byId.get(pickedResultId) as NonNullable<ReturnType<typeof byId.get>>} onRoll={pickRandomResult} onRestart={() => { setIsNewWinner(false); setPickedResultId(null); setPreparedIds(null); autoStarted.current = false; navigate({ search: {}, replace: true }); }} isNew={isNewWinner} onClose={()=>setPickedResultId(null)} onOpen={()=>setIsNewWinner(false)} /> : null}
       {results.length === 0 ? (
         <p className="mt-2 text-sm text-muted-foreground">Nenhuma obra em comum desta vez.</p>
       ) : (
@@ -560,7 +560,7 @@ function MatchPage() {
           >
             Convidar parceiro
           </Link>
-          {members.data === 1 && spaceId && <MatchPreparation works={works} spaceId={spaceId} solo onStart={(ids, extras) => {setPreparation({preparedIds:ids,simulating:true,extras});}} />}
+          {members.data === 1 && spaceId && <MatchPreparation works={works} spaceId={spaceId} solo onStart={(ids, extras) => {sessionStorage.removeItem(`match-solo:${space.userId}`);setPreparation({preparedIds:ids,simulating:true,extras});}} />}
           {last.data && (
             <Link
               to="/match"
