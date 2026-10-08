@@ -63,17 +63,29 @@ export function posterUrl(path: string | null, size: "w342" | "w780" | "original
 }
 
 export async function searchMulti(query: string, page = 1): Promise<TmdbSearchItem[]> {
+  const isDir = /dire(c|ç)ão|diretor|directed|director/i.test(query);
+  const isAct = /at(u|o)r|atriz|acting|actor|actress/i.test(query);
+
   const data = await call("/search/multi", { query, include_adult: "false", page: String(page) });
   const results = Array.isArray(data["results"]) ? (data["results"] as Json[]) : [];
+  
   // Fan-out guard: only the top 3 distinct people are expanded into credits.
+  // Bounded person resolution: if search has a role hint, skip people who don't match that primary role.
   const personIds = [
     ...new Set(
       results
-        .filter((r) => r["media_type"] === "person")
+        .filter((r) => {
+          if (r["media_type"] !== "person") return false;
+          const dept = String(r["known_for_department"] ?? "");
+          if (isDir && dept !== "Directing") return false;
+          if (isAct && dept !== "Acting") return false;
+          return true;
+        })
         .map((r) => Number(r["id"]))
         .filter((id) => Number.isInteger(id) && id > 0),
     ),
   ].slice(0, 3);
+
   const expanded = await Promise.all(
     results.slice(0, 20).map(async (item): Promise<TmdbSearchItem[]> => {
       const direct = mapListItem(item);
@@ -83,15 +95,17 @@ export async function searchMulti(query: string, page = 1): Promise<TmdbSearchIt
       const personId = Number(item["id"]);
       if (!personIds.includes(personId)) return [];
       personIds.splice(personIds.indexOf(personId), 1);
+      
       const credits = await call(`/person/${personId}/combined_credits`);
       const cast = Array.isArray(credits["cast"]) ? (credits["cast"] as Json[]) : [];
       const crew = Array.isArray(credits["crew"]) ? (credits["crew"] as Json[]) : [];
       const knownFor = Array.isArray(item["known_for"]) ? (item["known_for"] as Json[]) : [];
       const department = String(item["known_for_department"] ?? "");
+      
       const relevant =
-        department === "Directing"
+        isDir || department === "Directing"
           ? crew.filter((credit) => credit["job"] === "Director")
-          : department === "Acting"
+          : isAct || department === "Acting"
             ? cast
             : [...cast, ...crew.filter((credit) => credit["job"] === "Director")];
 

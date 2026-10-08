@@ -32,7 +32,7 @@ export function MatchPreparation({ works, spaceId, onStart, solo = false }: { wo
   return <section className="mt-6 space-y-3">
     <FilterPills options={[["all","Todos"],["movie","Filmes"],["tv","Séries"]]} value={kind} onChange={(v) => {if (v === kind) return; request.current++;setKind(v);setRefined(null);setExternal([]);setMessage(null);}} />
     <input aria-label="Intenção para o Match" value={intent} maxLength={180} onChange={(e) => {request.current++;setIntent(e.target.value);setRefined(null);setExternal([]);setMessage(null);}} placeholder="Algo leve, até 2h, suspense…" className="min-h-11 w-full rounded-xl border border-border bg-card px-3 text-sm" />
-    <Button variant="outline" onClick={run} disabled={pending || intent.trim().length < 3 || pool.length === 0} className="min-h-11 w-full"><Sparkles className={pending ? "animate-pulse" : ""} />{pending ? "Refinando candidatos…" : "Refinar com IA"}</Button>
+    <Button variant="outline" onClick={run} disabled={pending || intent.trim().length < 3} className="min-h-11 w-full"><Sparkles className={pending ? "animate-pulse" : ""} />{pending ? "Refinando candidatos…" : "Refinar com IA"}</Button>
     {message && <p role="status" className="text-xs text-muted-foreground">{message}</p>}
     <Button disabled={pending || ids.length + external.length < 2} onClick={async () => {
       setPending(true);

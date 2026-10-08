@@ -8,7 +8,7 @@ import { Poster } from "./MediaCard";
 import { formatRuntime, tmdbImage } from "@/lib/format";
 import type { LibraryWork } from "@/lib/space";
 
-export function MatchWinner({ work, onRoll, onRestart }: { work: LibraryWork; onRoll: () => void; onRestart: () => void }) {
+export function MatchWinner({ work, onRoll, onRestart, isNew = false }: { work: LibraryWork; onRoll: () => void; onRestart: () => void; isNew?: boolean }) {
   const reduce = useReducedMotion();
   const [arrived,setArrived]=useState(false);
   const [closing,setClosing]=useState(false);
@@ -28,7 +28,7 @@ export function MatchWinner({ work, onRoll, onRestart }: { work: LibraryWork; on
   if(!geometry || typeof document==="undefined")return null;
   return createPortal(<section role="dialog" aria-modal="true" aria-label={`Escolhido: ${work.title}`} className="fixed inset-0 z-[150] overflow-y-auto overscroll-contain">
     <motion.div className="fixed inset-0 nav-glass" initial={{opacity:0}} animate={{opacity:closing ? 0 : 1}} transition={{duration:reduce ? .01 : .4}} />
-    <motion.div className="fixed z-10 art-edge rounded-xl" initial={reduce ? geometry.to : geometry.from} animate={closing ? {...geometry.from,opacity:0} : {...geometry.to,opacity:1}} transition={{duration:reduce ? .01 : closing ? .22 : .5,ease:[.22,1,.36,1]}} onAnimationComplete={()=>{if(!closing)setArrived(true);}}><Poster eager path={work.poster_path} title={work.title} /></motion.div>
+    <motion.div className="fixed z-10 art-edge rounded-xl" initial={reduce || !isNew ? geometry.to : geometry.from} animate={closing ? {opacity:0} : {...geometry.to,opacity:1}} transition={{duration:reduce ? .01 : closing ? .22 : .5,ease:[.22,1,.36,1]}} onAnimationComplete={()=>{if(!closing)setArrived(true);}}><Poster eager path={work.poster_path} title={work.title} /></motion.div>
     <motion.div className="relative mx-auto max-w-sm px-5 pb-[max(env(safe-area-inset-bottom),24px)] text-center" style={{paddingTop:geometry.to.top+geometry.to.height+20}} initial={{opacity:0,y:10}} animate={{opacity:arrived && !closing ? 1 : 0,y:arrived ? 0 : 10}} transition={{duration:.2}}>
     <h2 className="text-xl font-semibold">{work.title}</h2>
     <p className="mt-2 text-xs leading-relaxed text-muted-foreground">{metadata}</p>
