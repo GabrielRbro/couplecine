@@ -61,7 +61,7 @@ function AddPage() {
   const pending = mode === "ai" ? intelligent.isFetching || q !== debounced : normal.isFetching || (q !== debounced && q.length >= 2);
   const update = (patch: Partial<{ q: string; kind: string; mode: string; sort: string }>) => navigate({ to: ".", search: (p) => ({ ...p, ...patch }), replace: true, viewTransition: false, resetScroll: false });
   const orders: [string,string][] = [["relevance", "Relevância"], ["newest", "Mais recentes"], ["oldest", "Mais antigos"], ["rating", "Melhor avaliados"]];
-  return <div className="px-4 pt-6">
+  return <div className="px-4 pt-6"><ScrollToTop />
     <div className="flex min-w-0 items-center gap-3"><BackButton /><h1 className="text-xl font-semibold">Adicionar obra</h1></div>
     <div className="mt-4 grid grid-cols-[auto_minmax(0,1fr)_auto_auto_auto] items-center gap-2 rounded-xl border border-border bg-card px-3">
       <Search className="h-4 w-4 shrink-0 text-muted-foreground" />

@@ -62,67 +62,40 @@ export function posterUrl(path: string | null, size: "w342" | "w780" | "original
   return path ? `https://image.tmdb.org/t/p/${size}${path}` : null;
 }
 
+/** Hard cap: 1 search + at most 3 credits OR 2 keyword requests (never both). */
 export async function searchMulti(query: string, page = 1): Promise<TmdbSearchItem[]> {
-  const isDir = /dire(c|ç)ão|diretor|directed|director/i.test(query);
-  const isAct = /at(u|o)r|atriz|acting|actor|actress/i.test(query);
-
-  const data = await call("/search/multi", { query, include_adult: "false", page: String(page) });
-  const results = Array.isArray(data["results"]) ? (data["results"] as Json[]) : [];
-  
-  // Fan-out guard: only the top 3 distinct people are expanded into credits.
-  // Bounded person resolution: if search has a role hint, skip people who don't match that primary role.
-  const personIds = [
-    ...new Set(
-      results
-        .filter((r) => {
-          if (r["media_type"] !== "person") return false;
-          const dept = String(r["known_for_department"] ?? "");
-          if (isDir && dept !== "Directing") return false;
-          if (isAct && dept !== "Acting") return false;
-          return true;
-        })
-        .map((r) => Number(r["id"]))
-        .filter((id) => Number.isInteger(id) && id > 0),
-    ),
-  ].slice(0, 3);
-
-  const expanded = await Promise.all(
-    results.slice(0, 20).map(async (item): Promise<TmdbSearchItem[]> => {
-      const direct = mapListItem(item);
-      if (direct) return [direct];
-      if (item["media_type"] !== "person") return [];
-
-      const personId = Number(item["id"]);
-      if (!personIds.includes(personId)) return [];
-      personIds.splice(personIds.indexOf(personId), 1);
-      
-      const credits = await call(`/person/${personId}/combined_credits`);
-      const cast = Array.isArray(credits["cast"]) ? (credits["cast"] as Json[]) : [];
-      const crew = Array.isArray(credits["crew"]) ? (credits["crew"] as Json[]) : [];
-      const knownFor = Array.isArray(item["known_for"]) ? (item["known_for"] as Json[]) : [];
-      const department = String(item["known_for_department"] ?? "");
-      
-      const relevant =
-        isDir || department === "Directing"
-          ? crew.filter((credit) => credit["job"] === "Director")
-          : isAct || department === "Acting"
-            ? cast
-            : [...cast, ...crew.filter((credit) => credit["job"] === "Director")];
-
-      return [...knownFor, ...relevant]
-        .filter((credit) => credit["adult"] !== true)
-        .map((credit) => mapListItem(credit))
-        .filter((credit): credit is TmdbSearchItem => Boolean(credit))
-        .slice(0, 12);
-    }),
-  );
-
-  const unique = new Map<string, TmdbSearchItem>();
-  for (const item of expanded.flat()) {
-    const resultKey = `${item.mediaType}:${item.tmdbId}`;
-    if (!unique.has(resultKey)) unique.set(resultKey, item);
+  const role=/dire(c|ç)ão|diretor|directed|director/i.test(query) ? "Directing" : /ator|atriz|actor|actress/i.test(query) ? "Acting" : null;
+  const cleaned=query.replace(/\b(diretor|director|directed|ator|atriz|actor|actress)\b/gi,"").trim();
+  const fold=(s:string)=>s.normalize("NFD").replace(/\p{Diacritic}/gu,"").toLowerCase().trim();
+  const data=await call("/search/multi",{query:cleaned,include_adult:"false",page:String(page)});
+  const raw=Array.isArray(data["results"]) ? data["results"] as Json[] : [];
+  const people=raw.filter(r=>r["media_type"] === "person" && (!role || r["known_for_department"] === role)).sort((a,b)=>Number(b["popularity"] ?? 0)-Number(a["popularity"] ?? 0));
+  const principal=people[0];
+  const personIntent=principal && (role || people.length>0 && raw.filter(r=>mapListItem(r)).length<10);
+  // A dominant directing result means the user's intent is that director, not every namesake.
+  const selected=personIntent && principal?.["known_for_department"] === "Directing" ? [principal] : people.slice(0,3);
+  const direct=raw.map(r=>mapListItem(r)).filter((r):r is TmdbSearchItem=>Boolean(r));
+  const expanded=await Promise.all(selected.map(async person=>{
+    const credits=await call(`/person/${Number(person["id"])}/combined_credits`);
+    const cast=Array.isArray(credits["cast"]) ? credits["cast"] as Json[] : [];
+    const crew=Array.isArray(credits["crew"]) ? credits["crew"] as Json[] : [];
+    const directing=role === "Directing" || person["known_for_department"] === "Directing";
+    return (directing ? crew.filter(c=>c["job"] === "Director") : cast).filter(c=>c["adult"] !== true).map(c=>mapListItem(c)).filter((c):c is TmdbSearchItem=>Boolean(c));
+  }));
+  let candidates=personIntent ? expanded.flat() : [...direct,...expanded.flat()];
+  if (!people.length && page === 1 && cleaned.length>=3) {
+    // TMDB keyword discovery adds canonical franchise titles absent from literal-title search.
+    const keywords=await call("/search/keyword",{query:cleaned,page:"1"}).catch(()=>({} as Json));
+    const exact=(Array.isArray(keywords["results"]) ? keywords["results"] as Json[] : []).find(k=>fold(String(k["name"])) === fold(cleaned));
+    if (exact) {
+      const discovered=await call("/discover/movie",{with_keywords:String(exact["id"]),sort_by:"vote_count.desc",include_adult:"false",page:"1"}).catch(()=>({} as Json));
+      const extra=(Array.isArray(discovered["results"]) ? discovered["results"] as Json[] : []).map(r=>mapListItem(r,"movie")).filter((r):r is TmdbSearchItem=>Boolean(r));
+      candidates.push(...extra);
+    }
   }
-  return [...unique.values()].slice(0, 20);
+  const unique=[...new Map(candidates.map(w=>[`${w.mediaType}:${w.tmdbId}`,w])).values()];
+  const {rankSearch}=await import("./search-ranking");
+  return rankSearch(unique,personIntent ? "" : cleaned).slice(0,20);
 }
 
 /** Bump when the details strategy changes; older cached payloads are refetched. */
