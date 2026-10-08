@@ -31,7 +31,7 @@ export function MatchPreparation({ works, spaceId, onStart, solo = false }: { wo
     return ()=>{active=false;};
   },[solo,spaceId,kind]);
   useEffect(() => {
-    if (!ai) return;
+    if (!ai) {setPending(false);return;}
     setAiReady(false);
     const timer=window.setTimeout(()=>{void run();},700);
     return ()=>window.clearTimeout(timer);
@@ -55,12 +55,12 @@ export function MatchPreparation({ works, spaceId, onStart, solo = false }: { wo
       <Button variant={ai ? "default" : "ghost"} size="icon" role="switch" aria-checked={ai} aria-label="IA no Match" title="IA no Match" onClick={()=>{request.current++;setAi(v=>!v);setExternal([]);setRefined(null);setMessage(null);}} className={`h-9 w-9 ${ai ? "text-primary-foreground" : "text-foreground"}`}><Sparkles /></Button>
     </div>
     {message && <p role="status" className="text-xs text-muted-foreground">{message}</p>}
-    <Button disabled={pending || basePending || (ai && !aiReady) || ids.length + (ai ? external.length : base.length) < 2} onClick={async () => {
+    <Button disabled={pending || basePending || (ai && !aiReady) || ids.length + (ai ? external.length : solo ? base.length : 0) < 2} onClick={async () => {
       setPending(true);
       try {
         const selected = ai ? external : solo ? base : [];
         const extras: LibraryWork[] = selected.map((w) => ({ id:`tmdb-${w.mediaType}-${w.tmdbId}`, tmdb_id:w.tmdbId, voteAverage:w.voteAverage, title:w.title,original_title:w.originalTitle,media_type:w.mediaType,poster_path:w.posterPath,backdrop_path:w.backdropPath,release_year:w.year,runtime_minutes:null,genres:w.genres ?? [],activity_at:"",created_at:"",interests:[],ratings:[],indications:[],joint_watch_sessions:[],watch:null,series_states:[],work_metadata_cache:[] }));
-        if (!solo && external.length) {
+        if (!solo && ai && external.length) {
           const extraIds = await materialize({data:{spaceId,items:external.map((w) => ({mediaType:w.mediaType,tmdbId:w.tmdbId}))}});
           onStart([...ids,...extraIds],extras.map((w,i)=>({...w,id:extraIds[i] ?? w.id})));
         } else onStart(ids,extras);

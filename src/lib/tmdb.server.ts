@@ -83,7 +83,7 @@ export async function searchMulti(query: string, page = 1): Promise<TmdbSearchIt
     return (directing ? crew.filter(c=>c["job"] === "Director") : cast).filter(c=>c["adult"] !== true).map(c=>mapListItem(c)).filter((c):c is TmdbSearchItem=>Boolean(c));
   }));
   let candidates=personIntent ? expanded.flat() : [...direct,...expanded.flat()];
-  if (!people.length && page === 1 && cleaned.length>=3) {
+  if (!personIntent && page === 1 && cleaned.length>=3) {
     // TMDB keyword discovery adds canonical franchise titles absent from literal-title search.
     const keywords=await call("/search/keyword",{query:cleaned,page:"1"}).catch(()=>({} as Json));
     const exact=(Array.isArray(keywords["results"]) ? keywords["results"] as Json[] : []).find(k=>fold(String(k["name"])) === fold(cleaned) || fold(String(k["name"])).startsWith(`${fold(cleaned)} `));
@@ -322,7 +322,7 @@ export async function findTitle(guess: {
     }));
     return title + (guess.year && item.year ? Math.max(0, 12 - Math.abs(item.year - guess.year) * 4) : 0);
   };
-  const best = [...items].sort((a,b) => score(b)-score(a))[0];
+  const best = items.filter(item => !guess.year || item.year === guess.year).sort((a,b) => score(b)-score(a))[0];
   return best && score(best) >= 45 ? best : null;
 }
 

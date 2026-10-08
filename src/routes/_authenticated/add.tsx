@@ -68,6 +68,7 @@ function AddPage() {
       <input aria-label="Título, ator ou diretor" value={q} onChange={(e) => { update({ q: e.target.value }); }} placeholder="Título, ator ou diretor" className="min-w-0 bg-transparent py-3 text-sm outline-none" />
       <Button variant="ghost" size="icon" title="Limpar busca" aria-label="Limpar busca" disabled={!q} onClick={() => update({q:""})} className={`h-9 w-9 ${q ? "text-muted-foreground" : "invisible"}`}><X className="h-3.5 w-3.5" /></Button>
        <span className="flex h-5 w-5 items-center">{pending && <LoaderCircle className="h-4 w-4 animate-spin text-primary" />}</span>
+      <Button variant={mode === "ai" ? "default" : "ghost"} size="icon" role="switch" aria-checked={mode === "ai"} aria-label="Busca inteligente" title="Busca inteligente" onClick={() => update({ mode: mode === "ai" ? "tmdb" : "ai" })} className={`h-9 w-9 shrink-0 ${mode === "ai" ? "text-primary-foreground" : "text-foreground"}`}><Sparkles className="h-4 w-4" /></Button>
     </div>
     <div className="mt-2 flex items-center justify-between gap-1"><div className="flex items-center gap-1"><FilterPills options={[["all", "Todos"], ["movie", "Filmes"], ["tv", "Séries"]]} value={kind} onChange={(value) => update({ kind: value })} /></div></div>
     <Button variant="ghost" onClick={() => setOrdering(true)} className="min-h-11 px-0 text-xs text-muted-foreground">{orders.find(([value]) => value === sort)?.[1] ?? "Relevância"}<ChevronDown className="h-3 w-3" /></Button>

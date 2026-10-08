@@ -210,7 +210,7 @@ export function DiscoverTab({
   return (
     <div className="mt-5">
       {burst && <SuperReaction {...burst} onComplete={()=>setBurst(null)} />}
-      <Button variant="ghost" title="Atualizar sugestões" aria-label="Atualizar sugestões" disabled={feed.isFetching} onClick={()=>feed.fetchNextPage()} className="mb-3 ml-auto flex min-h-11 gap-2 text-xs"><RotateCcw className={feed.isFetching ? "h-4 w-4 animate-spin" : "h-4 w-4"} />Atualizar</Button>
+      <Button variant="ghost" title="Atualizar sugestões" aria-label="Atualizar sugestões" disabled={feed.isFetching} onClick={() => void feed.refetch()} className="mb-3 ml-auto flex min-h-11 gap-2 text-xs"><RotateCcw className={feed.isFetching ? "h-4 w-4 animate-spin" : "h-4 w-4"} />Atualizar</Button>
       {restored.size > 0 && (
         <section className="mb-6" aria-labelledby="restored-title">
           <div className="mb-3 flex items-center justify-between">
