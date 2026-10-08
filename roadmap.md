@@ -81,3 +81,11 @@ Concluído: Lotes 1–4, 5A–5D, Rodada 6, MCP.
 - [x] Smoke autenticado 412×915: filtro Séries OFF iniciou simulador com Dark; zero chamadas RPC bloqueadas, zero erros de página. Apenas estado client-only; nenhuma gravação de obra/nota/episódio/reação ou Match real.
 - Checks: build automático OK; `git diff --check` limpo. Não executado build/typecheck manual adicional; a plataforma executa os checks automaticamente.
 - Limites: Gemini real não chamado; qualidade/cache do provedor e Match real a dois não exercitados. Imagens dos fixtures usam fallback por não terem poster. Custo da implementação anterior corrigido para 12,3 créditos; não é o custo desta correção.
+
+## Item 7.18 — linha de filtros unificada na Biblioteca (base bdf3252)
+- [x] Uma única linha `mt-4 flex min-h-11 items-center gap-2` para as três abas; `Ordenar`/sheet só fora de Descobrir. Descobrir perdeu o wrapper `mt-4` próprio.
+- [x] Medido autenticado em 390×844 e 412×915: Todos x16 y218 h28, Filmes x85 y217 h30, Séries x158 y217 h30, centros y232 — idêntico nas três abas nas duas larguras; `Ordenar` à direita (x280 a 390, x302 a 412), ausente em Descobrir; sem estouro horizontal (scrollWidth = largura da tela).
+- [x] Estado/URL sem regressão: `?tab=disc&kind=movie` continua após recarregar, pill com `aria-pressed=true`. Nenhuma gravação de obra, nota, episódio ou reação; nenhuma chamada Gemini.
+- [x] Capturas dos três tabs conferidas visualmente: mesma altura/posição dos pills, sem corte ou sobreposição na linha.
+- Checks: `tsgo --noEmit` exit 0; build automático OK (16:28:08Z); `git diff --check` limpo. Commits da plataforma: `aaacddc` (linha compartilhada), `e9915e4` (remoção do bloco duplicado), `9728212` (altura mínima) — HEAD final `9728212`.
+- Limites: diferença pré-existente e não alterada — o botão `Atualizar` do Descobrir ocupa uma linha própria e adia a grade cerca de 65px; na aba Assistidos a barra inferior sobrepõe o título do último card. Custo: o conector informou 17,70 créditos de mensagens em modo build no projeto em 8/10 (dia, não desta rodada isolada).
