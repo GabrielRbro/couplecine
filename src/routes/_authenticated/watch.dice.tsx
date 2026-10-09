@@ -1,10 +1,9 @@
 import { createFileRoute, Link } from "@tanstack/react-router";
 import { useQuery } from "@tanstack/react-query";
 import { useRef, useState, useEffect } from "react";
-import { Dices, RotateCcw, X } from "lucide-react";
+import { Check, Dices, Film, Grid2X2, Monitor, RotateCcw, Shuffle, Sparkles, Users, X } from "lucide-react";
 import { AppShell } from "@/components/app/AppShell";
 import { EmptyState, Poster } from "@/components/app/MediaCard";
-import { FilterPills, ScrollRow, TogglePill } from "@/components/app/ui";
 import { Button } from "@/components/ui/button";
 import { supabase } from "@/integrations/supabase/client";
 import { AnimatePresence, motion, useReducedMotion } from "motion/react";
@@ -155,35 +154,58 @@ function DicePage() {
     <div className="px-4 pt-6">
       <h1 className="text-2xl font-semibold">Sortear</h1>
 
-      <div className="mt-4 flex items-center justify-between gap-1">
-        <div className="flex items-center gap-1"><FilterPills
-          options={
-            [
-              ["all", "Todos"],
-              ["movie", "Filmes"],
-              ["tv", "Séries"],
-            ] as const
-          }
-          value={kind}
-          onChange={setKind}
-        /></div>
-        <TogglePill on={includeDislike} onClick={() => setIncludeDislike((v) => !v)}>Incluir 👎</TogglePill>
+      {/* Approved filter composition: full-width segmented type selector;
+          centered, narrower history pills over a recessed child card with only bottom corners. */}
+      <div role="group" aria-label="Tipo de obra" className="mt-4 grid grid-cols-3 overflow-hidden rounded-full border border-border bg-card p-1">
+        {([
+          ["all", "Todos", Grid2X2],
+          ["movie", "Filmes", Film],
+          ["tv", "Séries", Monitor],
+        ] as const).map(([value, label, Icon], index) => (
+          <Button
+            key={value}
+            variant="ghost"
+            aria-pressed={kind === value}
+            onClick={() => { if (kind !== value) setKind(value); }}
+            className={`relative h-11 min-w-0 rounded-full px-2 text-xs ${kind === value ? "bg-primary text-background hover:bg-primary/90 hover:text-background" : "text-muted-foreground hover:bg-secondary"} ${index > 0 && kind !== value ? "before:absolute before:left-0 before:top-3 before:bottom-3 before:w-px before:bg-border" : ""}`}
+          >
+            <Icon aria-hidden className="shrink-0" />{label}
+          </Button>
+        ))}
       </div>
-      <ScrollRow className="mt-2">
-        <FilterPills
-          options={
-            [
-              ["jointFresh", "Não juntos"],
-              ["nobody", "Inéditos"],
-              ["rewatch", "Rever"],
-              ["any", "Qualquer"],
-            ] as const
-          }
-          value={history}
-          onChange={setHistory}
-        />
-
-      </ScrollRow>
+      <div className="relative isolate mx-auto mt-2 w-[89%]">
+        <div role="group" aria-label="Histórico" className="relative z-10 grid grid-cols-[1.25fr_1fr_.86fr_1.09fr] gap-1">
+          {([
+            ["jointFresh", "Não juntos", Users],
+            ["nobody", "Inéditos", Sparkles],
+            ["rewatch", "Rever", RotateCcw],
+            ["any", "Qualquer", Shuffle],
+          ] as const).map(([value, label, Icon]) => (
+            <Button
+              key={value}
+              variant="ghost"
+              aria-pressed={history === value}
+              onClick={() => { if (history !== value) setHistory(value); }}
+              className={`h-11 min-w-0 gap-1 rounded-full border px-1 text-[10px] [&_svg]:size-3 ${history === value ? "border-primary/40 bg-accent text-primary hover:bg-accent hover:text-primary" : "border-border bg-card text-muted-foreground hover:bg-secondary"}`}
+            >
+              <Icon aria-hidden className="shrink-0" />{label}
+            </Button>
+          ))}
+        </div>
+        <Button
+          variant="ghost"
+          role="checkbox"
+          aria-label="Incluir 👎🏻"
+          aria-checked={includeDislike}
+          onClick={() => setIncludeDislike((v) => !v)}
+          className="relative mx-auto -mt-4 grid h-[60px] w-[94%] grid-cols-[minmax(0,1fr)_auto] items-center rounded-t-none rounded-b-xl border border-t-0 border-border bg-card px-3 pb-1 pt-5 text-left text-[11px] font-normal text-muted-foreground hover:bg-secondary"
+        >
+          <span className="min-w-0">Incluir 👎🏻</span>
+          <span aria-hidden className={`flex h-4 w-4 shrink-0 items-center justify-center rounded-[3px] border border-primary/60 ${includeDislike ? "bg-primary text-background" : "bg-primary/10 text-primary"}`}>
+            {includeDislike && <Check className="!size-3" />}
+          </span>
+        </Button>
+      </div>
 
       {pool.length === 0 && !picked ? (
         <div className="mt-6">
