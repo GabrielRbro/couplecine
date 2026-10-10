@@ -36,10 +36,11 @@ export function MatchPreparation({ works, spaceId, onStart, solo = false }: { wo
           const result = await refine({ data: { spaceId, kind: kind === "movie" ? "movie" : kind === "tv" ? "tv" : "all", query: intent.trim().length >= 3 ? intent.trim() : "Escolha variada para assistir hoje", ids: normalIds.slice(0,40) } });
           if (version !== request.current) return;
           external = [...new Map(result.external.filter(w => !w.existingWorkId && (kind === "all" || w.mediaType === kind)).map(w => [`${w.mediaType}:${w.tmdbId}`, w])).values()];
-          // Without new candidates keep the complete normal pool, not a too-small AI subset.
-          if (external.length) ids = [...new Set(result.ids.filter(id => normalIds.includes(id)))];
-          if (ids.length + external.length < 2 && normalIds.length >= 2) { ids = normalIds;external = []; }
+          // AI answered: adopt its compatible set even without externals. Only an AI failure
+          // with a generic intent falls back to the normal pool (server already filtered strict intents).
+          if (result.refined || result.strict) ids = [...new Set(result.ids.filter(id => normalIds.includes(id)))];
           if (result.reason) setMessage(result.reason);
+          if (ids.length + external.length < 2 && (result.refined || result.strict)) { setMessage("Poucas obras compatíveis com essa intenção (menos de 2). Ajuste o texto ou desligue a IA."); return; }
         } catch {
           if (version !== request.current) return;
           setMessage("IA indisponível · o Match normal continua disponível.");

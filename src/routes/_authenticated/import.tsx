@@ -21,8 +21,9 @@ const DRAFT_KEY = "import-draft";
 const DRAFT_TTL = 30 * 60_000;
 
 type Candidate = { mediaType: "movie" | "tv"; tmdbId: number; title: string; originalTitle: string | null; posterPath: string | null; backdropPath: string | null; year: number | null; existingWorkId: string | null };
-type Status = "pending" | "skipped" | "saving" | "saved" | "error";
-type Row = { c: Candidate; status: Status; note?: string | undefined };
+type Status = "pending" | "skipped" | "saving" | "saved" | "partial" | "error";
+// partial = indication saved but "Já assisti antes" failed (no transaction exists; retry only the mark).
+type Row = { c: Candidate; status: Status; note?: string | undefined; seen?: boolean };
 
 export const Route = createFileRoute("/_authenticated/import")({
   head: () => ({
@@ -63,7 +64,8 @@ function ImportPage() {
   const [busy, setBusy] = useState<null | "resolve" | "ai">(null);
   const [notice, setNotice] = useState<string | null>(null);
   const [hasText, setHasText] = useState(false);
-  const [rows, setRows] = useState<Row[] | null>(null);
+  const [rows, setRows] = useState<Row[]>([]);
+  const [reviewing, setReviewing] = useState(false);
   const fileRef = useRef<HTMLInputElement>(null);
   const autoRan = useRef(false);
 
@@ -82,10 +84,12 @@ function ImportPage() {
   }, [text]);
 
   const merge = (items: Candidate[]) => {
-    const map = new Map<string, Row>();
-    for (const r of rows ?? []) map.set(key(r.c), r);
-    for (const c of items) if (!map.has(key(c))) map.set(key(c), { c, status: "pending" });
-    setRows([...map.values()]);
+    // Functional update: rapid resolutions accumulate instead of overwriting each other.
+    setRows((prev) => {
+      const map = new Map<string, Row>(prev.map((r) => [key(r.c), r]));
+      for (const c of items) if (!map.has(key(c))) map.set(key(c), { c, status: "pending" });
+      return [...map.values()];
+    });
   };
 
   async function runResolve(value = text) {
@@ -144,7 +148,7 @@ function ImportPage() {
     void qc.invalidateQueries({ queryKey: ["library", space?.spaceId] });
   };
 
-  if (rows && rows.length) return <ReviewStack rows={rows} setRows={setRows} spaceId={space?.spaceId ?? ""} onDone={() => { finish(); setRows(null); setText(""); setImage(null); void navigate({ search: {}, replace: true }); }} onBack={() => setRows(null)} />;
+  if (reviewing && rows.length) return <ReviewStack rows={rows} setRows={setRows} spaceId={space?.spaceId ?? ""} onDone={() => { finish(); setRows([]); setReviewing(false); setText(""); setImage(null); void navigate({ search: {}, replace: true }); }} onBack={() => setReviewing(false)} />;
 
   return (
     <main className="mx-auto max-w-md px-4 pb-32 pt-[max(env(safe-area-inset-top),16px)]">
@@ -161,41 +165,59 @@ function ImportPage() {
         <Button className="min-h-12 w-full" disabled={!text.trim() || !!busy} onClick={() => runResolve()}>{busy === "resolve" ? <LoaderCircle className="animate-spin" /> : <Search />}Identificar links</Button>
         <Button variant="secondary" className="min-h-12 w-full" disabled={(!text.trim() && !image) || !!busy} onClick={runAi}>{busy === "ai" ? <LoaderCircle className="animate-spin" /> : <Sparkles />}Analisar com IA{image ? " (texto + captura)" : ""}</Button>
       </div>
+      {rows.length > 0 && (
+        <div className="mt-4 rounded-2xl border border-border bg-card p-3">
+          <p className="text-xs text-muted-foreground">{rows.length} {rows.length === 1 ? "obra encontrada" : "obras encontradas"} · continue identificando links ou analisando texto/captura para acumular.</p>
+          <div className="mt-2 flex gap-2 overflow-hidden">{rows.slice(0, 6).map((r) => <div key={key(r.c)} className="w-10 shrink-0"><Poster path={r.c.posterPath} title={r.c.title} /></div>)}</div>
+          <Button className="mt-3 min-h-12 w-full" onClick={() => setReviewing(true)}>Revisar {rows.length} {rows.length === 1 ? "obra" : "obras"}</Button>
+        </div>
+      )}
       {notice && <p role="status" className="mt-4 rounded-xl border border-border bg-card p-3 text-sm text-muted-foreground">{notice}</p>}
       {hasText && !notice && <p className="mt-3 text-xs text-muted-foreground">Há texto livre; a IA pode encontrar mais títulos.</p>}
     </main>
   );
 }
 
-function ReviewStack({ rows, setRows, spaceId, onDone, onBack }: { rows: Row[]; setRows: (r: Row[]) => void; spaceId: string; onDone: () => void; onBack: () => void }) {
+function ReviewStack({ rows, setRows, spaceId, onDone, onBack }: { rows: Row[]; setRows: React.Dispatch<React.SetStateAction<Row[]>>; spaceId: string; onDone: () => void; onBack: () => void }) {
   const reduce = useReducedMotion();
   const add = useServerFn(addWork);
   const seenBefore = useServerFn(markSeenBefore);
   const find = useServerFn(searchCatalog);
   const [index, setIndex] = useState(() => Math.max(0, rows.findIndex((r) => r.status === "pending")));
-  const [seen, setSeen] = useState(false);
   const [fixing, setFixing] = useState(false);
   const [query, setQuery] = useState("");
   const [options, setOptions] = useState<Candidate[]>([]);
   const [dir, setDir] = useState(1);
-  const rowsRef = useRef(rows);
-  rowsRef.current = rows;
   const row = rows[index];
-  const update = (i: number, patch: Partial<Row>) => setRows(rowsRef.current.map((r, j) => (j === i ? { ...r, ...patch } : r)));
-  const go = (to: number) => { setDir(to > index ? 1 : -1); setIndex(to); setSeen(false); setFixing(false); };
+  const update = (i: number, patch: Partial<Row>) => setRows((prev) => prev.map((r, j) => (j === i ? { ...r, ...patch } : r)));
+  const go = (to: number) => { setDir(to > index ? 1 : -1); setIndex(to); setFixing(false); };
   const nextPending = (from: number) => { const n = rows.findIndex((r, j) => j > from && r.status === "pending"); go(n === -1 ? rows.length : n); };
 
   async function confirm(reaction: "fire" | "like" | "neutral") {
     const i = index;
-    const c = rows[i]!.c;
+    const { c, seen } = rows[i]!;
     update(i, { status: "saving", note: undefined });
     nextPending(i);
+    // Indication first: a failed indication never leaves "Já assisti antes" recorded alone.
     try {
-      if (seen) await seenBefore({ data: { spaceId, mediaType: c.mediaType, tmdbId: c.tmdbId, score: null } });
       await add({ data: { spaceId, mediaType: c.mediaType, tmdbId: c.tmdbId, reaction } });
-      update(i, { status: "saved", note: c.existingWorkId ? "Já estava na biblioteca · indicação renovada" : undefined });
     } catch (e) {
       update(i, { status: "error", note: e instanceof Error ? e.message : "Falha ao salvar" });
+      return;
+    }
+    const renewed = c.existingWorkId ? "Já estava na biblioteca · indicação renovada" : undefined;
+    if (!seen) { update(i, { status: "saved", note: renewed }); return; }
+    await markSeen(i, renewed);
+  }
+
+  async function markSeen(i: number, prefix?: string) {
+    const c = rows[i]!.c;
+    update(i, { status: "saving" });
+    try {
+      await seenBefore({ data: { spaceId, mediaType: c.mediaType, tmdbId: c.tmdbId, score: null } });
+      update(i, { status: "saved", note: [prefix, "Já assisti antes marcado"].filter(Boolean).join(" · ") });
+    } catch {
+      update(i, { status: "partial", note: "Indicação salva · falhou marcar “Já assisti antes”" });
     }
   }
 
@@ -205,13 +227,13 @@ function ReviewStack({ rows, setRows, spaceId, onDone, onBack }: { rows: Row[]; 
     setOptions(r.slice(0, 6) as Candidate[]);
   }
 
-  const summary = { saved: rows.filter((r) => r.status === "saved").length, skipped: rows.filter((r) => r.status === "skipped").length, errors: rows.filter((r) => r.status === "error").length, saving: rows.some((r) => r.status === "saving") };
+  const summary = { saved: rows.filter((r) => r.status === "saved").length, skipped: rows.filter((r) => r.status === "skipped").length, errors: rows.filter((r) => r.status === "error").length, partial: rows.filter((r) => r.status === "partial").length, saving: rows.some((r) => r.status === "saving") };
 
   if (!row) return (
     <main className="mx-auto max-w-md px-4 pb-32 pt-[max(env(safe-area-inset-top),24px)] text-center">
       <h1 className="text-xl font-semibold">Revisão concluída</h1>
-      <p className="mt-2 text-sm text-muted-foreground">{summary.saved} indicadas · {summary.skipped} puladas · {summary.errors} com erro{summary.saving ? " · salvando…" : ""}</p>
-      <ul className="mt-5 space-y-2 text-left">{rows.map((r, i) => <li key={key(r.c)} className="flex items-center gap-3 rounded-xl border border-border p-2"><div className="w-9 shrink-0"><Poster path={r.c.posterPath} title={r.c.title} /></div><div className="min-w-0 flex-1"><p className="truncate text-sm font-medium">{r.c.title}</p><p className="text-[11px] text-muted-foreground">{r.status === "saved" ? "Indicada" : r.status === "skipped" ? "Pulada" : r.status === "error" ? r.note : r.status === "saving" ? "Salvando…" : "Pendente"}{r.status === "saved" && r.note ? ` · ${r.note}` : ""}</p></div>{(r.status === "skipped" || r.status === "error" || r.status === "pending") && <Button variant="ghost" className="min-h-11 text-xs" onClick={() => { update(i, { status: "pending" }); go(i); }}>Rever</Button>}</li>)}</ul>
+      <p className="mt-2 text-sm text-muted-foreground">{summary.saved} indicadas · {summary.skipped} puladas · {summary.errors} com erro{summary.partial ? ` · ${summary.partial} parcial` : ""}{summary.saving ? " · salvando…" : ""}</p>
+      <ul className="mt-5 space-y-2 text-left">{rows.map((r, i) => <li key={key(r.c)} className="flex items-center gap-3 rounded-xl border border-border p-2"><div className="w-9 shrink-0"><Poster path={r.c.posterPath} title={r.c.title} /></div><div className="min-w-0 flex-1"><p className="truncate text-sm font-medium">{r.c.title}</p><p className="text-[11px] text-muted-foreground">{r.status === "saved" ? "Indicada" : r.status === "skipped" ? "Pulada" : r.status === "error" || r.status === "partial" ? r.note : r.status === "saving" ? "Salvando…" : "Pendente"}{r.status === "saved" && r.note ? ` · ${r.note}` : ""}</p></div>{(r.status === "skipped" || r.status === "error" || r.status === "pending") && <Button variant="ghost" className="min-h-11 text-xs" onClick={() => { update(i, { status: "pending" }); go(i); }}>Rever</Button>}{r.status === "partial" && <Button variant="ghost" className="min-h-11 text-xs" onClick={() => markSeen(i)}>Tentar marcar visto</Button>}</li>)}</ul>
       <Button className="mt-6 min-h-12 w-full" disabled={summary.saving} onClick={onDone}>Concluir</Button>
       <Button asChild variant="ghost" className="mt-2 min-h-12 w-full"><Link to="/library">Ver biblioteca</Link></Button>
     </main>
@@ -237,13 +259,14 @@ function ReviewStack({ rows, setRows, spaceId, onDone, onBack }: { rows: Row[]; 
             <h2 className="mt-4 text-xl font-semibold">{row.c.title}</h2>
             <p className="mt-1 text-xs text-muted-foreground">{[row.c.year, row.c.mediaType === "tv" ? "Série" : "Filme", row.c.originalTitle && row.c.originalTitle !== row.c.title ? row.c.originalTitle : null].filter(Boolean).join(" · ")}</p>
             {row.c.existingWorkId && <p className="mt-2 text-xs text-primary">Já está na biblioteca · confirmar só renova sua indicação</p>}
-            {row.status !== "pending" && <p className="mt-2 text-xs text-muted-foreground">{row.status === "saved" ? "Indicada" : row.status === "skipped" ? "Pulada" : row.status === "saving" ? "Salvando…" : `Erro: ${row.note}`}</p>}
+            {row.status !== "pending" && <p className="mt-2 text-xs text-muted-foreground">{row.status === "saved" ? "Indicada" : row.status === "skipped" ? "Pulada" : row.status === "saving" ? "Salvando…" : row.status === "partial" ? row.note : `Erro: ${row.note}`}</p>}
           </motion.section>
         </AnimatePresence>
 
-        {row.status === "saved" || row.status === "saving" ? null : (
+        {row.status === "partial" && <Button variant="secondary" className="mx-auto mt-5 flex min-h-11" onClick={() => markSeen(index)}>Tentar marcar “Já assisti antes”</Button>}
+        {row.status === "saved" || row.status === "saving" || row.status === "partial" ? null : (
           <>
-            <button type="button" aria-pressed={seen} onClick={() => setSeen((v) => !v)} className={`pressable mx-auto mt-5 flex min-h-11 items-center gap-2 rounded-full border px-4 text-xs ${seen ? "border-primary bg-primary/15 text-primary" : "border-border text-muted-foreground"}`}><Check className="h-4 w-4" />Já assisti antes</button>
+            <button type="button" aria-pressed={!!row.seen} onClick={() => update(index, { seen: !row.seen })} className={`pressable mx-auto mt-5 flex min-h-11 items-center gap-2 rounded-full border px-4 text-xs ${row.seen ? "border-primary bg-primary/15 text-primary" : "border-border text-muted-foreground"}`}><Check className="h-4 w-4" />Já assisti antes</button>
             <div className="mt-4 grid grid-cols-4 gap-2">
               <Button variant="secondary" aria-label="Pular" className="min-h-14" onClick={() => { update(index, { status: "skipped" }); nextPending(index); }}><X /></Button>
               {([["fire", "🔥"], ["like", "👍"], ["neutral", "😐"]] as const).map(([r, e]) => <Button key={r} variant="secondary" aria-label={`Indicar com ${e}`} className="min-h-14 text-2xl emoji" onClick={() => confirm(r)}>{e}</Button>)}

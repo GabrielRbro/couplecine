@@ -2,7 +2,7 @@ import { createServerFn } from "@tanstack/react-start";
 import { z } from "zod";
 import { requireSupabaseAuth } from "@/integrations/supabase/auth-middleware";
 import { AiUnavailable, GEMINI_SECRET, geminiConfig, geminiJson, testGemini, type AiTitleGuess } from "./gemini.server";
-import { findTitle, type TmdbSearchItem } from "./tmdb.server";
+import { findTitle, lookupTmdb, type TmdbSearchItem } from "./tmdb.server";
 
 const AI_MESSAGE: Record<string, string> = {
   not_configured: "Pesquisa inteligente não configurada. Adicione a chave do Gemini em Configurações.",
@@ -200,7 +200,15 @@ export const refineMatch = createServerFn({ method: "POST" })
     const intent=data.query.trim().replace(/\s+/g," ").toLowerCase();
     const signals=intentSignals(intent);
     const genreOk=(genres:string[])=>!signals.genres.length || signals.genres.some(g=>genres.includes(g));
-    const eligible = (rows ?? []).filter(w=>w.indications.length && !w.interests.some(i=>i.reaction === "dislike") && (data.kind === "all" || w.media_type === data.kind) && genreOk(w.genres));
+    let eligible = (rows ?? []).filter(w=>w.indications.length && !w.interests.some(i=>i.reaction === "dislike") && (data.kind === "all" || w.media_type === data.kind) && genreOk(w.genres));
+    // Explicit origin: genre alone never proves country. Verify original_language on TMDB
+    // for at most 16 internals (4 at a time); unverified ones are omitted.
+    if(signals.languages.length){
+      const pick=eligible.slice(0,16), ok=new Set<string>();
+      for(let i=0;i<pick.length;i+=4) await Promise.all(pick.slice(i,i+4).map(async w=>{const t=await lookupTmdb(w.media_type as "movie"|"tv",w.tmdb_id).catch(()=>null); if(t && signals.languages.includes(t.originalLanguage ?? "")) ok.add(w.id);}));
+      eligible=pick.filter(w=>ok.has(w.id));
+    }
+    const strict=signals.languages.length>0 || signals.genres.length>0;
     // With canonical intent signals, an incompatible internal title never returns as fallback.
     const fallback=eligible.map(w=>w.id);
     try {
@@ -209,8 +217,9 @@ export const refineMatch = createServerFn({ method: "POST" })
       const result=await geminiJson<{order?:number[];items?:AiTitleGuess[]}>({supabase:context.supabase,userId:context.userId,feature:"smart_search",system:'Refine os candidatos pela intenção, incluindo origem/idioma, gênero e formato. Retorne JSON {"order":[índices compatíveis em ordem],"items":[{"title":string,"year":number|null,"mediaType":"movie"|"tv"}]}. order só índices fornecidos e realmente compatíveis, nunca IDs. items: 12 títulos reais novos ainda fora da biblioteca, compatíveis com intenção e tipo, MESMO quando não há candidatos internos. Origem (ex.: coreano, japonês) significa produção/idioma original desse país; gênero deve ser o gênero principal. Não invente metadados, votos ou resultados.',parts:[{text:JSON.stringify({intent,kind:data.kind,library:library ?? [],candidates:compact})}],cacheTtlHours:24,cacheSeed:`match-intent-v4:${data.kind}:${intent}:${JSON.stringify(compact)}`});
       const ids=[...new Set(result.order ?? [])].filter(i=>Number.isInteger(i) && i>=0 && i<eligible.length).flatMap(i=>eligible[i] ? [eligible[i].id] : []);
       const external=(await validate((result.items ?? []).slice(0,12),data.spaceId,context.supabase)).filter(w=>!w.existingWorkId && (data.kind === "all" || w.mediaType === data.kind) && genreOk(w.genres ?? []) && (!signals.languages.length || signals.languages.includes(w.originalLanguage ?? ""))).slice(0,12);
-      return {ids:ids.length || external.length ? ids : fallback,external,refined:ids.length>0 || external.length>0,reason:null};
-    } catch {return {ids:fallback,external:[],refined:false,reason:"IA indisponível · o Match normal continua disponível."};}
+      // AI answered: its compatible subset is authoritative (possibly empty) when intent is explicit.
+      return {ids:strict || ids.length || external.length ? ids : fallback,external,refined:true,strict,reason:null};
+    } catch {return {ids:fallback,external:[],refined:false,strict,reason:"IA indisponível · o Match normal continua disponível."};}
   });
 
 const ORIGINS:[RegExp,string[]][]=[[/corean|coreia|k-?drama/,["ko"]],[/japon|japão|anime|j-?horror/,["ja"]],[/iran/,["fa"]],[/franc[eê]s|fran[çc]a/,["fr"]],[/espanh/,["es"]],[/brasil|nacional/,["pt"]],[/indian|bollywood/,["hi","ta","te"]],[/chin[eê]s|china/,["zh","cn"]],[/italian/,["it"]],[/alem[aã]/,["de"]],[/tailand/,["th"]],[/turc/,["tr"]]];

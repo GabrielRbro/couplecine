@@ -21,6 +21,9 @@ export function MatchSimulator({ works, onExit, storageKey }: { works: LibraryWo
   const [isNewWinner, setIsNewWinner] = useState(false);
   const lock = useRef(false);
   const current = deck[votes.length];
+  // Warm only the next poster (one request, background) so the following card arrives decoded.
+  const nextPath = deck[votes.length + 1]?.poster_path ?? null;
+  useEffect(() => { if (nextPath) void readyPoster(nextPath); }, [nextPath]);
   const results = deck.filter((w) => votes.some((v) => v.id === w.id && v.liked));
   const delay = (ms: number) => new Promise((resolve) => window.setTimeout(resolve, window.matchMedia("(prefers-reduced-motion: reduce)").matches ? 1 : ms));
   async function vote(liked: boolean) {
