@@ -12,7 +12,7 @@ import { Poster } from "@/components/app/MediaCard";
 import { Button } from "@/components/ui/button";
 import { searchCatalog } from "@/lib/catalog.functions";
 import { analyzeSession, confirmCandidate, correctCandidate, createImportSession, fetchSessionCaptions, resolveSession } from "@/lib/import.functions";
-import { parseSocial } from "@/lib/social-url";
+import { carouselIndexes, parseSocial } from "@/lib/social-url";
 import { tmdbImage } from "@/lib/format";
 import { useSpace } from "@/lib/space";
 
@@ -72,12 +72,12 @@ function useStartSession() {
   const navigate = Route.useNavigate();
   const create = useServerFn(createImportSession);
   const resolve = useServerFn(resolveSession);
-  return async (input: { origin: "share" | "manual" | "capture"; title?: string; text?: string; url?: string; sourcePostId?: string; image?: Img | null }) => {
+  return async (input: { origin: "share" | "manual" | "capture"; title?: string; text?: string; url?: string; sourcePostId?: string; clientToken?: string; image?: Img | null }) => {
     if (!space?.spaceId) throw new Error("Sem espaço");
     const { image, ...rest } = input;
-    const { sessionId } = await create({ data: { spaceId: space.spaceId, ...Object.fromEntries(Object.entries(rest).filter(([, v]) => v)) } as never });
+    const { sessionId, reused } = await create({ data: { spaceId: space.spaceId, ...Object.fromEntries(Object.entries(rest).filter(([, v]) => v)) } as never });
     if (image) pendingImages.set(sessionId, image);
-    await resolve({ data: { sessionId } }).catch(() => null); // deterministic only; failures stay retomáveis
+    if (!reused) await resolve({ data: { sessionId } }).catch(() => null); // deterministic only; failures stay retomáveis
     await navigate({ search: { session: sessionId }, replace: true });
     return sessionId;
   };
@@ -96,24 +96,42 @@ function EntryView() {
   const shared = !!(search.title || search.text || search.url);
   const ran = useRef(false);
 
+  const [shareFailed, setShareFailed] = useState(false);
   useEffect(() => {
     if (!shared || !space?.spaceId || ran.current) return;
     ran.current = true;
-    // Guard against StrictMode/reload double capture of the same share payload.
-    const key = `share:${search.title ?? ""}|${search.text ?? ""}|${search.url ?? ""}`;
-    const prior = sessionStorage.getItem(key);
-    if (prior && prior !== "pending") { void navigate({ search: { session: prior }, replace: true }); return; }
-    if (prior) return;
-    sessionStorage.setItem(key, "pending");
-    void start({ origin: "share", ...(search.title ? { title: search.title } : {}), ...(search.text ? { text: search.text } : {}), ...(search.url ? { url: search.url } : {}) }).then((sid) => sessionStorage.setItem(key, sid)).catch(() => { sessionStorage.removeItem(key); toast.error("Não foi possível capturar o compartilhamento."); });
+    // In-flight guard only: a reload/StrictMode re-run of this same share (until the URL is replaced) reuses the
+    // token, so the server returns the same session. Each later share event gets a fresh token = own session.
+    const key = `share-inflight:${search.title ?? ""}|${search.text ?? ""}|${search.url ?? ""}`;
+    let entry: { token: string; t: number } | null = null;
+    try { entry = JSON.parse(sessionStorage.getItem(key) ?? "null"); } catch { entry = null; }
+    if (!entry || typeof entry.t !== "number" || Date.now() - entry.t > 120_000) entry = { token: crypto.randomUUID(), t: Date.now() };
+    sessionStorage.setItem(key, JSON.stringify(entry));
+    void start({ origin: "share", clientToken: entry.token, ...(search.title ? { title: search.title } : {}), ...(search.text ? { text: search.text } : {}), ...(search.url ? { url: search.url } : {}) })
+      .then(() => sessionStorage.removeItem(key))
+      .catch(() => {
+        sessionStorage.removeItem(key);
+        setText([search.title, search.text, search.url].filter(Boolean).join("\n").slice(0, MAX_TEXT));
+        setShareFailed(true);
+        void navigate({ search: {}, replace: true });
+        toast.error("Não foi possível guardar o compartilhamento. O conteúdo ficou no campo abaixo.");
+      });
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [space?.spaceId]);
 
-  const sessions = useQuery({
+  const sessions = useInfiniteQuery({
     queryKey: ["import-sessions", space?.userId],
     enabled: !!space?.userId,
-    queryFn: async () => (await supabase.from("import_sessions").select("id, status, origin, shared_title, shared_text, shared_url, updated_at, import_candidates(status)").neq("status", "completed").order("updated_at", { ascending: false }).limit(10)).data ?? [],
+    initialPageParam: 0,
+    queryFn: async ({ pageParam }) => {
+      const { data, error } = await supabase.from("import_sessions").select("id, status, origin, shared_title, shared_text, shared_url, updated_at, source_post_ids, import_candidates!import_candidates_session_id_fkey(status)").neq("status", "completed").order("updated_at", { ascending: false }).range(pageParam, pageParam + PAGE - 1);
+      if (error) throw error;
+      return data ?? [];
+    },
+    getNextPageParam: (last, all) => (last.length === PAGE ? all.length * PAGE : undefined),
   });
+  const openSessions = sessions.data?.pages.flat() ?? [];
+
   const backlog = useInfiniteQuery({
     queryKey: ["source-backlog", space?.spaceId],
     enabled: !!space?.spaceId,
@@ -132,7 +150,7 @@ function EntryView() {
     try { await start(input); } catch { toast.error("Não foi possível iniciar a importação."); setBusy(false); }
   }
 
-  if (shared) return <main className="flex min-h-[60dvh] items-center justify-center gap-2 text-sm text-muted-foreground"><LoaderCircle className="animate-spin" />Guardando o compartilhamento…</main>;
+  if (shared && !shareFailed) return <main className="flex min-h-[60dvh] items-center justify-center gap-2 text-sm text-muted-foreground"><LoaderCircle className="animate-spin" />Guardando o compartilhamento…</main>;
 
   return (
     <main className="mx-auto max-w-md px-4 pb-32 pt-[max(env(safe-area-inset-top),16px)]">
@@ -146,10 +164,10 @@ function EntryView() {
       </div>
       <Button className="mt-4 min-h-12 w-full" disabled={(!text.trim() && !image) || busy} onClick={() => begin({ origin: !text.trim() && image ? "capture" : "manual", ...(text.trim() ? { text } : {}), image })}>{busy ? <LoaderCircle className="animate-spin" /> : <Search />}Iniciar importação</Button>
 
-      {(sessions.data?.length ?? 0) > 0 && (
+      {openSessions.length > 0 && (
         <section className="mt-6">
           <h2 className="text-sm font-semibold">Sessões em andamento</h2>
-          <ul className="mt-2 space-y-1">{sessions.data!.map((s) => {
+          <ul className="mt-2 space-y-1">{openSessions.map((s) => {
             const left = (s.import_candidates ?? []).filter((c) => c.status === "pending" || c.status === "error").length;
             return (
               <li key={s.id} className="flex items-center gap-2 rounded-xl border border-border px-3 py-1">
@@ -161,6 +179,7 @@ function EntryView() {
               </li>
             );
           })}</ul>
+          {sessions.hasNextPage && <Button variant="ghost" className="mt-2 min-h-11 w-full" disabled={sessions.isFetchingNextPage} onClick={() => sessions.fetchNextPage()}>Ver mais sessões</Button>}
         </section>
       )}
 
@@ -174,7 +193,7 @@ function EntryView() {
                 <p className="text-[11px] text-muted-foreground">{p.platform === "instagram" ? "Instagram" : p.platform === "tiktok" ? "TikTok" : p.platform} · {new Date(p.created_at).toLocaleDateString("pt-BR")}{p.created_by === space?.userId ? "" : " · do parceiro"}</p>
               </div>
               <Button variant="ghost" className="min-h-11 shrink-0 text-xs" disabled={busy} onClick={() => begin({ origin: "manual", url: p.source_url, sourcePostId: p.id })}>Analisar</Button>
-              {p.created_by === space?.userId && <Button variant="ghost" size="icon" aria-label="Remover link" className="h-11 w-11 shrink-0" onClick={async () => { const { error } = await supabase.from("source_posts").delete().eq("id", p.id); if (error) toast.error("Não foi possível remover."); void qc.invalidateQueries({ queryKey: ["source-backlog"] }); }}><Trash2 className="h-4 w-4" /></Button>}
+              {p.created_by === space?.userId && <Button variant="ghost" size="icon" aria-label="Remover link" className="h-11 w-11 shrink-0" onClick={async () => { const { error } = await supabase.from("source_posts").delete().eq("id", p.id); if (error) toast.error(error.message.includes("source_in_open_session") ? "Este link está numa sessão em andamento. Conclua ou dispense a sessão antes." : "Não foi possível remover."); void qc.invalidateQueries({ queryKey: ["source-backlog"] }); }}><Trash2 className="h-4 w-4" /></Button>}
             </li>
           ))}</ul>
           {backlog.hasNextPage && <Button variant="ghost" className="mt-2 min-h-11 w-full" disabled={backlog.isFetchingNextPage} onClick={() => backlog.fetchNextPage()}>Ver mais</Button>}
@@ -235,10 +254,12 @@ function SessionView({ id }: { id: string }) {
   if (!q.data) return <main className="mx-auto max-w-md px-4 pt-10 text-center text-sm text-muted-foreground">Sessão não encontrada.<Button asChild variant="ghost" className="mt-4 min-h-11 w-full"><Link to="/import" search={{}}>Voltar</Link></Button></main>;
   const { session: s, sources, cands, lib } = q.data;
 
-  if (reviewing && cands.length) return <ReviewStack cands={cands} lib={lib} spaceId={s.space_id} sources={sources} onChanged={refresh} onBack={() => setReviewing(false)} onDone={async () => { const { data } = await supabase.rpc("import_complete", { _session: id }); void refresh(); if (data === "completed") { toast.success("Sessão concluída"); void qc.invalidateQueries({ queryKey: ["library", s.space_id] }); void navigate({ search: {}, replace: true }); } else toast("Ainda há obras pendentes ou com erro."); }} />;
+  if (reviewing && cands.length) return <ReviewStack cands={cands} lib={lib} spaceId={s.space_id} sources={sources} onChanged={refresh} onBack={() => setReviewing(false)} onDone={async () => { const { data, error } = await supabase.rpc("import_complete", { _session: id }); void refresh(); if (error) { toast.error("Não foi possível concluir. Tente de novo."); return; } if (data === "completed") { toast.success("Sessão concluída"); void qc.invalidateQueries({ queryKey: ["library", s.space_id] }); void qc.invalidateQueries({ queryKey: ["import-sessions"] }); void navigate({ search: {}, replace: true }); } else { toast(data === "sources_open" ? "Há links sem obra identificada. Analise ou marque “Ignorar esta fonte”." : data === "empty" ? "Nenhuma obra decidida ainda." : "Ainda há obras pendentes ou com erro."); setReviewing(false); } }} />;
 
   const freeText = [s.shared_title, s.shared_text].filter(Boolean).join("\n").replace(/https?:\/\/\S+/g, " ").replace(/\s+/g, " ").trim();
   const left = cands.filter((c) => c.status === "pending" || c.status === "error").length;
+  const carousel = carouselIndexes([s.shared_url, s.shared_text, s.shared_title].filter(Boolean).join("\n"));
+  const skipped = new Set((s as { skipped_source_ids?: string[] }).skipped_source_ids ?? []);
   const needCaption = sources.some((p) => !p.caption && (!p.caption_fetched_at || Date.now() - new Date(p.caption_fetched_at).getTime() > 6 * 3600_000));
 
   return (
@@ -251,12 +272,14 @@ function SessionView({ id }: { id: string }) {
 
       {sources.map((p) => {
         const ref = parseSocial(p.source_url);
-        const idx = ref?.platform === "instagram" ? ref.imgIndex : null;
+        const idx = ref?.platform === "instagram" ? (carousel.get(ref.id) ?? (ref.imgIndex ? [ref.imgIndex] : [])).join(", ") : "";
+        const hasCands = cands.some((c) => c.source_post_id === p.id);
         return (
           <div key={p.id} className="mt-3 rounded-2xl border border-border bg-card p-3">
             <p className="text-[11px] text-muted-foreground">Fonte: {p.platform === "instagram" ? (ref?.platform === "instagram" && ref.kind === "reel" ? "Instagram Reel" : "Instagram") : "TikTok"}</p>
             <a href={p.source_url} target="_blank" rel="noopener noreferrer" className="block truncate text-xs text-primary">{p.source_url}</a>
             {idx ? <p className="mt-1 text-xs text-primary">Imagem {idx} do carrossel. A imagem não é lida: envie a captura dessa imagem.</p> : null}
+            {!hasCands && <button type="button" aria-pressed={skipped.has(p.id)} disabled={!!busy} onClick={() => run("skip" + p.id, async () => { const { error } = await supabase.rpc("import_skip_source", { _session: id, _source: p.id, _skip: !skipped.has(p.id) }); if (error) throw new Error("Não foi possível salvar."); })} className={`mt-2 min-h-11 text-xs underline-offset-2 hover:underline ${skipped.has(p.id) ? "text-primary" : "text-muted-foreground"}`}>{skipped.has(p.id) ? "Fonte ignorada · desfazer" : "Ignorar esta fonte (sem obra identificável)"}</button>}
             {p.caption ? <p className="mt-2 max-h-40 overflow-y-auto whitespace-pre-wrap rounded-xl bg-background/60 p-2 text-sm">{p.caption}</p>
               : p.caption_status ? <p role="status" className="mt-2 text-xs text-muted-foreground">{p.caption_status === "blocked" ? "A rede bloqueou a leitura pública. Envie uma captura ou cole a legenda." : "Legenda indisponível. Envie uma captura ou cole a legenda."}</p> : null}
             {p.caption && <Button variant="secondary" className="mt-2 min-h-11 w-full" disabled={!!busy} onClick={() => run(p.id, () => analyzeFn({ data: { sessionId: id, sourcePostId: p.id } }))}>{busy === p.id ? <LoaderCircle className="animate-spin" /> : <Sparkles />}Analisar legenda com IA</Button>}
