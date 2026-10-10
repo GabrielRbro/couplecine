@@ -30,15 +30,10 @@
 - Catalog previews use the authenticated title route and existing catalog server functions; existing works link directly to their work page — avoids duplicate local records and keeps TMDB credentials server-only.
 - Gallery title logos share complete work_metadata_cache payloads and are fetched in visible batches with two workers; expired payloads refresh fully — avoids N+1 bursts and extending stale metadata.
 - MatchSimulator persists account-scoped temporary state in sessionStorage, offered only to a one-member space and isolated from real Match writes — enables temporary solo QA without fake participants or sessions.
-- Animation poster readiness uses a bounded decode helper and scenic fallback — slow or failed images never leave shuffle cards blank or permanently locked.
 
-- Overlay scroll locks capture gestures without changing html/body overflow; disabled-close history entries are restored on Back to preserve scroll geometry and overlay ordering.
 - Match external candidates are TMDB-validated; solo candidates remain local and real candidates materialize only catalog identities without indication or interest, so stable voting IDs do not pollute library sections.
-- Shared art names clear on the active View Transition completion (animation completion fallback), never on an arbitrary short delay.
 
 - Search relevance combines bounded title matching with TMDB recognition signals; AI batches exclude previous validated identities and use query/type/batch cache keys to avoid repeat sets.
-- External additions hold an optimistic detail surface and feed/library snapshots until the authoritative work arrives; failures restore all snapshots and the picker.
-- Solo Match keeps the full shuffled pool with a variable initial window, 5–10-card pre-goal extensions and one 0–8 post-goal extension, mirroring the real RPC without writes.
 - Import never fetches user-supplied URLs as given: TMDB/IMDb ids resolve deterministically; Instagram/TikTok captions are fetched only on explicit tap via `social.server.ts` from URLs rebuilt from parsed ids on allowlisted HTTPS hosts (per-hop redirect validation, timeout, byte cap), and AI runs only on explicit action — avoids SSRF and invented titles.
 - Simkl is read-only per user (AUTH V2 + PKCE); tokens/OAuth states live in `private` behind service-role definer functions, `integration_accounts`/`external_watch_items` are user-read-only via RLS and written only server-side, and external history never writes watch_events/prior_watch_status — keeps credentials off the client and evidence separate from couple data.
 - Nuvio TV is exposed only as a copyable canonical `nuvio://tmdb/<type>/<id>` link — remote send/playback needs a paired companion that is unproven.
