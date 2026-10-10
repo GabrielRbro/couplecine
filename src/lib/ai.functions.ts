@@ -155,37 +155,36 @@ export const analyzeImport = createServerFn({ method: "POST" })
       .refine((v) => v.text || v.image, "Envie texto ou imagem.")
       .parse(d),
   )
-  .handler(async ({ data, context }) => {
-    try {
-      const parts = [
-        ...(data.text ? [{ text: data.text }] : []),
-        ...(data.image
-          ? [{ inline_data: { mime_type: data.image.mimeType, data: data.image.base64 } }]
-          : []),
-      ];
-      const res = await geminiJson<{ items?: AiTitleGuess[] }>({
-        supabase: context.supabase,
-        userId: context.userId,
-        feature: "import",
-        system: `Extraia apenas filmes e séries realmente citados ou mostrados no conteúdo recebido (texto, legenda ou captura de tela). Não invente. ${GUESS_SCHEMA_HINT}`,
-        parts,
-        cacheTtlHours: 24 * 14,
-        cacheSeed: `i:${data.text ?? ""}:${data.image?.base64.slice(0, 2000) ?? ""}:${data.image?.base64.length ?? 0}`,
-      });
-      return {
-        ok: true as const,
-        items: await validate(res.items ?? [], data.spaceId, context.supabase),
-      };
-    } catch (e) {
-      if (e instanceof AiUnavailable)
-        return {
-          ok: false as const,
-          reason: AI_MESSAGE[e.message] ?? AI_MESSAGE["failed"]!,
-          items: [],
-        };
-      throw e;
-    }
-  });
+  .handler(async ({ data, context }) => runImportAnalysis({ supabase: context.supabase, userId: context.userId, spaceId: data.spaceId, ...(data.text ? { text: data.text } : {}), ...(data.image ? { image: data.image } : {}) }));
+
+async function sha256Hex(bytes: Uint8Array) {
+  return [...new Uint8Array(await crypto.subtle.digest("SHA-256", bytes))].map((b) => b.toString(16).padStart(2, "0")).join("");
+}
+
+/** Server-side import analysis (explicit action only). Cache key = strategy version + content type + SHA-256 of the full text/image bytes. */
+export async function runImportAnalysis(opts: { supabase: Parameters<typeof geminiJson>[0]["supabase"]; userId: string; spaceId: string; text?: string; image?: { mimeType: "image/png" | "image/jpeg" | "image/webp"; base64: string } }) {
+  try {
+    const textHash = opts.text ? await sha256Hex(new TextEncoder().encode(opts.text)) : "-";
+    const imageHash = opts.image ? await sha256Hex(Uint8Array.from(atob(opts.image.base64), (ch) => ch.charCodeAt(0))) : "-";
+    const parts = [
+      ...(opts.text ? [{ text: opts.text }] : []),
+      ...(opts.image ? [{ inline_data: { mime_type: opts.image.mimeType, data: opts.image.base64 } }] : []),
+    ];
+    const res = await geminiJson<{ items?: AiTitleGuess[] }>({
+      supabase: opts.supabase,
+      userId: opts.userId,
+      feature: "import",
+      system: `Extraia apenas filmes e séries realmente citados ou mostrados no conteúdo recebido (texto, legenda ou captura de tela). Não invente. ${GUESS_SCHEMA_HINT}`,
+      parts,
+      cacheTtlHours: 24 * 14,
+      cacheSeed: `import-v2:${opts.text ? "t" : ""}${opts.image ? `i:${opts.image.mimeType}` : ""}:${textHash}:${imageHash}`,
+    });
+    return { ok: true as const, items: await validate(res.items ?? [], opts.spaceId, opts.supabase) };
+  } catch (e) {
+    if (e instanceof AiUnavailable) return { ok: false as const, reason: AI_MESSAGE[e.message] ?? AI_MESSAGE["failed"]!, items: [] };
+    throw e;
+  }
+}
 
 /**
  * refineMatch: Resolves internal candidates via search-ranking (local) and discovers external ones via AI.
