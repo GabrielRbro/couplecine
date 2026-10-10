@@ -4,12 +4,13 @@ import { supabase } from "@/integrations/supabase/client";
 
 export const Route = createFileRoute("/_authenticated")({
   ssr: false,
-  beforeLoad: async () => {
+  beforeLoad: async ({ location }) => {
     // Local session read (no network) so navigation never waits on Auth.
     // Security is unchanged: every query is validated server-side by RLS/JWT.
     const { data } = await supabase.auth.getSession();
     const user = data.session?.user;
-    if (!user) throw redirect({ to: "/auth" });
+    // Keeps the destination (e.g. shared content on /import) through Google sign-in.
+    if (!user) throw redirect({ to: "/auth", search: location.pathname === "/" ? {} : { next: location.href } });
     return { user };
   },
   component: AuthenticatedLayout,

@@ -18,6 +18,8 @@ export const manifest = {
   orientation: "portrait-primary",
   theme_color: "#131217",
   background_color: "#131217",
+  // Text/URL only (GET). Files from the Android share sheet would need POST multipart — not implemented.
+  share_target: { action: "/import", method: "GET", params: { title: "title", text: "text", url: "url" } },
   categories: ["entertainment", "lifestyle"],
   icons: [
     { src: "/pwa-192x192.png", sizes: "192x192", type: "image/png" },
