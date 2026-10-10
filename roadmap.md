@@ -102,3 +102,11 @@ Concluído: Lotes 1–4, 5A–5D, Rodada 6, MCP.
 - [ ] Validar no Android instalado: reinstalar PWA após publicar, compartilhar um link de outro app → AppCinema deve aparecer e abrir Importar com o texto.
 - [ ] Suporte por plataforma social só após prova com 8–12 links reais. Origem/link não persistidos (sem modelo aprovado).
 - Integrações pendentes (não iniciadas): Trakt/Simkl exigem conta + OAuth app e decisão de direção do sync; Nuvio sem API/contrato confirmado — nada prometido.
+
+## Correção focada sobre 7d63e5c (Match IA / Importação)
+- Custo da rodada anterior informado pelo conector: 13,5 créditos.
+- Match IA: cliente adota o conjunto refinado mesmo sem externos; <2 compatíveis com intenção explícita → aviso honesto, sem reinserir pool normal. Fallback normal só em falha da IA com intenção genérica. Servidor verifica original_language no TMDB para no máximo 16 internos (4 por vez) quando há origem explícita; não verificados são omitidos. Validado: tsgo + vite build. NÃO validado: resposta IA mock no navegador (sem Gemini real); relevância real de "terror japonês".
+- Poster Match: Match solo pré-carrega apenas o próximo pôster em segundo plano. Match real não prefetcha o próximo (ordem secreta do servidor). Sem prova visual de ganho → não marcado como resolvido.
+- Importação: candidatos acumulam (dedupe mediaType:tmdbId, atualização funcional); botão "Revisar N obras"; voltar preserva candidatos e estados. Playwright 390/412: link TMDB + IMDb acumulou 2, voltar manteve 2 e "Já assisti antes" por obra, sem overflow. Nenhuma confirmação/escrita nem IA executada.
+- Confirmação: addWork antes de markSeenBefore; falha da 2ª operação vira estado "parcial" (indicação salva) com "Tentar marcar visto". Caminho de erro não exercitado em teste.
+- Share Target Android continua não provado no aparelho instalado.
