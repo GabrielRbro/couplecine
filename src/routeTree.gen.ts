@@ -25,6 +25,7 @@ import { Route as AuthenticatedWatchDiceRouteImport } from './routes/_authentica
 import { Route as AuthenticatedWatchGalleryRouteImport } from './routes/_authenticated/watch.gallery'
 import { Route as AuthenticatedWorkIdRouteImport } from './routes/_authenticated/work.$id'
 import { Route as AuthenticatedTitleMediaTypeTmdbIdRouteImport } from './routes/_authenticated/title.$mediaType.$tmdbId'
+import { Route as ApiPublicSimklCallbackRouteImport } from './routes/api/public/simkl/callback'
 
 const AuthenticatedRouteRoute = AuthenticatedRouteRouteImport.update({
   id: '/_authenticated',
@@ -108,6 +109,11 @@ const AuthenticatedTitleMediaTypeTmdbIdRoute =
     path: '/title/$mediaType/$tmdbId',
     getParentRoute: () => AuthenticatedRouteRoute,
   } as any)
+const ApiPublicSimklCallbackRoute = ApiPublicSimklCallbackRouteImport.update({
+  id: '/api/public/simkl/callback',
+  path: '/api/public/simkl/callback',
+  getParentRoute: () => rootRouteImport,
+} as any)
 
 export interface FileRoutesByFullPath {
   '/': typeof AuthenticatedIndexRoute
@@ -125,6 +131,7 @@ export interface FileRoutesByFullPath {
   '/watch/gallery': typeof AuthenticatedWatchGalleryRoute
   '/work/$id': typeof AuthenticatedWorkIdRoute
   '/title/$mediaType/$tmdbId': typeof AuthenticatedTitleMediaTypeTmdbIdRoute
+  '/api/public/simkl/callback': typeof ApiPublicSimklCallbackRoute
 }
 export interface FileRoutesByTo {
   '/auth': typeof AuthRoute
@@ -142,6 +149,7 @@ export interface FileRoutesByTo {
   '/watch/gallery': typeof AuthenticatedWatchGalleryRoute
   '/work/$id': typeof AuthenticatedWorkIdRoute
   '/title/$mediaType/$tmdbId': typeof AuthenticatedTitleMediaTypeTmdbIdRoute
+  '/api/public/simkl/callback': typeof ApiPublicSimklCallbackRoute
 }
 export interface FileRoutesById {
   __root__: typeof rootRouteImport
@@ -161,6 +169,7 @@ export interface FileRoutesById {
   '/_authenticated/watch/gallery': typeof AuthenticatedWatchGalleryRoute
   '/_authenticated/work/$id': typeof AuthenticatedWorkIdRoute
   '/_authenticated/title/$mediaType/$tmdbId': typeof AuthenticatedTitleMediaTypeTmdbIdRoute
+  '/api/public/simkl/callback': typeof ApiPublicSimklCallbackRoute
 }
 export interface FileRouteTypes {
   fileRoutesByFullPath: FileRoutesByFullPath
@@ -180,6 +189,7 @@ export interface FileRouteTypes {
     | '/watch/gallery'
     | '/work/$id'
     | '/title/$mediaType/$tmdbId'
+    | '/api/public/simkl/callback'
   fileRoutesByTo: FileRoutesByTo
   to:
     | '/auth'
@@ -197,6 +207,7 @@ export interface FileRouteTypes {
     | '/watch/gallery'
     | '/work/$id'
     | '/title/$mediaType/$tmdbId'
+    | '/api/public/simkl/callback'
   id:
     | '__root__'
     | '/_authenticated'
@@ -215,6 +226,7 @@ export interface FileRouteTypes {
     | '/_authenticated/watch/gallery'
     | '/_authenticated/work/$id'
     | '/_authenticated/title/$mediaType/$tmdbId'
+    | '/api/public/simkl/callback'
   fileRoutesById: FileRoutesById
 }
 export interface RootRouteChildren {
@@ -223,6 +235,7 @@ export interface RootRouteChildren {
   McpRoute: typeof McpRoute
   Char91DotwellKnownChar93OauthProtectedResourceRoute: typeof Char91DotwellKnownChar93OauthProtectedResourceRoute
   DotlovableOauthConsentRoute: typeof DotlovableOauthConsentRoute
+  ApiPublicSimklCallbackRoute: typeof ApiPublicSimklCallbackRoute
 }
 
 declare module '@tanstack/react-router' {
@@ -339,6 +352,13 @@ declare module '@tanstack/react-router' {
       preLoaderRoute: typeof AuthenticatedTitleMediaTypeTmdbIdRouteImport
       parentRoute: typeof AuthenticatedRouteRoute
     }
+    '/api/public/simkl/callback': {
+      id: '/api/public/simkl/callback'
+      path: '/api/public/simkl/callback'
+      fullPath: '/api/public/simkl/callback'
+      preLoaderRoute: typeof ApiPublicSimklCallbackRouteImport
+      parentRoute: typeof rootRouteImport
+    }
   }
 }
 
@@ -381,6 +401,7 @@ const rootRouteChildren: RootRouteChildren = {
   Char91DotwellKnownChar93OauthProtectedResourceRoute:
     Char91DotwellKnownChar93OauthProtectedResourceRoute,
   DotlovableOauthConsentRoute: DotlovableOauthConsentRoute,
+  ApiPublicSimklCallbackRoute: ApiPublicSimklCallbackRoute,
 }
 export const routeTree = rootRouteImport
   ._addFileChildren(rootRouteChildren)

@@ -1,6 +1,7 @@
 import { createFileRoute, useNavigate } from "@tanstack/react-router";
 import { BackButton } from "@/components/app/ui";
 import { GeminiSettings } from "@/components/app/GeminiSettings";
+import { SimklSettings } from "@/components/app/SimklSettings";
 import { useQuery, useQueryClient } from "@tanstack/react-query";
 import { useState } from "react";
 import { toast } from "sonner";
@@ -193,6 +194,7 @@ function SettingsPage() {
           <span className="text-xs text-primary">Ativo</span>
         </div>
         <GeminiSettings status={ai.data} onChanged={() => ai.refetch()} />
+        <SimklSettings />
       </section>
 
       <AppInstallSection />

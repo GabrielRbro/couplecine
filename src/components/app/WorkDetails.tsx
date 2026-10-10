@@ -418,6 +418,7 @@ export function WorkDetails({
           <h2 className="mb-2 font-semibold">Posts relacionados</h2>
           <p className="text-xs text-muted-foreground">Importação de posts chega numa próxima fase.</p>
         </section>
+        <NuvioLink mediaType={work.media_type} tmdbId={work.tmdb_id} />
       </div>
       <AnimatedSheet
         open={picking}
@@ -1225,5 +1226,20 @@ function IndicationsBlock({
         </div>
       </AnimatedSheet>
     </div>
+  );
+}
+
+/** Canonical Nuvio TV deep link (beta 1.1.0+ parser). Copy-only: no remote send/playback claims. */
+function NuvioLink({ mediaType, tmdbId }: { mediaType: "movie" | "tv"; tmdbId: number }) {
+  const link = `nuvio://tmdb/${mediaType}/${tmdbId}`;
+  return (
+    <section>
+      <h2 className="mb-1 font-semibold">Nuvio TV</h2>
+      <p className="text-xs text-muted-foreground">Link da ficha para abrir no dispositivo com Nuvio TV (versão beta 1.1.0 ou mais nova). Não envia à TV nem inicia reprodução.</p>
+      <div className="mt-2 flex items-center gap-2">
+        <code className="min-w-0 flex-1 truncate rounded-lg border border-border bg-card px-2 py-2 text-xs">{link}</code>
+        <Button variant="secondary" className="min-h-11" onClick={() => { void navigator.clipboard?.writeText(link).then(() => toast("Link copiado"), () => toast.error("Não foi possível copiar")); }}>Copiar</Button>
+      </div>
+    </section>
   );
 }

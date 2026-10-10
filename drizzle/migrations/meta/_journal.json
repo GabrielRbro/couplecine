@@ -50,6 +50,13 @@
       "when": 1791247580988,
       "tag": "0006_round7_stabilization",
       "breakpoints": true
+    },
+    {
+      "idx": 7,
+      "version": "7",
+      "when": 1791602115919,
+      "tag": "0007_simkl_read_integration",
+      "breakpoints": true
     }
   ]
 }

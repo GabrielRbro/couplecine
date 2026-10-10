@@ -11,7 +11,7 @@ import { Poster } from "@/components/app/MediaCard";
 import { Button } from "@/components/ui/button";
 import { analyzeImport } from "@/lib/ai.functions";
 import { addWork, markSeenBefore, searchCatalog } from "@/lib/catalog.functions";
-import { resolveImportText } from "@/lib/import.functions";
+import { fetchSocialCaptions, resolveImportText } from "@/lib/import.functions";
 import { tmdbImage } from "@/lib/format";
 import { useSpace } from "@/lib/space";
 
@@ -58,8 +58,13 @@ function ImportPage() {
   const qc = useQueryClient();
   const resolve = useServerFn(resolveImportText);
   const analyze = useServerFn(analyzeImport);
+  const fetchCaptions = useServerFn(fetchSocialCaptions);
+  type Caption = Awaited<ReturnType<typeof fetchSocialCaptions>>["results"][number];
+  const [captions, setCaptions] = useState<Caption[]>([]);
+  const [captionBusy, setCaptionBusy] = useState<string | null>(null);
   const shared = [search.title, search.text, search.url].filter(Boolean).join("\n").slice(0, MAX_TEXT);
   const [text, setText] = useState(shared);
+  const hasSocial = /instagram\.com\/(?:[\w.]+\/)?(?:reels?|p)\/|tiktok\.com\/@[^/\s]+\/(?:video|photo)\/|v[tm]\.tiktok\.com\//i.test(text);
   const [image, setImage] = useState<{ name: string; mimeType: "image/png" | "image/jpeg" | "image/webp"; base64: string } | null>(null);
   const [busy, setBusy] = useState<null | "resolve" | "ai">(null);
   const [notice, setNotice] = useState<string | null>(null);
@@ -101,7 +106,7 @@ function ImportPage() {
       setHasText(r.hasText);
       if (r.items.length) merge(r.items);
       if (r.social.length && !r.items.length)
-        setNotice(`Não foi possível identificar a obra pelo link (${r.social.join(", ")}). Envie uma captura de tela ou cole a legenda/texto do post.`);
+        setNotice(`Link de rede social (${r.social.join(", ")}) não identifica a obra sozinho. Use “Buscar legenda do post”, cole a legenda ou envie uma captura.`);
       else if (!r.items.length) setNotice(r.hasText ? "Nenhum link do TMDB/IMDb reconhecido. Use “Analisar com IA” para identificar títulos no texto." : "Nada reconhecido. Cole um texto ou envie uma captura.");
     } catch {
       setNotice("Não foi possível analisar agora. Tente de novo.");
@@ -128,6 +133,37 @@ function ImportPage() {
       setNotice("A IA não respondeu. Tente de novo mais tarde.");
     } finally {
       setBusy(null);
+    }
+  }
+
+  async function runCaptions() {
+    setCaptionBusy("fetch");
+    setNotice(null);
+    try {
+      const r = await fetchCaptions({ data: { text: text.slice(0, MAX_TEXT) } });
+      if (!r.recognised) setNotice("Nenhum link de post do Instagram (reel/p) ou TikTok (vídeo/foto) reconhecido.");
+      setCaptions(r.results);
+    } catch {
+      setNotice("Não foi possível buscar a legenda agora.");
+    } finally {
+      setCaptionBusy(null);
+    }
+  }
+
+  // One AI batch per caption, only on tap; existing analyzeImport cache applies.
+  async function analyzeCaption(c: Caption) {
+    if (!space?.spaceId || !c.caption) return;
+    setCaptionBusy(c.canonical);
+    setNotice(null);
+    try {
+      const r = await analyze({ data: { spaceId: space.spaceId, text: c.caption.slice(0, MAX_TEXT) } });
+      if (!r.ok) setNotice(r.reason);
+      else if (!r.items.length) setNotice("A legenda não cita filmes ou séries reconhecíveis. Em listas, Reels e carrosséis, envie capturas de tela das imagens.");
+      else merge(r.items);
+    } catch {
+      setNotice("A IA não respondeu. Tente de novo mais tarde.");
+    } finally {
+      setCaptionBusy(null);
     }
   }
 
@@ -165,6 +201,22 @@ function ImportPage() {
         <Button className="min-h-12 w-full" disabled={!text.trim() || !!busy} onClick={() => runResolve()}>{busy === "resolve" ? <LoaderCircle className="animate-spin" /> : <Search />}Identificar links</Button>
         <Button variant="secondary" className="min-h-12 w-full" disabled={(!text.trim() && !image) || !!busy} onClick={runAi}>{busy === "ai" ? <LoaderCircle className="animate-spin" /> : <Sparkles />}Analisar com IA{image ? " (texto + captura)" : ""}</Button>
       </div>
+      {hasSocial && (
+        <div className="mt-2">
+          <Button variant="outline" className="min-h-12 w-full" disabled={!!busy || !!captionBusy} onClick={runCaptions}>{captionBusy === "fetch" ? <LoaderCircle className="animate-spin" /> : <Search />}Buscar legenda do post</Button>
+          <p className="mt-1 text-[11px] text-muted-foreground">Lê só a legenda pública do post. Vídeo e imagens não são analisados.</p>
+        </div>
+      )}
+      {captions.map((c) => (
+        <div key={c.canonical} className="mt-3 rounded-2xl border border-border bg-card p-3">
+          <p className="text-[11px] text-muted-foreground">Origem: {c.platform === "instagram" ? "Instagram" : "TikTok"}{c.author ? ` · @${c.author}` : ""}</p>
+          <p className="truncate text-[11px] text-muted-foreground">{c.canonical}</p>
+          {c.caption ? <p className="mt-2 max-h-40 overflow-y-auto whitespace-pre-wrap rounded-xl bg-background/60 p-2 text-sm">{c.caption}</p> : null}
+          {c.message && <p role="status" className="mt-2 text-xs text-muted-foreground">{c.message}</p>}
+          {c.caption && <p className="mt-2 text-[11px] text-muted-foreground">A legenda pode não citar as obras. Se for uma lista, Reel ou carrossel, envie capturas.</p>}
+          {c.caption && <Button variant="secondary" className="mt-2 min-h-11 w-full" disabled={!!busy || !!captionBusy} onClick={() => analyzeCaption(c)}>{captionBusy === c.canonical ? <LoaderCircle className="animate-spin" /> : <Sparkles />}Analisar legenda com IA</Button>}
+        </div>
+      ))}
       {rows.length > 0 && (
         <div className="mt-4 rounded-2xl border border-border bg-card p-3">
           <p className="text-xs text-muted-foreground">{rows.length} {rows.length === 1 ? "obra encontrada" : "obras encontradas"} · continue identificando links ou analisando texto/captura para acumular.</p>

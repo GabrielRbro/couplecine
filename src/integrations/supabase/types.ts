@@ -213,6 +213,69 @@ export type Database = {
           },
         ]
       }
+      external_watch_items: {
+        Row: {
+          dated_episodes_count: number
+          episodes: Json
+          external_id: string
+          external_type: string
+          id: string
+          imdb_id: string | null
+          last_watched_at: string | null
+          media_type: string | null
+          provider: string
+          status: string | null
+          synced_at: string
+          title: string
+          tmdb_id: number | null
+          total_episodes_count: number | null
+          user_id: string
+          user_rating: number | null
+          watched_episodes_count: number | null
+          year: number | null
+        }
+        Insert: {
+          dated_episodes_count?: number
+          episodes?: Json
+          external_id: string
+          external_type: string
+          id?: string
+          imdb_id?: string | null
+          last_watched_at?: string | null
+          media_type?: string | null
+          provider: string
+          status?: string | null
+          synced_at?: string
+          title: string
+          tmdb_id?: number | null
+          total_episodes_count?: number | null
+          user_id: string
+          user_rating?: number | null
+          watched_episodes_count?: number | null
+          year?: number | null
+        }
+        Update: {
+          dated_episodes_count?: number
+          episodes?: Json
+          external_id?: string
+          external_type?: string
+          id?: string
+          imdb_id?: string | null
+          last_watched_at?: string | null
+          media_type?: string | null
+          provider?: string
+          status?: string | null
+          synced_at?: string
+          title?: string
+          tmdb_id?: number | null
+          total_episodes_count?: number | null
+          user_id?: string
+          user_rating?: number | null
+          watched_episodes_count?: number | null
+          year?: number | null
+        }
+        Relationships: []
+      }
       indications: {
         Row: {
           created_at: string
@@ -258,25 +321,37 @@ export type Database = {
       integration_accounts: {
         Row: {
           external_account_id: string | null
+          external_username: string | null
           id: string
+          last_sync_at: string | null
           provider: string
           status: string
+          sync_error: string | null
+          sync_status: string | null
           updated_at: string
           user_id: string
         }
         Insert: {
           external_account_id?: string | null
+          external_username?: string | null
           id?: string
+          last_sync_at?: string | null
           provider: string
           status?: string
+          sync_error?: string | null
+          sync_status?: string | null
           updated_at?: string
           user_id: string
         }
         Update: {
           external_account_id?: string | null
+          external_username?: string | null
           id?: string
+          last_sync_at?: string | null
           provider?: string
           status?: string
+          sync_error?: string | null
+          sync_status?: string | null
           updated_at?: string
           user_id?: string
         }
@@ -990,6 +1065,43 @@ export type Database = {
           _season: number
           _watched: boolean
           _work: string
+        }
+        Returns: undefined
+      }
+      simkl_state_put: {
+        Args: { _state: string; _user: string; _verifier: string }
+        Returns: undefined
+      }
+      simkl_state_take: {
+        Args: { _state: string }
+        Returns: {
+          user_id: string
+          verifier: string
+        }[]
+      }
+      simkl_sync_mark: {
+        Args: { _attempt: boolean; _snapshot: Json; _user: string }
+        Returns: undefined
+      }
+      simkl_token_delete: { Args: { _user: string }; Returns: undefined }
+      simkl_token_get: {
+        Args: { _user: string }
+        Returns: {
+          access_token: string
+          expires_at: string
+          last_sync_at: string
+          refresh_token: string
+          scope: string
+          snapshot: Json
+        }[]
+      }
+      simkl_token_set: {
+        Args: {
+          _access: string
+          _expires: string
+          _refresh: string
+          _scope: string
+          _user: string
         }
         Returns: undefined
       }

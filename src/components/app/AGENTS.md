@@ -1,2 +1,7 @@
 - Touch sliders use pointer capture plus keyboard semantics, so drag stays continuous inside gesture-locking overlays.
 - Winner presentation retains the result grid underneath a portal frost layer and moves the selected poster from its measured grid bounds; metadata appears after arrival and rewinds before another roll.
+- Animation poster readiness uses a bounded decode helper and scenic fallback — slow or failed images never leave shuffle cards blank or permanently locked.
+- Overlay scroll locks capture gestures without changing html/body overflow; disabled-close history entries are restored on Back to preserve scroll geometry and overlay ordering.
+- Shared art names clear on the active View Transition completion (animation completion fallback), never on an arbitrary short delay.
+- External additions hold an optimistic detail surface and feed/library snapshots until the authoritative work arrives; failures restore all snapshots and the picker.
+- Solo Match keeps the full shuffled pool with a variable initial window, 5–10-card pre-goal extensions and one 0–8 post-goal extension, mirroring the real RPC without writes.
