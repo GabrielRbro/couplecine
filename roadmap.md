@@ -141,3 +141,4 @@ Concluído: Lotes 1–4, 5A–5D, Rodada 6, MCP.
 - [x] `import_source_for` deriva e valida plataforma/shortcode/tipo da URL canônica no SQL; parâmetros forjados e rotas/hosts inválidos são recusados.
 - [x] Falha do Share Target preserva a URL inteira no campo (`shareFallbackText`, testado com 4000 caracteres + URL).
 - [x] `tests/sql/import_rpc_rollback.sql` com ASSERTs e rollback final; executado: todos passaram. Vitest 8/8.
+- [x] Migração 0013: desfazer não-final restaura renewed_at da decisão ativa anterior (NULL se só criação); edição externa vence; ASSERTs adicionados e executados com rollback.
