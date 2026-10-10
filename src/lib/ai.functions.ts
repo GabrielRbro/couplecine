@@ -157,7 +157,7 @@ export const analyzeImport = createServerFn({ method: "POST" })
   )
   .handler(async ({ data, context }) => runImportAnalysis({ supabase: context.supabase, userId: context.userId, spaceId: data.spaceId, ...(data.text ? { text: data.text } : {}), ...(data.image ? { image: data.image } : {}) }));
 
-async function sha256Hex(bytes: Uint8Array) {
+async function sha256Hex(bytes: Uint8Array<ArrayBuffer>) {
   return [...new Uint8Array(await crypto.subtle.digest("SHA-256", bytes))].map((b) => b.toString(16).padStart(2, "0")).join("");
 }
 
