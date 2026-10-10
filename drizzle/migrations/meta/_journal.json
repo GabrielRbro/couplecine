@@ -71,6 +71,13 @@
       "when": 1791661692997,
       "tag": "0009_import_candidates_skip_error",
       "breakpoints": true
+    },
+    {
+      "idx": 10,
+      "version": "7",
+      "when": 1791661894281,
+      "tag": "0010_import_tables_tighten_grants",
+      "breakpoints": true
     }
   ]
 }
