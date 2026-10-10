@@ -78,6 +78,13 @@
       "when": 1791661894281,
       "tag": "0010_import_tables_tighten_grants",
       "breakpoints": true
+    },
+    {
+      "idx": 11,
+      "version": "7",
+      "when": 1791662342938,
+      "tag": "0011_import_provenance_integrity",
+      "breakpoints": true
     }
   ]
 }

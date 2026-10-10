@@ -43,32 +43,48 @@ async function setStatus(sessionId: string, patch: Record<string, unknown>) {
 }
 
 async function refreshStatus(sessionId: string, fallback: "needs_help" | "interrupted" = "needs_help") {
+  // Never auto-completes: only import_complete (explicit decisions) can set "completed".
   const db = await admin();
-  const { count } = await db.from("import_candidates").select("id", { count: "exact", head: true }).eq("session_id", sessionId);
-  await setStatus(sessionId, { status: (count ?? 0) > 0 ? "review" : fallback });
+  const { count, error } = await db.from("import_candidates").select("id", { count: "exact", head: true }).eq("session_id", sessionId);
+  if (error) throw new Error("Não foi possível atualizar a sessão.");
+  const { error: ue } = await db.from("import_sessions").update({ status: (count ?? 0) > 0 ? "review" : fallback, updated_at: new Date().toISOString() }).eq("id", sessionId).neq("status", "completed");
+  if (ue) throw new Error("Não foi possível atualizar a sessão.");
 }
 
-/** Captures a share/manual entry immediately. title/text/url stay separate (URL never truncated by concatenation). */
+/** Captures a share/manual entry immediately. title/text/url stay separate (URL never truncated by concatenation).
+ * clientToken makes a reload of the same in-flight share idempotent; a later share uses a new token = new session. */
 export const createImportSession = createServerFn({ method: "POST" })
   .middleware([requireSupabaseAuth])
-  .inputValidator((d) => z.object({ spaceId: z.string().uuid(), origin: z.enum(["share", "manual", "capture"]), title: z.string().max(300).optional(), text: z.string().max(4000).optional(), url: z.string().max(2000).optional(), sourcePostId: z.string().uuid().optional() }).parse(d))
+  .inputValidator((d) => z.object({ spaceId: z.string().uuid(), origin: z.enum(["share", "manual", "capture"]), title: z.string().max(300).optional(), text: z.string().max(4000).optional(), url: z.string().max(2000).optional(), sourcePostId: z.string().uuid().optional(), clientToken: z.string().regex(/^[0-9a-f-]{36}$/).optional() }).parse(d))
   .handler(async ({ data, context }) => {
     const { supabase, userId } = context;
-    const { data: member } = await supabase.from("space_members").select("id").eq("space_id", data.spaceId).eq("user_id", userId).maybeSingle();
-    if (!member) throw new Error("Sem acesso a este espaço.");
-    const refs = extractSocial([data.url, data.text, data.title].filter(Boolean).join("\n"), 12);
-    const ids: string[] = [];
-    if (data.sourcePostId) ids.push(data.sourcePostId);
-    for (const r of refs) {
-      const url = sourceUrl(r);
-      // One source per space+URL: the first author is kept; a second sender reuses it.
-      await supabase.from("source_posts").insert({ space_id: data.spaceId, platform: r.platform === "instagram" ? "instagram" : "tiktok", source_url: url, created_by: userId });
-      const { data: row } = await supabase.from("source_posts").select("id").eq("space_id", data.spaceId).eq("source_url", url).maybeSingle();
-      if (row && !ids.includes(row.id)) ids.push(row.id);
+    const { data: member, error: me } = await supabase.from("space_members").select("id").eq("space_id", data.spaceId).eq("user_id", userId).maybeSingle();
+    if (me || !member) throw new Error("Sem acesso a este espaço.");
+    const db = await admin();
+    if (data.clientToken) {
+      const { data: prior } = await db.from("import_sessions").select("id").eq("created_by", userId).eq("client_token", data.clientToken).maybeSingle();
+      if (prior) return { sessionId: prior.id as string, reused: true };
     }
-    const { data: s, error } = await (await admin()).from("import_sessions").insert({ space_id: data.spaceId, created_by: userId, origin: data.origin, shared_title: data.title ?? null, shared_text: data.text ?? null, shared_url: data.url ?? null, source_post_ids: ids }).select("id").single();
-    if (error) throw new Error("Não foi possível criar a sessão.");
-    return { sessionId: s.id as string };
+    const ids: string[] = [];
+    if (data.sourcePostId) {
+      // The source must belong to this space (checked as the caller, RLS + explicit space filter).
+      const { data: src } = await supabase.from("source_posts").select("id").eq("id", data.sourcePostId).eq("space_id", data.spaceId).maybeSingle();
+      if (!src) throw new Error("Link salvo não encontrado neste espaço.");
+      ids.push(src.id);
+    }
+    for (const r of extractSocial([data.url, data.text, data.title].filter(Boolean).join("\n"), 12)) {
+      // One source per space+post (shortcode reuse for legacy /p/ rows); first author kept.
+      const { data: id, error } = await supabase.rpc("import_source_for", { _space: data.spaceId, _platform: r.platform === "instagram" ? "instagram" : "tiktok", _url: sourceUrl(r), _shortcode: r.platform === "instagram" ? r.id : null, _reel: r.platform === "instagram" && r.kind === "reel" } as never);
+      if (error || !id) throw new Error("Não foi possível guardar o link.");
+      if (!ids.includes(id as string)) ids.push(id as string);
+    }
+    const { data: s, error } = await db.from("import_sessions").insert({ space_id: data.spaceId, created_by: userId, origin: data.origin, shared_title: data.title ?? null, shared_text: data.text ?? null, shared_url: data.url ?? null, source_post_ids: ids, client_token: data.clientToken ?? null }).select("id").single();
+    if (error?.code === "23505" && data.clientToken) {
+      const { data: prior } = await db.from("import_sessions").select("id").eq("created_by", userId).eq("client_token", data.clientToken).maybeSingle();
+      if (prior) return { sessionId: prior.id as string, reused: true };
+    }
+    if (error || !s) throw new Error("Não foi possível criar a sessão.");
+    return { sessionId: s.id as string, reused: false };
   });
 
 /** Deterministic step (no AI): TMDB links / IMDb ids in the session's own text. */
@@ -84,7 +100,7 @@ export const resolveSession = createServerFn({ method: "POST" })
     for (const t of tmdb.slice(0, 12)) { const item = await lookupTmdb(t.mediaType, t.id); if (item) found.push(item); }
     for (const id of imdb.slice(0, 12)) found.push(...(await findImdb(id)).slice(0, 1));
     if (found.length) await addCandidates(s.id, s.space_id, s.created_by, found, null);
-    await refreshStatus(s.id, s.source_post_ids.length ? "needs_help" : "needs_help");
+    await refreshStatus(s.id);
     return { found: found.length };
   });
 
@@ -104,7 +120,8 @@ export const fetchSessionCaptions = createServerFn({ method: "POST" })
       if (!ref) continue;
       fetched++;
       const r = await fetchCaption(ref).catch(() => null);
-      await db.from("source_posts").update({ caption: r?.caption ?? null, caption_status: r?.status ?? "unavailable", caption_fetched_at: new Date().toISOString() }).eq("id", p.id);
+      const { error } = await db.from("source_posts").update({ caption: r?.caption ?? null, caption_status: r?.status ?? "unavailable", caption_fetched_at: new Date().toISOString() }).eq("id", p.id);
+      if (error) throw new Error("Não foi possível guardar a legenda lida. Tente de novo.");
     }
     return { fetched };
   });
@@ -148,7 +165,9 @@ export const correctCandidate = createServerFn({ method: "POST" })
     return { ok: true };
   });
 
-/** Confirm: ensure the TMDB-validated work, then one transactional RPC (indication, reaction, seen, source link, status). Idempotent. */
+/** Confirm: ensure the TMDB-validated work, then one transactional RPC (indication, reaction, seen, source link, status).
+ * Idempotent: a saved candidate returns its stored result. If the RPC fails after this call created the work, the
+ * fresh unreferenced work is removed again; the error note says exactly what remained. */
 export const confirmCandidate = createServerFn({ method: "POST" })
   .middleware([requireSupabaseAuth])
   .inputValidator((d) => z.object({ candidateId: z.string().uuid(), reaction: z.enum(["fire", "like", "neutral"]) }).parse(d))
@@ -156,14 +175,33 @@ export const confirmCandidate = createServerFn({ method: "POST" })
     const { supabase, userId } = context;
     const { data: c } = await supabase.from("import_candidates").select("id, space_id, media_type, tmdb_id, seen, status, work_id").eq("id", data.candidateId).maybeSingle();
     if (!c) throw new Error("Candidato não encontrado.");
+    if (c.status === "saved") return { status: "saved", indication: undefined, idempotent: true };
+    if (c.status !== "pending" && c.status !== "error") throw new Error("Volte esta obra para pendente antes de confirmar.");
+    const { data: before } = await supabase.from("works").select("id").eq("space_id", c.space_id).eq("media_type", c.media_type).eq("tmdb_id", c.tmdb_id).maybeSingle();
+    let workId: string | null = before?.id ?? null;
+    let note = "Não foi possível confirmar. Nada desta obra foi gravado; tente de novo.";
     try {
-      const workId = c.status === "saved" && c.work_id ? c.work_id : await ensureWork(supabase, userId, { spaceId: c.space_id, mediaType: c.media_type, tmdbId: c.tmdb_id });
+      if (!workId) workId = await ensureWork(supabase, userId, { spaceId: c.space_id, mediaType: c.media_type, tmdbId: c.tmdb_id });
       const { data: r, error } = await supabase.rpc("import_confirm", { _candidate: c.id, _work: workId, _reaction: data.reaction, _seen: c.seen });
       if (error) throw new Error(error.message);
       return r as { status: string; indication?: "created" | "renewed"; idempotent: boolean };
     } catch (e) {
-      const msg = e instanceof Error ? e.message : "Falha";
-      await (await admin()).from("import_candidates").update({ status: "error", note: "Não foi possível confirmar. Nada desta obra foi gravado; tente de novo.", updated_at: new Date().toISOString() }).eq("id", c.id).neq("status", "saved");
-      throw new Error(msg.startsWith("Não") ? msg : "Não foi possível confirmar. Tente de novo.");
+      if (!before && workId) {
+        // RPC rolled back, so nothing references the work this call created; remove it only if still unreferenced.
+        const db = await admin();
+        const refs = await Promise.all([
+          db.from("indications").select("id", { count: "exact", head: true }).eq("work_id", workId),
+          db.from("import_work_holds").select("work_id", { count: "exact", head: true }).eq("work_id", workId),
+          db.from("source_post_works").select("id", { count: "exact", head: true }).eq("work_id", workId),
+          db.from("interests").select("id", { count: "exact", head: true }).eq("work_id", workId),
+        ]);
+        const free = refs.every((x) => !x.error && (x.count ?? 0) === 0);
+        const del = free ? await db.from("works").delete().eq("id", workId).eq("created_by", userId) : { error: true };
+        if (del.error) note = "A obra foi criada no catálogo do espaço, mas a indicação não foi gravada. Tente de novo.";
+      }
+      const { error: ue } = await (await admin()).from("import_candidates").update({ status: "error", note, updated_at: new Date().toISOString() }).eq("id", c.id).in("status", ["pending", "error"]);
+      if (ue) console.error("import: failed to mark candidate error", ue.message);
+      const msg = e instanceof Error ? e.message : "";
+      throw new Error(msg.startsWith("Não") ? msg : note);
     }
   });

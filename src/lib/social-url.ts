@@ -26,9 +26,19 @@ export function parseSocial(raw: string): SocialRef | null {
   return null;
 }
 
-/** Stored identity of a source: canonical URL plus ?img_index for carousels (capture reference only). */
+/** Stored identity of a source: the canonical post URL. ?img_index is an entry/session reference, never part of the key. */
 export function sourceUrl(ref: SocialRef) {
-  return ref.platform === "instagram" && ref.imgIndex ? `${ref.canonical}?img_index=${ref.imgIndex}` : ref.canonical;
+  return ref.canonical;
+}
+
+/** Carousel positions mentioned in a shared text, per Instagram shortcode (session-level capture reference). */
+export function carouselIndexes(text: string) {
+  const out = new Map<string, number[]>();
+  for (const m of text.matchAll(/https?:\/\/[^\s<>"']+/gi)) {
+    const r = parseSocial(m[0]);
+    if (r?.platform === "instagram" && r.imgIndex) out.set(r.id, [...new Set([...(out.get(r.id) ?? []), r.imgIndex])]);
+  }
+  return out;
 }
 
 export function extractSocial(text: string, max = 12) {
