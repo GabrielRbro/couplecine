@@ -3,7 +3,7 @@
 DO $$
 DECLARE
   me uuid := gen_random_uuid(); pa uuid := gen_random_uuid(); sp uuid; sp2 uuid; w uuid; w2 uuid; w3 uuid;
-  s1 uuid; s2 uuid; s3 uuid; a uuid; b uuid; c3 uuid; src uuid; src2 uuid; legacy uuid; r jsonb; t text; n int; failed boolean;
+  s1 uuid; s2 uuid; s3 uuid; a uuid; b uuid; c3 uuid; src uuid; src2 uuid; legacy uuid; r jsonb; t text; n int; failed boolean; tsa timestamptz; tsb timestamptz;
 BEGIN
   INSERT INTO couple_spaces(name, created_by) VALUES ('t', me) RETURNING id INTO sp;
   INSERT INTO couple_spaces(name, created_by) VALUES ('t2', pa) RETURNING id INTO sp2;
@@ -108,6 +108,47 @@ BEGIN
   failed := false; BEGIN PERFORM import_source_for(sp, 'tiktok', 'https://vt.tiktok.com/ZZtest9/', 'ZZtest1', false); EXCEPTION WHEN others THEN failed := SQLERRM = 'source_params_mismatch'; END; ASSERT failed, 'tiktok with shortcode';
   failed := false; BEGIN PERFORM import_source_for(sp, 'instagram', 'https://evil.com/p/AAAAA/', 'AAAAA', false); EXCEPTION WHEN others THEN failed := SQLERRM = 'invalid_source'; END; ASSERT failed, 'bad host';
   failed := false; BEGIN PERFORM import_source_for(sp, 'instagram', 'https://www.instagram.com/stories/AAAAA/', 'AAAAA', false); EXCEPTION WHEN others THEN failed := SQLERRM = 'invalid_source'; END; ASSERT failed, 'bad route';
+
+  -- 8) renewed_at per decision. New indication: A creates (NULL), B renews (tsB); undo B => NULL; undo A => gone.
+  INSERT INTO works(space_id, media_type, tmdb_id, title, created_by) VALUES (sp, 'movie', 999010, 'R', me) RETURNING id INTO w3;
+  INSERT INTO import_candidates(session_id, space_id, created_by, media_type, tmdb_id, title) VALUES (s1, sp, me, 'movie', 999010, 'R') RETURNING id INTO a;
+  INSERT INTO import_candidates(session_id, space_id, created_by, media_type, tmdb_id, title) VALUES (s2, sp, me, 'movie', 999010, 'R') RETURNING id INTO b;
+  PERFORM import_confirm(a, w3, 'fire', false);
+  ASSERT (SELECT renewed_at FROM indications WHERE work_id = w3 AND indicated_by = me) IS NULL, 'A created: renewed_at NULL';
+  PERFORM import_confirm(b, w3, 'like', false);
+  tsb := (SELECT (effects->>'renewed_at')::timestamptz FROM import_candidates WHERE id = b);
+  ASSERT tsb IS NOT NULL AND (SELECT renewed_at FROM indications WHERE work_id = w3 AND indicated_by = me) = tsb, 'B renewed at its own ts';
+  PERFORM import_set_reaction(a, 'neutral');
+  ASSERT (SELECT renewed_at FROM indications WHERE work_id = w3 AND indicated_by = me) = tsb, 'set_reaction does not touch renewal';
+  PERFORM import_undo(b);
+  ASSERT (SELECT renewed_at FROM indications WHERE work_id = w3 AND indicated_by = me) IS NULL, 'undo B with A active -> NULL';
+  PERFORM import_undo(a);
+  ASSERT (SELECT count(*) FROM indications WHERE work_id = w3 AND indicated_by = me) = 0, 'undo A final -> indication gone';
+  -- Order B->A on a new indication: undo A first keeps tsB; undo B final removes.
+  PERFORM import_confirm(a, w3, 'fire', false); PERFORM import_confirm(b, w3, 'like', false);
+  tsb := (SELECT (effects->>'renewed_at')::timestamptz FROM import_candidates WHERE id = b);
+  PERFORM import_undo(a);
+  ASSERT (SELECT renewed_at FROM indications WHERE work_id = w3 AND indicated_by = me) = tsb, 'undo A first keeps tsB';
+  PERFORM import_undo(b);
+  ASSERT (SELECT count(*) FROM indications WHERE work_id = w3 AND indicated_by = me) = 0, 'undo B final -> gone';
+  -- Preexisting indication (baseline 2026-01-01): A renews tsA, B renews tsB; undo B => tsA; undo A => baseline.
+  INSERT INTO indications(space_id, work_id, indicated_by, renewed_at) VALUES (sp, w3, me, '2026-01-01 10:00+00');
+  PERFORM import_confirm(a, w3, 'fire', false);
+  tsa := (SELECT (effects->>'renewed_at')::timestamptz FROM import_candidates WHERE id = a);
+  PERFORM import_confirm(b, w3, 'like', false);
+  tsb := (SELECT (effects->>'renewed_at')::timestamptz FROM import_candidates WHERE id = b);
+  ASSERT tsb > tsa, 'distinct ordered timestamps';
+  PERFORM import_undo(b);
+  ASSERT (SELECT renewed_at FROM indications WHERE work_id = w3 AND indicated_by = me) = tsa, 'undo B -> tsA';
+  PERFORM import_undo(a);
+  ASSERT (SELECT renewed_at FROM indications WHERE work_id = w3 AND indicated_by = me) = '2026-01-01 10:00+00', 'undo A -> baseline';
+  -- External edit wins: A, B, manual renewed_at change, undo B keeps manual value.
+  PERFORM import_confirm(a, w3, 'fire', false); PERFORM import_confirm(b, w3, 'like', false);
+  UPDATE indications SET renewed_at = '2026-05-05 00:00+00' WHERE work_id = w3 AND indicated_by = me;
+  PERFORM import_undo(b);
+  ASSERT (SELECT renewed_at FROM indications WHERE work_id = w3 AND indicated_by = me) = '2026-05-05 00:00+00', 'external renewed_at kept (B)';
+  PERFORM import_undo(a);
+  ASSERT (SELECT renewed_at FROM indications WHERE work_id = w3 AND indicated_by = me) = '2026-05-05 00:00+00', 'external renewed_at kept (A)';
 
   RAISE EXCEPTION 'ALL_ASSERTS_PASSED (rolled back)';
 END $$;
