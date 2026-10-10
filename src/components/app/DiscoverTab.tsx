@@ -67,13 +67,19 @@ export function DiscoverTab({
   const refreshLibrary = () => qc.invalidateQueries({ queryKey: ["library", space.spaceId] });
   const dismissedKey = ["discover-dismissed", space.userId, space.spaceId] as const;
 
+  // Atualizar advances to later TMDB pages (Gemini rerank only runs on page 1), never refetches the same page.
+  const [round, setRound] = useState(1);
   const feed = useInfiniteQuery({
-    queryKey: ["discover", space.spaceId],
-    initialPageParam: 1,
+    queryKey: ["discover", space.spaceId, round],
+    initialPageParam: round,
     staleTime: 5 * 60_000,
+    placeholderData: (prev) => prev,
     queryFn: ({ pageParam }) => fetchFeed({ data: { spaceId: space.spaceId, page: pageParam } }),
-    getNextPageParam: (last, pages) => (last?.hasMore ? pages.length + 1 : undefined),
+    getNextPageParam: (last, pages) => (last?.hasMore && round + pages.length <= 20 ? round + pages.length : undefined),
   });
+  const advance = () => setRound((r) => { const next = r + (feed.data?.pages.length ?? 1); return next > 20 ? 2 : next; });
+  const [actions, setActions] = useState<HTMLElement | null>(null);
+  useEffect(() => setActions(document.getElementById("library-filter-actions")), []);
   const dismissed = useQuery({
     queryKey: dismissedKey,
     queryFn: () => fetchDismissed({ data: { spaceId: space.spaceId } }),
@@ -210,7 +216,7 @@ export function DiscoverTab({
   return (
     <div className="mt-5">
       {burst && <SuperReaction {...burst} onComplete={()=>setBurst(null)} />}
-      <Button variant="ghost" title="Atualizar sugestões" aria-label="Atualizar sugestões" disabled={feed.isFetching} onClick={() => void feed.refetch()} className="mb-3 ml-auto flex min-h-11 gap-2 text-xs"><RotateCcw className={feed.isFetching ? "h-4 w-4 animate-spin" : "h-4 w-4"} />Atualizar</Button>
+      {actions && createPortal(<Button variant="ghost" title="Atualizar sugestões" aria-label="Atualizar sugestões" aria-busy={feed.isFetching} disabled={feed.isFetching} onClick={advance} className="min-h-11 gap-2 px-2 text-xs"><RotateCw className={feed.isFetching ? "h-4 w-4 animate-spin" : "h-4 w-4"} />{feed.isFetching && !feed.isFetchingNextPage ? "Atualizando…" : "Atualizar"}</Button>, actions)}
       {restored.size > 0 && (
         <section className="mb-6" aria-labelledby="restored-title">
           <div className="mb-3 flex items-center justify-between">
@@ -267,7 +273,7 @@ export function DiscoverTab({
             </h2>
             <span className="flex items-center gap-2 text-xs text-muted-foreground">{dismissed.data?.length}<ChevronDown className={`h-4 w-4 transition-transform ${dismissedOpen ? "rotate-180" : ""}`} /></span>
           </Button>
-          <div id="dismissed-list" hidden={!dismissedOpen} className="space-y-1">
+          <AnimatePresence initial={false}>{dismissedOpen && <motion.div key="dismissed" id="dismissed-list" initial={{ height: 0, opacity: 0 }} animate={{ height: "auto", opacity: 1 }} exit={{ height: 0, opacity: 0 }} transition={{ duration: reduceMotion ? 0.01 : 0.26, ease: [0.22, 1, 0.36, 1] }} className="space-y-1 overflow-hidden pb-24">
             {dismissed.data?.map((item) => (
               <div key={k(item)} className="flex min-h-14 items-center gap-3 py-1">
                 <div className="w-9 shrink-0 overflow-hidden rounded-md">
@@ -289,7 +295,7 @@ export function DiscoverTab({
                 </button>
               </div>
             ))}
-          </div>
+          </motion.div>}</AnimatePresence>
         </section>
       )}
 
