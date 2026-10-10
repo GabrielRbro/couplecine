@@ -79,6 +79,7 @@ function useStartSession() {
     if (image) pendingImages.set(sessionId, image);
     await resolve({ data: { sessionId } }).catch(() => null); // deterministic only; failures stay retomáveis
     await navigate({ search: { session: sessionId }, replace: true });
+    return sessionId;
   };
 }
 
@@ -86,6 +87,7 @@ function EntryView() {
   const { data: space } = useSpace();
   const search = Route.useSearch();
   const start = useStartSession();
+  const navigate = Route.useNavigate();
   const qc = useQueryClient();
   const [text, setText] = useState("");
   const [image, setImage] = useState<Img | null>(null);
@@ -100,9 +102,10 @@ function EntryView() {
     // Guard against StrictMode/reload double capture of the same share payload.
     const key = `share:${search.title ?? ""}|${search.text ?? ""}|${search.url ?? ""}`;
     const prior = sessionStorage.getItem(key);
-    if (prior) { void Route.router?.navigate({ to: "/import", search: { session: prior }, replace: true }); return; }
+    if (prior && prior !== "pending") { void navigate({ search: { session: prior }, replace: true }); return; }
+    if (prior) return;
     sessionStorage.setItem(key, "pending");
-    start({ origin: "share", ...(search.title ? { title: search.title } : {}), ...(search.text ? { text: search.text } : {}), ...(search.url ? { url: search.url } : {}) }).catch(() => { sessionStorage.removeItem(key); toast.error("Não foi possível capturar o compartilhamento."); });
+    void start({ origin: "share", ...(search.title ? { title: search.title } : {}), ...(search.text ? { text: search.text } : {}), ...(search.url ? { url: search.url } : {}) }).then((sid) => sessionStorage.setItem(key, sid)).catch(() => { sessionStorage.removeItem(key); toast.error("Não foi possível capturar o compartilhamento."); });
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [space?.spaceId]);
 
