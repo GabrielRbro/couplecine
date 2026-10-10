@@ -520,8 +520,8 @@ function Comparison({
         : await supabase
             .from("ratings")
             .upsert({ work_id: workId, user_id: space.userId, score }, { onConflict: "user_id,work_id" });
-    setSaving(false);
     if (error) {
+      drop();
       toast.error("Não foi possível salvar.");
       return;
     }
@@ -853,11 +853,14 @@ function SeriesBlock({
   onChange: () => void;
 }) {
   const qc = useQueryClient();
+  // Optimistic per-episode overrides: only the tapped card changes; others never re-render as disabled.
+  const [overrides, setOverrides] = useState<Record<string, boolean>>({});
   const seen = new Set(events.map((e) => `${e.season_number}:${e.episode_number}`));
+  for (const [k, v] of Object.entries(overrides)) if (v) seen.add(k); else seen.delete(k);
   const next = nextEpisode(seen, seasons);
   const [season, setSeason] = useState<number | null>(null);
   const [openEp, setOpenEp] = useState<Episode | null>(null);
-  const [saving, setSaving] = useState(false);
+  const saving = false;
   const activeSeason = season ?? (seasons.length ? (next?.s ?? seasons[0]?.seasonNumber ?? 1) : 1);
   const episodeRow = useRef<HTMLDivElement>(null);
   useEffect(() => {
@@ -917,7 +920,9 @@ function SeriesBlock({
     if (watched) after.add(key);
     else after.delete(key);
     const n = nextEpisode(after, seasons);
-    setSaving(true);
+    if (key in overrides) return;
+    setOverrides((o) => ({ ...o, [key]: watched }));
+    const drop = () => setOverrides((o) => { const { [key]: _, ...rest } = o; void _; return rest; });
     const { error } = await supabase.rpc("set_episode_watched", {
       _work: workId,
       _season: s,
@@ -953,7 +958,8 @@ function SeriesBlock({
             },
       ),
     );
-    qc.invalidateQueries({ queryKey: ["work", workId] });
+    await qc.invalidateQueries({ queryKey: ["work", workId] });
+    drop();
   }
   void onChange;
 
@@ -1018,13 +1024,14 @@ function SeriesBlock({
                   <Button
                     variant="ghost"
                     size="icon"
-                    disabled={saving || !workId}
+                    disabled={!workId}
                     aria-label={`${done ? "Desmarcar" : "Marcar"} T${ep.seasonNumber}E${ep.episodeNumber} assistido`}
                     aria-pressed={done}
                     onClick={() => toggle(ep.seasonNumber, ep.episodeNumber, !done)}
-                    className={`absolute right-0 top-0 z-10 h-11 w-11 rounded-full ${done ? "nav-glass text-primary" : "bg-background/40 text-foreground/60"}`}
+                    className="absolute right-0 top-0 z-10 h-11 w-11 rounded-full hover:bg-transparent"
                   >
-                    <Check className="h-4 w-4" />
+                    {/* Small visual mark inside the full 44px touch target. */}
+                    <span className={`grid h-6 w-6 place-items-center rounded-full transition-colors ${done ? "nav-glass text-primary" : "bg-background/50 text-foreground/60"}`}><Check className="h-3.5 w-3.5" /></span>
                   </Button>
                 </div>
               );
