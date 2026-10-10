@@ -39,3 +39,4 @@
 - Search relevance combines bounded title matching with TMDB recognition signals; AI batches exclude previous validated identities and use query/type/batch cache keys to avoid repeat sets.
 - External additions hold an optimistic detail surface and feed/library snapshots until the authoritative work arrives; failures restore all snapshots and the picker.
 - Solo Match keeps the full shuffled pool with a variable initial window, 5–10-card pre-goal extensions and one 0–8 post-goal extension, mirroring the real RPC without writes.
+- Import resolution never fetches user-supplied URLs; only TMDB/IMDb ids are resolved deterministically and AI runs only on explicit action — avoids SSRF and invented titles.

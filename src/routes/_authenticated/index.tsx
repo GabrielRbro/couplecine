@@ -211,11 +211,11 @@ function Home() {
               : "Nenhum ainda"}
           </span>
         </Link>
-        <div className={`${quick} border-dashed`} aria-label="Importações, em breve">
-          <Upload className="h-5 w-5 text-muted-foreground" />
-          <span className="text-xs font-semibold text-muted-foreground">Importações</span>
-          <span className="text-[11px] text-muted-foreground">Em breve</span>
-        </div>
+        <Link to="/import" className={quick}>
+          <Upload className="h-5 w-5 text-primary" />
+          <span className="text-xs font-semibold">Importações</span>
+          <span className="text-[11px] text-muted-foreground">Link, texto ou captura</span>
+        </Link>
       </section>
 
       <section className="mt-7">

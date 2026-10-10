@@ -131,6 +131,7 @@ function LibraryPage() {
           value={kind}
           onChange={setKind}
         />
+        {tab === "disc" && <span id="library-filter-actions" className="ml-auto flex" />}
         {tab !== "disc" && (
           <>
             <Button variant="ghost" aria-label="Ordenar" onClick={()=>setOrdering(true)} className="ml-auto min-h-11 px-2 text-xs">{sort === "title" ? "A–Z" : sort === "year" ? "Ano" : "Recentes"}<ChevronDown className="h-3 w-3" /></Button>
