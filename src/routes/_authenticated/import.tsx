@@ -1,6 +1,7 @@
 import { createFileRoute, Link } from "@tanstack/react-router";
 import { useServerFn } from "@tanstack/react-start";
-import { useQueryClient } from "@tanstack/react-query";
+import { useQuery, useQueryClient } from "@tanstack/react-query";
+import { supabase } from "@/integrations/supabase/client";
 import { useEffect, useRef, useState } from "react";
 import { AnimatePresence, motion, useReducedMotion } from "motion/react";
 import { Check, ChevronLeft, ChevronRight, ImagePlus, LoaderCircle, Search, Sparkles, Undo2, X } from "lucide-react";
@@ -48,6 +49,23 @@ export const Route = createFileRoute("/_authenticated/import")({
     </AppShell>
   ),
 });
+
+/** Client-side canonical form for the saved-links box (no fetch). Keeps ?img_index=N for Instagram carousels. */
+function canonicalSocial(raw: string): { platform: "instagram" | "tiktok"; url: string } | null {
+  let u: URL;
+  try { u = new URL(raw); } catch { return null; }
+  const host = u.hostname.toLowerCase();
+  let m: RegExpMatchArray | null;
+  if ((host === "instagram.com" || host === "www.instagram.com") && (m = u.pathname.match(/^\/(?:[\w.]{1,30}\/)?(?:reel|reels|p)\/([A-Za-z0-9_-]{5,40})\/?$/))) {
+    const n = Number(u.searchParams.get("img_index"));
+    return { platform: "instagram", url: `https://www.instagram.com/p/${m[1]}/${Number.isInteger(n) && n >= 1 && n <= 20 ? `?img_index=${n}` : ""}` };
+  }
+  if ((host === "tiktok.com" || host === "www.tiktok.com" || host === "m.tiktok.com") && (m = u.pathname.match(/^\/@([\w.-]{1,40})\/(video|photo)\/(\d{8,25})\/?$/)))
+    return { platform: "tiktok", url: `https://www.tiktok.com/@${m[1]}/${m[2]}/${m[3]}` };
+  if ((host === "vt.tiktok.com" || host === "vm.tiktok.com") && (m = u.pathname.match(/^\/([A-Za-z0-9]{5,15})\/?$/)))
+    return { platform: "tiktok", url: `https://${host}/${m[1]}/` };
+  return null;
+}
 
 const key = (c: Candidate) => `${c.mediaType}:${c.tmdbId}`;
 
@@ -136,6 +154,38 @@ function ImportPage() {
     }
   }
 
+  const saved = useQuery({
+    queryKey: ["source-posts", space?.spaceId],
+    enabled: !!space?.spaceId,
+    queryFn: async () => (await supabase.from("source_posts").select("id, platform, source_url, created_at").eq("space_id", space!.spaceId!).is("work_id", null).order("created_at", { ascending: false }).limit(20)).data ?? [],
+  });
+  const [saving, setSaving] = useState(false);
+
+  // Explicit action: store recognised post links (max 12) as pending, work_id null. Never creates works/indications.
+  async function saveLinks() {
+    if (!space?.spaceId) return;
+    const found = [...new Map([...text.matchAll(/https?:\/\/[^\s<>"']+/gi)].map((m) => canonicalSocial(m[0])).filter((x): x is NonNullable<typeof x> => !!x).map((x) => [x.url, x])).values()].slice(0, 12);
+    if (!found.length) { setNotice("Nenhum link de post do Instagram ou TikTok reconhecido."); return; }
+    setSaving(true);
+    try {
+      const { data: existing, error: e1 } = await supabase.from("source_posts").select("source_url").eq("space_id", space.spaceId).in("source_url", found.map((f) => f.url));
+      if (e1) throw e1;
+      const have = new Set((existing ?? []).map((r) => r.source_url));
+      const fresh = found.filter((f) => !have.has(f.url));
+      const { data: { user } } = await supabase.auth.getUser();
+      if (fresh.length && user) {
+        const { error } = await supabase.from("source_posts").upsert(fresh.map((f) => ({ space_id: space.spaceId!, platform: f.platform, source_url: f.url, created_by: user.id, work_id: null })), { onConflict: "space_id,source_url", ignoreDuplicates: true });
+        if (error) throw error;
+      }
+      toast.success(`${fresh.length} ${fresh.length === 1 ? "link novo salvo" : "links novos salvos"} · ${found.length - fresh.length} já existiam`);
+      void saved.refetch();
+    } catch {
+      toast.error("Não foi possível salvar os links.");
+    } finally {
+      setSaving(false);
+    }
+  }
+
   async function runCaptions() {
     setCaptionBusy("fetch");
     setNotice(null);
@@ -207,6 +257,7 @@ function ImportPage() {
           <p className="mt-1 text-[11px] text-muted-foreground">Lê só a legenda pública do post. Vídeo e imagens não são analisados.</p>
         </div>
       )}
+      {hasSocial && <Button variant="ghost" className="mt-1 min-h-11 w-full" disabled={saving} onClick={saveLinks}>{saving && <LoaderCircle className="animate-spin" />}Salvar links</Button>}
       {captions.map((c) => (
         <div key={c.canonical} className="mt-3 rounded-2xl border border-border bg-card p-3">
           <p className="text-[11px] text-muted-foreground">Origem: {c.platform === "instagram" ? "Instagram" : "TikTok"}{c.author ? ` · @${c.author}` : ""}</p>
@@ -224,6 +275,20 @@ function ImportPage() {
           <div className="mt-2 flex gap-2 overflow-hidden">{rows.slice(0, 6).map((r) => <div key={key(r.c)} className="w-10 shrink-0"><Poster path={r.c.posterPath} title={r.c.title} /></div>)}</div>
           <Button className="mt-3 min-h-12 w-full" onClick={() => setReviewing(true)}>Revisar {rows.length} {rows.length === 1 ? "obra" : "obras"}</Button>
         </div>
+      )}
+      {(saved.data?.length ?? 0) > 0 && (
+        <section className="mt-5">
+          <h2 className="text-sm font-semibold">Links salvos pendentes</h2>
+          <ul className="mt-2 space-y-1">{saved.data!.map((p) => (
+            <li key={p.id} className="flex items-center gap-2 rounded-xl border border-border px-3 py-1">
+              <div className="min-w-0 flex-1">
+                <a href={p.source_url} target="_blank" rel="noopener noreferrer" className="block truncate text-xs text-primary underline-offset-2 hover:underline">{p.source_url}</a>
+                <p className="text-[11px] text-muted-foreground">{p.platform === "instagram" ? "Instagram" : p.platform === "tiktok" ? "TikTok" : p.platform} · {new Date(p.created_at).toLocaleDateString("pt-BR")}</p>
+              </div>
+              <Button variant="ghost" className="min-h-11 shrink-0 text-xs" onClick={() => { setText(p.source_url); setCaptions([]); setNotice(null); window.scrollTo({ top: 0, behavior: "smooth" }); }}>Analisar</Button>
+            </li>
+          ))}</ul>
+        </section>
       )}
       {notice && <p role="status" className="mt-4 rounded-xl border border-border bg-card p-3 text-sm text-muted-foreground">{notice}</p>}
       {hasText && !notice && <p className="mt-3 text-xs text-muted-foreground">Há texto livre; a IA pode encontrar mais títulos.</p>}
