@@ -80,7 +80,7 @@ async function validate(
   supabase: Parameters<typeof geminiJson>[0]["supabase"],
 ) {
   const found: (TmdbSearchItem | null)[] = [];
-  for (let i = 0; i < Math.min(10, guesses.length); i += 4) found.push(...await Promise.all(guesses.slice(i, i + 4).map((g) => findTitle(g).catch(() => null))));
+  for (let i = 0; i < Math.min(12, guesses.length); i += 4) found.push(...await Promise.all(guesses.slice(i, i + 4).map((g) => findTitle(g).catch(() => null))));
   const { data: existing } = await supabase
     .from("works")
     .select("id, media_type, tmdb_id")
@@ -197,15 +197,29 @@ export const refineMatch = createServerFn({ method: "POST" })
   .handler(async ({ data, context }) => {
     const { data: rows, error } = data.ids.length ? await context.supabase.from("works").select("id,tmdb_id,media_type,title,runtime_minutes,genres,interests(reaction),indications(id)").eq("space_id",data.spaceId).in("id",data.ids) : {data:[],error:null};
     if (error) throw new Error("Não foi possível preparar candidatos.");
-    const eligible = (rows ?? []).filter(w=>w.indications.length && !w.interests.some(i=>i.reaction === "dislike") && (data.kind === "all" || w.media_type === data.kind));
+    const intent=data.query.trim().replace(/\s+/g," ").toLowerCase();
+    const signals=intentSignals(intent);
+    const genreOk=(genres:string[])=>!signals.genres.length || signals.genres.some(g=>genres.includes(g));
+    const eligible = (rows ?? []).filter(w=>w.indications.length && !w.interests.some(i=>i.reaction === "dislike") && (data.kind === "all" || w.media_type === data.kind) && genreOk(w.genres));
+    // With canonical intent signals, an incompatible internal title never returns as fallback.
     const fallback=eligible.map(w=>w.id);
     try {
       const {data:library} = await context.supabase.from("works").select("title,media_type").eq("space_id",data.spaceId).limit(100);
       const compact=eligible.map((w,index)=>({index,title:w.title,type:w.media_type,minutes:w.runtime_minutes,genres:w.genres.slice(0,3)}));
-      const intent=data.query.trim().replace(/\s+/g," ").toLowerCase();
-      const result=await geminiJson<{order?:number[];items?:AiTitleGuess[]}>({supabase:context.supabase,userId:context.userId,feature:"smart_search",system:'Refine os candidatos pela intenção, incluindo origem/idioma, gênero e formato. Retorne JSON {"order":[índices compatíveis em ordem],"items":[{"title":string,"year":number|null,"mediaType":"movie"|"tv"}]}. order só índices fornecidos, nunca IDs. items: 4 títulos reais novos ainda fora da biblioteca, compatíveis com intenção e tipo, MESMO quando não há candidatos internos. Drama coreano deve respeitar origem coreana; terror japonês deve respeitar origem japonesa e gênero. Não invente metadados, votos ou resultados.',parts:[{text:JSON.stringify({intent,kind:data.kind,library:library ?? [],candidates:compact})}],cacheTtlHours:24,cacheSeed:`match-intent-v3:${data.kind}:${intent}:${JSON.stringify(compact)}`});
+      const result=await geminiJson<{order?:number[];items?:AiTitleGuess[]}>({supabase:context.supabase,userId:context.userId,feature:"smart_search",system:'Refine os candidatos pela intenção, incluindo origem/idioma, gênero e formato. Retorne JSON {"order":[índices compatíveis em ordem],"items":[{"title":string,"year":number|null,"mediaType":"movie"|"tv"}]}. order só índices fornecidos e realmente compatíveis, nunca IDs. items: 12 títulos reais novos ainda fora da biblioteca, compatíveis com intenção e tipo, MESMO quando não há candidatos internos. Origem (ex.: coreano, japonês) significa produção/idioma original desse país; gênero deve ser o gênero principal. Não invente metadados, votos ou resultados.',parts:[{text:JSON.stringify({intent,kind:data.kind,library:library ?? [],candidates:compact})}],cacheTtlHours:24,cacheSeed:`match-intent-v4:${data.kind}:${intent}:${JSON.stringify(compact)}`});
       const ids=[...new Set(result.order ?? [])].filter(i=>Number.isInteger(i) && i>=0 && i<eligible.length).flatMap(i=>eligible[i] ? [eligible[i].id] : []);
-      const external=(await validate((result.items ?? []).slice(0,4),data.spaceId,context.supabase)).filter(w=>!w.existingWorkId && (data.kind === "all" || w.mediaType === data.kind)).slice(0,4);
+      const external=(await validate((result.items ?? []).slice(0,12),data.spaceId,context.supabase)).filter(w=>!w.existingWorkId && (data.kind === "all" || w.mediaType === data.kind) && genreOk(w.genres ?? []) && (!signals.languages.length || signals.languages.includes(w.originalLanguage ?? ""))).slice(0,12);
       return {ids:ids.length || external.length ? ids : fallback,external,refined:ids.length>0 || external.length>0,reason:null};
     } catch {return {ids:fallback,external:[],refined:false,reason:"IA indisponível · o Match normal continua disponível."};}
   });
+
+const ORIGINS:[RegExp,string[]][]=[[/corean|coreia|k-?drama/,["ko"]],[/japon|japão|anime|j-?horror/,["ja"]],[/iran/,["fa"]],[/franc[eê]s|fran[çc]a/,["fr"]],[/espanh/,["es"]],[/brasil|nacional/,["pt"]],[/indian|bollywood/,["hi","ta","te"]],[/chin[eê]s|china/,["zh","cn"]],[/italian/,["it"]],[/alem[aã]/,["de"]],[/tailand/,["th"]],[/turc/,["tr"]]];
+const GENRE_WORDS:[RegExp,string[]][]=[[/terror|horror/,["Terror"]],[/com[eé]dia|engra[çc]ad/,["Comédia"]],[/romanc|rom[aâ]ntic/,["Romance"]],[/a[çc][aã]o\b/,["Ação","Ação e Aventura"]],[/fic[çc][aã]o cient|sci-?fi/,["Ficção científica","Sci-Fi e Fantasia"]],[/anima[çc]/,["Animação"]],[/suspense|thriller/,["Thriller","Mistério"]],[/document/,["Documentário"]],[/crime|policial/,["Crime"]],[/fantasia/,["Fantasia","Sci-Fi e Fantasia"]],[/guerra/,["Guerra","Guerra e Política"]]];
+/** Canonical TMDB signals (original_language + genre names) derived from explicit intent words. */
+function intentSignals(intent:string){
+  const languages=ORIGINS.filter(([r])=>r.test(intent)).flatMap(([,l])=>l);
+  const genres=GENRE_WORDS.filter(([r])=>r.test(intent)).flatMap(([,g])=>g);
+  // Horror series on TMDB often only carry Mystery/Sci-Fi; allow those for TV terror.
+  if(genres.includes("Terror")) genres.push("Mistério","Sci-Fi e Fantasia");
+  return {languages,genres};
+}
