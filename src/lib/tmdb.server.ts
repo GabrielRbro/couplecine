@@ -13,6 +13,7 @@ export type TmdbSearchItem = {
   voteAverage?: number;
   voteCount?: number;
   popularity?: number;
+  originalLanguage?: string | null;
 };
 
 // TMDB's fixed genre ids (movie + tv), used to give rerankers real genre signals.
@@ -243,6 +244,7 @@ function mapListItem(item: Json, fallback?: "movie" | "tv"): TmdbSearchItem | nu
     voteAverage: Number(item["vote_average"] ?? 0),
     voteCount: Number(item["vote_count"] ?? 0),
     popularity: Number(item["popularity"] ?? 0),
+    originalLanguage: str(item["original_language"]),
     genres: Array.isArray(item["genre_ids"])
       ? (item["genre_ids"] as unknown[]).map((g) => GENRES[Number(g)]).filter((g): g is string => !!g)
       : [],
@@ -323,4 +325,19 @@ function chooseLogo(images: Json | undefined): string | null {
 }
 export async function fetchLogo(mediaType: "movie" | "tv", id: number) {
   return chooseLogo(await call(`/${mediaType}/${id}/images`, { include_image_language: "pt,en,null" }));
+}
+
+/** Deterministic import lookups: explicit TMDB ids and IMDb ids (via /find). */
+export async function lookupTmdb(mediaType: "movie" | "tv", id: number): Promise<TmdbSearchItem | null> {
+  const data = await call(`/${mediaType}/${id}`).catch(() => null);
+  if (!data) return null;
+  const genres = Array.isArray(data["genres"]) ? (data["genres"] as Json[]).map((g) => Number(g["id"])) : [];
+  return mapListItem({ ...data, genre_ids: genres }, mediaType);
+}
+export async function findImdb(imdbId: string): Promise<TmdbSearchItem[]> {
+  const data = await call(`/find/${imdbId}`, { external_source: "imdb_id" }).catch(() => null);
+  if (!data) return [];
+  const movies = Array.isArray(data["movie_results"]) ? (data["movie_results"] as Json[]) : [];
+  const tv = Array.isArray(data["tv_results"]) ? (data["tv_results"] as Json[]) : [];
+  return [...movies.map((r) => mapListItem(r, "movie")), ...tv.map((r) => mapListItem(r, "tv"))].filter((x): x is TmdbSearchItem => !!x);
 }
