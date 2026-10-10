@@ -6,29 +6,8 @@ const MAX_BYTES = 600_000;
 const TIMEOUT = 6000;
 const UA = "Mozilla/5.0 (compatible; AppCinemaImport/1.0)";
 
-export type SocialRef =
-  | { platform: "instagram"; id: string; canonical: string; imgIndex: number | null }
-  | { platform: "tiktok"; id: string; canonical: string; kind: "video" | "photo" }
-  | { platform: "tiktok-short"; code: string; canonical: string };
-
-export function parseSocial(raw: string): SocialRef | null {
-  let u: URL;
-  try { u = new URL(raw); } catch { return null; }
-  if (u.protocol !== "https:" && u.protocol !== "http:") return null;
-  const host = u.hostname.toLowerCase();
-  let m: RegExpMatchArray | null;
-  if ((host === "instagram.com" || host === "www.instagram.com") && (m = u.pathname.match(/^\/(?:[\w.]{1,30}\/)?(?:reel|reels|p)\/([A-Za-z0-9_-]{5,40})\/?$/)))
-  {
-    // Carousel position the user shared (?img_index=N): kept only as a capture reference, never fetched.
-    const n = Number(u.searchParams.get("img_index"));
-    return { platform: "instagram", id: m[1]!, canonical: `https://www.instagram.com/p/${m[1]}/`, imgIndex: Number.isInteger(n) && n >= 1 && n <= 20 ? n : null };
-  }
-  if ((host === "tiktok.com" || host === "www.tiktok.com" || host === "m.tiktok.com") && (m = u.pathname.match(/^\/@([\w.-]{1,40})\/(video|photo)\/(\d{8,25})\/?$/)))
-    return { platform: "tiktok", id: m[3]!, kind: m[2] as "video" | "photo", canonical: `https://www.tiktok.com/@${m[1]}/${m[2]}/${m[3]}` };
-  if ((host === "vt.tiktok.com" || host === "vm.tiktok.com") && (m = u.pathname.match(/^\/([A-Za-z0-9]{5,15})\/?$/)))
-    return { platform: "tiktok-short", code: m[1]!, canonical: `https://${host}/${m[1]}/` };
-  return null;
-}
+import { parseSocial, type SocialRef } from "./social-url";
+export { parseSocial, type SocialRef };
 
 function allowed(url: string) {
   try {
