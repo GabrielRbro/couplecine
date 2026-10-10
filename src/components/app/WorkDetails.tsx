@@ -931,8 +931,8 @@ function SeriesBlock({
       _next_season: n?.s ?? (null as unknown as number),
       _next_episode: n?.e ?? (null as unknown as number),
     });
-    setSaving(false);
     if (error) {
+      drop();
       toast.error("Não foi possível salvar.");
       return;
     }
