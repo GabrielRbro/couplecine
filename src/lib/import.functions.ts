@@ -43,9 +43,12 @@ async function setStatus(sessionId: string, patch: Record<string, unknown>) {
 }
 
 async function refreshStatus(sessionId: string, fallback: "needs_help" | "interrupted" = "needs_help") {
+  // Never auto-completes: only import_complete (explicit decisions) can set "completed".
   const db = await admin();
-  const { count } = await db.from("import_candidates").select("id", { count: "exact", head: true }).eq("session_id", sessionId);
-  await setStatus(sessionId, { status: (count ?? 0) > 0 ? "review" : fallback });
+  const { count, error } = await db.from("import_candidates").select("id", { count: "exact", head: true }).eq("session_id", sessionId);
+  if (error) throw new Error("Não foi possível atualizar a sessão.");
+  const { error: ue } = await db.from("import_sessions").update({ status: (count ?? 0) > 0 ? "review" : fallback, updated_at: new Date().toISOString() }).eq("id", sessionId).neq("status", "completed");
+  if (ue) throw new Error("Não foi possível atualizar a sessão.");
 }
 
 /** Captures a share/manual entry immediately. title/text/url stay separate (URL never truncated by concatenation).
@@ -97,7 +100,7 @@ export const resolveSession = createServerFn({ method: "POST" })
     for (const t of tmdb.slice(0, 12)) { const item = await lookupTmdb(t.mediaType, t.id); if (item) found.push(item); }
     for (const id of imdb.slice(0, 12)) found.push(...(await findImdb(id)).slice(0, 1));
     if (found.length) await addCandidates(s.id, s.space_id, s.created_by, found, null);
-    await refreshStatus(s.id, s.source_post_ids.length ? "needs_help" : "needs_help");
+    await refreshStatus(s.id);
     return { found: found.length };
   });
 
