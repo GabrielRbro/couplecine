@@ -85,12 +85,12 @@ BEGIN
   BEGIN INSERT INTO import_candidates(session_id, space_id, created_by, source_post_id, media_type, tmdb_id, title) VALUES (s1, sp, me, legacy, 'movie', 1, 'x'); ok := ok || ' | ' || coalesce(('T5 cross-space candidate ALLOWED(bad)')::text, 'NULL'); EXCEPTION WHEN others THEN ok := ok || ' | ' || coalesce(('T5 cross-space candidate rejected')::text, 'NULL'); END;
 
   -- T6: source identity. Partner's legacy /p/ row reused for my /reel/ share, URL corrected, author kept.
-  ok := ok || ' | ' || coalesce((('T6 reel reuses legacy id='||(import_source_for(sp, 'instagram', 'https://www.instagram.com/reel/ZZtest1/', 'ZZtest1', true) = src)))::text, 'NULL');
-  SELECT source_url || ' by partner=' || (created_by = pa) INTO t FROM source_posts WHERE id = src; ok := ok || ' | ' || coalesce((('T6 '||t))::text, 'NULL');
+  ok := ok || ' | T6 reel reuses legacy=' || (import_source_for(sp, 'instagram', 'https://www.instagram.com/reel/ZZtest1/', 'ZZtest1', true) = src);
+  SELECT source_url || ' partnerAuthor=' || (created_by = pa) INTO t FROM source_posts WHERE id = src; ok := ok || ' | T6 ' || t;
   INSERT INTO source_posts(space_id, platform, source_url, created_by) VALUES (sp, 'instagram', 'https://www.instagram.com/p/ZZcar01/?img_index=4', pa) RETURNING id INTO legacy;
-  ok := ok || ' | ' || coalesce((('T6 carousel reuses legacy img_index row='||(import_source_for(sp, 'instagram', 'https://www.instagram.com/p/ZZcar01/', 'ZZcar01', false) = legacy)))::text, 'NULL');
-  ok := ok || ' | ' || coalesce((('T6 new reel stored as '||(SELECT source_url FROM source_posts WHERE id = import_source_for(sp, 'instagram', 'https://www.instagram.com/reel/ZZnew01/', 'ZZnew01', true))))::text, 'NULL');
-  BEGIN PERFORM import_source_for(sp, 'instagram', 'https://evil.com/p/x/', 'x', false); ok := ok || ' | ' || coalesce(('T6 bad url ALLOWED(bad)')::text, 'NULL'); EXCEPTION WHEN others THEN ok := ok || ' | ' || coalesce(('T6 bad url rejected')::text, 'NULL'); END;
-
+  ok := ok || ' | T6 carousel reuse=' || (import_source_for(sp, 'instagram', 'https://www.instagram.com/p/ZZcar01/', 'ZZcar01', false) = legacy);
+  src2 := import_source_for(sp, 'instagram', 'https://www.instagram.com/reel/ZZnew01/', 'ZZnew01', true);
+  SELECT source_url INTO t FROM source_posts WHERE id = src2; ok := ok || ' | T6 new reel=' || coalesce(t, 'NULL');
+  BEGIN PERFORM import_source_for(sp, 'instagram', 'https://evil.com/p/x/', 'x', false); ok := ok || ' | T6 bad url ALLOWED(bad)'; EXCEPTION WHEN others THEN ok := ok || ' | T6 bad url rejected'; END;
   RAISE EXCEPTION 'ROLLBACK_RESULTS:%', ok;
 END $$;
