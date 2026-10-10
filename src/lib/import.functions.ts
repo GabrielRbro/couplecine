@@ -166,8 +166,7 @@ export const correctCandidate = createServerFn({ method: "POST" })
   });
 
 /** Confirm: ensure the TMDB-validated work, then one transactional RPC (indication, reaction, seen, source link, status).
- * Idempotent: a saved candidate returns its stored result. If the RPC fails after this call created the work, the
- * fresh unreferenced work is removed again; the error note says exactly what remained. */
+ * Idempotent: a saved candidate returns its stored result. Works are never deleted on failure; the note says what may remain. */
 export const confirmCandidate = createServerFn({ method: "POST" })
   .middleware([requireSupabaseAuth])
   .inputValidator((d) => z.object({ candidateId: z.string().uuid(), reaction: z.enum(["fire", "like", "neutral"]) }).parse(d))
@@ -186,19 +185,9 @@ export const confirmCandidate = createServerFn({ method: "POST" })
       if (error) throw new Error(error.message);
       return r as { status: string; indication?: "created" | "renewed"; idempotent: boolean };
     } catch (e) {
-      if (!before && workId) {
-        // RPC rolled back, so nothing references the work this call created; remove it only if still unreferenced.
-        const db = await admin();
-        const refs = await Promise.all([
-          db.from("indications").select("id", { count: "exact", head: true }).eq("work_id", workId),
-          db.from("import_work_holds").select("work_id", { count: "exact", head: true }).eq("work_id", workId),
-          db.from("source_post_works").select("id", { count: "exact", head: true }).eq("work_id", workId),
-          db.from("interests").select("id", { count: "exact", head: true }).eq("work_id", workId),
-        ]);
-        const free = refs.every((x) => !x.error && (x.count ?? 0) === 0);
-        const del = free ? await db.from("works").delete().eq("id", workId).eq("created_by", userId) : { error: true };
-        if (del.error) note = "A obra foi criada no catálogo do espaço, mas a indicação não foi gravada. Tente de novo.";
-      }
+      // No automatic deletion: there is no reliable proof this call alone created the work, and keeping an
+      // unreferenced catalog row is safer than deleting someone's earlier work.
+      if (!before && workId) note = "A obra pode ter ficado no catálogo do espaço, mas a indicação não foi gravada. Tente de novo.";
       const { error: ue } = await (await admin()).from("import_candidates").update({ status: "error", note, updated_at: new Date().toISOString() }).eq("id", c.id).in("status", ["pending", "error"]);
       if (ue) console.error("import: failed to mark candidate error", ue.message);
       const msg = e instanceof Error ? e.message : "";

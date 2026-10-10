@@ -13,6 +13,7 @@ import { Button } from "@/components/ui/button";
 import { searchCatalog } from "@/lib/catalog.functions";
 import { analyzeSession, confirmCandidate, correctCandidate, createImportSession, fetchSessionCaptions, resolveSession } from "@/lib/import.functions";
 import { carouselIndexes, parseSocial } from "@/lib/social-url";
+import { shareFallbackText } from "@/lib/share-fallback";
 import { tmdbImage } from "@/lib/format";
 import { useSpace } from "@/lib/space";
 
@@ -111,7 +112,7 @@ function EntryView() {
       .then(() => sessionStorage.removeItem(key))
       .catch(() => {
         sessionStorage.removeItem(key);
-        setText([search.title, search.text, search.url].filter(Boolean).join("\n").slice(0, MAX_TEXT));
+        setText(shareFallbackText({ title: search.title, text: search.text, url: search.url }, MAX_TEXT));
         setShareFailed(true);
         void navigate({ search: {}, replace: true });
         toast.error("Não foi possível guardar o compartilhamento. O conteúdo ficou no campo abaixo.");

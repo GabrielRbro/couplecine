@@ -134,3 +134,10 @@ Concluído: Lotes 1–4, 5A–5D, Rodada 6, MCP.
 - [x] Share: token in-flight (2 min) idempotente; novo compartilhamento = nova sessão; falha devolve o texto ao campo. Fila de sessões paginada.
 - [x] Teste SQL com rollback (`tests/sql/import_rpc_rollback.sql`) executado: T1–T6 passaram. Smoke read-only 390/412: 12 pendentes, sem writes.
 - [ ] Não validado: fluxo completo confirmar/desfazer pela interface com sessão real (evitado para não gravar dados reais); Share Target no Android.
+
+## Importações — revisão final (2425cbf)
+- [x] Migração 0012: desfazer volta à reação da decisão mais recente ainda salva (só se o valor atual é o da importação); `import_set_reaction` reordena decisões.
+- [x] Undo e falha de confirmação nunca apagam obras (heurística removida; metadados órfãos podem ficar no catálogo).
+- [x] `import_source_for` deriva e valida plataforma/shortcode/tipo da URL canônica no SQL; parâmetros forjados e rotas/hosts inválidos são recusados.
+- [x] Falha do Share Target preserva a URL inteira no campo (`shareFallbackText`, testado com 4000 caracteres + URL).
+- [x] `tests/sql/import_rpc_rollback.sql` com ASSERTs e rollback final; executado: todos passaram. Vitest 8/8.
