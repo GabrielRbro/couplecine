@@ -2,6 +2,7 @@ import { createServerFn } from "@tanstack/react-start";
 import { z } from "zod";
 import { requireSupabaseAuth } from "@/integrations/supabase/auth-middleware";
 import { findImdb, lookupTmdb, type TmdbSearchItem } from "./tmdb.server";
+import { fetchCaption, parseSocial } from "./social.server";
 
 const SOCIAL = /(^|\.)(instagram\.com|tiktok\.com|youtube\.com|youtu\.be|x\.com|twitter\.com|facebook\.com|fb\.watch|threads\.net|kwai\.com|pinterest\.com|reddit\.com)$/i;
 
@@ -34,4 +35,16 @@ export const resolveImportText = createServerFn({ method: "POST" })
     // Free text left after removing URLs/ids decides whether an AI analysis could help.
     const rest = text.replace(/https?:\/\/[^\s]+/gi, " ").replace(/\btt\d{7,9}\b/gi, " ").replace(/\s+/g, " ").trim();
     return { items, social, hasText: rest.length >= 3 };
+  });
+
+/** Explicit user action only: fetch public captions for up to 3 recognised Instagram/TikTok posts. */
+export const fetchSocialCaptions = createServerFn({ method: "POST" })
+  .middleware([requireSupabaseAuth])
+  .inputValidator((d) => z.object({ text: z.string().max(4000) }).parse(d))
+  .handler(async ({ data }) => {
+    const refs = [...data.text.matchAll(/https?:\/\/[^\s<>"']+/gi)].map((m) => parseSocial(m[0])).filter((r): r is NonNullable<typeof r> => !!r);
+    const unique = [...new Map(refs.map((r) => [r.canonical, r])).values()].slice(0, 3);
+    const results = [];
+    for (const r of unique) results.push(await fetchCaption(r).catch(() => ({ platform: r.platform === "instagram" ? "instagram" as const : "tiktok" as const, canonical: r.canonical, author: null, caption: null, status: "unavailable" as const, message: "Não foi possível ler este post. Envie uma captura." })));
+    return { results, recognised: unique.length };
   });

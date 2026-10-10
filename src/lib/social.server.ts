@@ -50,9 +50,9 @@ async function boundedFetch(url: string, redirect: "manual" | "error" = "error")
       if (size > MAX_BYTES) { await reader.cancel(); break; }
       chunks.push(value);
     }
-    const buf = new Uint8Array(Math.min(size, MAX_BYTES));
+    const buf = new Uint8Array(chunks.reduce((n, c) => n + c.byteLength, 0));
     let o = 0;
-    for (const c of chunks) { buf.set(c.subarray(0, buf.length - o), o); o += c.byteLength; }
+    for (const c of chunks) { buf.set(c, o); o += c.byteLength; }
     return { res, body: new TextDecoder().decode(buf) };
   } finally { clearTimeout(t); }
 }
