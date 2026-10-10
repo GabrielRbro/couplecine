@@ -358,11 +358,18 @@ export type Database = {
             referencedColumns: ["id"]
           },
           {
-            foreignKeyName: "import_candidates_source_post_id_fkey"
-            columns: ["source_post_id"]
+            foreignKeyName: "import_candidates_session_space_fk"
+            columns: ["session_id", "space_id"]
+            isOneToOne: false
+            referencedRelation: "import_sessions"
+            referencedColumns: ["id", "space_id"]
+          },
+          {
+            foreignKeyName: "import_candidates_source_space_fk"
+            columns: ["source_post_id", "space_id"]
             isOneToOne: false
             referencedRelation: "source_posts"
-            referencedColumns: ["id"]
+            referencedColumns: ["id", "space_id"]
           },
           {
             foreignKeyName: "import_candidates_work_id_fkey"
@@ -376,6 +383,7 @@ export type Database = {
       import_sessions: {
         Row: {
           ai_done: boolean
+          client_token: string | null
           created_at: string
           created_by: string
           id: string
@@ -384,6 +392,7 @@ export type Database = {
           shared_text: string | null
           shared_title: string | null
           shared_url: string | null
+          skipped_source_ids: string[]
           source_post_ids: string[]
           space_id: string
           status: string
@@ -391,6 +400,7 @@ export type Database = {
         }
         Insert: {
           ai_done?: boolean
+          client_token?: string | null
           created_at?: string
           created_by: string
           id?: string
@@ -399,6 +409,7 @@ export type Database = {
           shared_text?: string | null
           shared_title?: string | null
           shared_url?: string | null
+          skipped_source_ids?: string[]
           source_post_ids?: string[]
           space_id: string
           status?: string
@@ -406,6 +417,7 @@ export type Database = {
         }
         Update: {
           ai_done?: boolean
+          client_token?: string | null
           created_at?: string
           created_by?: string
           id?: string
@@ -414,6 +426,7 @@ export type Database = {
           shared_text?: string | null
           shared_title?: string | null
           shared_url?: string | null
+          skipped_source_ids?: string[]
           source_post_ids?: string[]
           space_id?: string
           status?: string
@@ -425,6 +438,72 @@ export type Database = {
             columns: ["space_id"]
             isOneToOne: false
             referencedRelation: "couple_spaces"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+      import_work_holds: {
+        Row: {
+          candidates: string[]
+          import_reaction:
+            | Database["public"]["Enums"]["interest_reaction"]
+            | null
+          import_renewed_at: string | null
+          ind_existed: boolean
+          prev_reaction: Database["public"]["Enums"]["interest_reaction"] | null
+          prev_renewed_at: string | null
+          prev_seen: boolean | null
+          seen_baseline_recorded: boolean
+          seen_candidates: string[]
+          space_id: string
+          user_id: string
+          work_created: boolean
+          work_id: string
+        }
+        Insert: {
+          candidates?: string[]
+          import_reaction?:
+            | Database["public"]["Enums"]["interest_reaction"]
+            | null
+          import_renewed_at?: string | null
+          ind_existed: boolean
+          prev_reaction?:
+            | Database["public"]["Enums"]["interest_reaction"]
+            | null
+          prev_renewed_at?: string | null
+          prev_seen?: boolean | null
+          seen_baseline_recorded?: boolean
+          seen_candidates?: string[]
+          space_id: string
+          user_id: string
+          work_created?: boolean
+          work_id: string
+        }
+        Update: {
+          candidates?: string[]
+          import_reaction?:
+            | Database["public"]["Enums"]["interest_reaction"]
+            | null
+          import_renewed_at?: string | null
+          ind_existed?: boolean
+          prev_reaction?:
+            | Database["public"]["Enums"]["interest_reaction"]
+            | null
+          prev_renewed_at?: string | null
+          prev_seen?: boolean | null
+          seen_baseline_recorded?: boolean
+          seen_candidates?: string[]
+          space_id?: string
+          user_id?: string
+          work_created?: boolean
+          work_id?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "import_work_holds_work_id_fkey"
+            columns: ["work_id"]
+            isOneToOne: false
+            referencedRelation: "works"
             referencedColumns: ["id"]
           },
         ]
@@ -943,6 +1022,7 @@ export type Database = {
           id: string
           source_post_id: string
           space_id: string
+          via_import: boolean
           work_id: string
         }
         Insert: {
@@ -951,6 +1031,7 @@ export type Database = {
           id?: string
           source_post_id: string
           space_id: string
+          via_import?: boolean
           work_id: string
         }
         Update: {
@@ -959,6 +1040,7 @@ export type Database = {
           id?: string
           source_post_id?: string
           space_id?: string
+          via_import?: boolean
           work_id?: string
         }
         Relationships: [
@@ -1267,6 +1349,20 @@ export type Database = {
       import_set_seen: {
         Args: { _candidate: string; _seen: boolean }
         Returns: undefined
+      }
+      import_skip_source: {
+        Args: { _session: string; _skip: boolean; _source: string }
+        Returns: undefined
+      }
+      import_source_for: {
+        Args: {
+          _platform: string
+          _reel: boolean
+          _shortcode: string
+          _space: string
+          _url: string
+        }
+        Returns: string
       }
       import_undo: { Args: { _candidate: string }; Returns: Json }
       match_abandon: { Args: { _session: string }; Returns: undefined }
