@@ -64,6 +64,13 @@
       "when": 1791661572080,
       "tag": "0008_import_sessions_and_source_links",
       "breakpoints": true
+    },
+    {
+      "idx": 9,
+      "version": "7",
+      "when": 1791661692997,
+      "tag": "0009_import_candidates_skip_error",
+      "breakpoints": true
     }
   ]
 }
