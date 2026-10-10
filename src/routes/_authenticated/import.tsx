@@ -212,6 +212,7 @@ function ImportPage() {
           <p className="text-[11px] text-muted-foreground">Origem: {c.platform === "instagram" ? "Instagram" : "TikTok"}{c.author ? ` · @${c.author}` : ""}</p>
           <p className="truncate text-[11px] text-muted-foreground">{c.canonical}</p>
           {c.caption ? <p className="mt-2 max-h-40 overflow-y-auto whitespace-pre-wrap rounded-xl bg-background/60 p-2 text-sm">{c.caption}</p> : null}
+          {c.imgIndex ? <p className="mt-2 text-xs text-primary">Link aponta para a imagem {c.imgIndex} do carrossel. A imagem não é lida: envie a captura dessa imagem.</p> : null}
           {c.message && <p role="status" className="mt-2 text-xs text-muted-foreground">{c.message}</p>}
           {c.caption && <p className="mt-2 text-[11px] text-muted-foreground">A legenda pode não citar as obras. Se for uma lista, Reel ou carrossel, envie capturas.</p>}
           {c.caption && <Button variant="secondary" className="mt-2 min-h-11 w-full" disabled={!!busy || !!captionBusy} onClick={() => analyzeCaption(c)}>{captionBusy === c.canonical ? <LoaderCircle className="animate-spin" /> : <Sparkles />}Analisar legenda com IA</Button>}

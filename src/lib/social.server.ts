@@ -7,7 +7,7 @@ const TIMEOUT = 6000;
 const UA = "Mozilla/5.0 (compatible; AppCinemaImport/1.0)";
 
 export type SocialRef =
-  | { platform: "instagram"; id: string; canonical: string }
+  | { platform: "instagram"; id: string; canonical: string; imgIndex: number | null }
   | { platform: "tiktok"; id: string; canonical: string; kind: "video" | "photo" }
   | { platform: "tiktok-short"; code: string; canonical: string };
 
@@ -18,7 +18,11 @@ export function parseSocial(raw: string): SocialRef | null {
   const host = u.hostname.toLowerCase();
   let m: RegExpMatchArray | null;
   if ((host === "instagram.com" || host === "www.instagram.com") && (m = u.pathname.match(/^\/(?:[\w.]{1,30}\/)?(?:reel|reels|p)\/([A-Za-z0-9_-]{5,40})\/?$/)))
-    return { platform: "instagram", id: m[1]!, canonical: `https://www.instagram.com/p/${m[1]}/` };
+  {
+    // Carousel position the user shared (?img_index=N): kept only as a capture reference, never fetched.
+    const n = Number(u.searchParams.get("img_index"));
+    return { platform: "instagram", id: m[1]!, canonical: `https://www.instagram.com/p/${m[1]}/`, imgIndex: Number.isInteger(n) && n >= 1 && n <= 20 ? n : null };
+  }
   if ((host === "tiktok.com" || host === "www.tiktok.com" || host === "m.tiktok.com") && (m = u.pathname.match(/^\/@([\w.-]{1,40})\/(video|photo)\/(\d{8,25})\/?$/)))
     return { platform: "tiktok", id: m[3]!, kind: m[2] as "video" | "photo", canonical: `https://www.tiktok.com/@${m[1]}/${m[2]}/${m[3]}` };
   if ((host === "vt.tiktok.com" || host === "vm.tiktok.com") && (m = u.pathname.match(/^\/([A-Za-z0-9]{5,15})\/?$/)))
@@ -75,7 +79,7 @@ async function expandShort(start: string): Promise<SocialRef | null> {
 
 const decode = (s: string) => s.replace(/&quot;/g, '"').replace(/&#x27;|&#39;/g, "'").replace(/&amp;/g, "&").replace(/&lt;/g, "<").replace(/&gt;/g, ">").replace(/&#(\d+);/g, (_, n) => String.fromCodePoint(Number(n))).replace(/&#x([0-9a-f]+);/gi, (_, n) => String.fromCodePoint(parseInt(n, 16)));
 
-export type CaptionResult = { platform: "instagram" | "tiktok"; canonical: string; author: string | null; caption: string | null; status: "ok" | "blocked" | "unavailable"; message: string | null };
+export type CaptionResult = { platform: "instagram" | "tiktok"; canonical: string; author: string | null; caption: string | null; status: "ok" | "blocked" | "unavailable"; message: string | null; imgIndex?: number | null };
 
 export async function fetchCaption(ref: SocialRef): Promise<CaptionResult> {
   if (ref.platform === "tiktok-short") {
@@ -93,6 +97,10 @@ export async function fetchCaption(ref: SocialRef): Promise<CaptionResult> {
       return { platform: "tiktok", canonical: ref.canonical, author: j.author_name ?? null, caption, status: "ok", message: caption ? null : "Post sem legenda. Envie uma captura." };
     } catch { return { platform: "tiktok", canonical: ref.canonical, author: null, caption: null, status: "unavailable", message: "Resposta inesperada do TikTok. Envie uma captura." }; }
   }
+  return { ...(await instagram(ref)), imgIndex: ref.imgIndex };
+}
+
+async function instagram(ref: Extract<SocialRef, { platform: "instagram" }>): Promise<CaptionResult> {
   const { res, body } = await boundedFetch(ref.canonical).catch(() => ({ res: null, body: "" }));
   if (!res || res.status === 429 || !res.ok || /accounts\/login/.test(res.url))
     return { platform: "instagram", canonical: ref.canonical, author: null, caption: null, status: "blocked", message: "O Instagram bloqueou a leitura pública (limite ou login). Envie uma captura de tela ou cole a legenda." };

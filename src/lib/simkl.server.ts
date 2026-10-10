@@ -65,12 +65,13 @@ async function saveToken(userId: string, t: TokenResponse, previousRefresh?: str
 export async function exchangeCode(cfg: Config, userId: string, code: string, verifier: string) {
   const t = await tokenRequest(cfg, { grant_type: "authorization_code", code, redirect_uri: cfg.redirectUri, code_verifier: verifier });
   await saveToken(userId, t);
-  const settings = await api<{ user?: { name?: string }; account?: { id?: number } }>(cfg, t.access_token, "/users/settings", "POST").catch(() => null);
+  const settings = await api<{ user?: { name?: string }; account?: { id?: number } }>(cfg, t.access_token, "/users/settings").catch(() => null);
   await setAccount(userId, { status: "connected", external_account_id: settings?.account?.id ? String(settings.account.id) : null, external_username: settings?.user?.name ?? null, sync_status: "never", sync_error: null });
 }
 
 export async function setAccount(userId: string, patch: Record<string, unknown>) {
-  await (await admin()).from("integration_accounts").upsert({ user_id: userId, provider: "simkl", updated_at: new Date().toISOString(), status: "connected", ...patch }, { onConflict: "user_id,provider" });
+  const { error } = await (await admin()).from("integration_accounts").upsert({ user_id: userId, provider: "simkl", updated_at: new Date().toISOString(), status: "connected", ...patch }, { onConflict: "user_id,provider" });
+  if (error) throw new Error("account_store_failed");
 }
 
 async function getToken(cfg: Config, userId: string) {
@@ -147,13 +148,16 @@ const FULL = { extended: "full", episode_watched_at: "yes", include_all_episodes
 
 /** Phase 1 (no snapshot): activities → shows → movies → anime sequential, snapshot only after all succeed. Phase 2: deltas by date_from + deletion diff. Never writes to Simkl. */
 export async function runSync(cfg: Config, userId: string, manual: boolean) {
-  const tok = await getToken(cfg, userId);
-  if (!tok) return { ok: false as const, reason: "not_connected" };
-  const since = tok.last_sync_at ? Date.now() - new Date(tok.last_sync_at).getTime() : Infinity;
-  if (since < (manual ? MANUAL_SYNC_MIN_MS : AUTO_SYNC_MIN_MS)) return { ok: true as const, skipped: true };
-  await (await admin()).rpc("simkl_sync_mark", { _user: userId, _snapshot: null, _attempt: true });
-  await setAccount(userId, { sync_status: "syncing", sync_error: null });
   try {
+    // Refresh can fail (revoked/expired grant): handled below so the error is visible in settings.
+    const tok = await getToken(cfg, userId);
+    if (!tok) return { ok: false as const, reason: "not_connected" };
+    // private last_sync_at = last ATTEMPT (throttle only); integration_accounts.last_sync_at = last SUCCESS.
+    const since = tok.last_sync_at ? Date.now() - new Date(tok.last_sync_at).getTime() : Infinity;
+    if (since < (manual ? MANUAL_SYNC_MIN_MS : AUTO_SYNC_MIN_MS)) return { ok: true as const, skipped: true };
+    const mark = await (await admin()).rpc("simkl_sync_mark", { _user: userId, _snapshot: null, _attempt: true });
+    if (mark.error) throw new Error("store_failed");
+    await setAccount(userId, { sync_status: "syncing", sync_error: null });
     const activities = await api<{ all?: string }>(cfg, tok.access_token, "/sync/activities");
     const snapshot = tok.snapshot as { all?: string } | null;
     let changed = 0;
@@ -171,21 +175,34 @@ export async function runSync(cfg: Config, userId: string, manual: boolean) {
       changed = rows.length;
       // Deletion reconciliation: drop local rows whose Simkl id is no longer in the library.
       const ids = await api<AllItems>(cfg, tok.access_token, "/sync/all-items", "GET", { extended: "simkl_ids_only" });
+      if (!ids) throw new Error("ids_missing"); // never treat an empty/failed id list as "everything deleted"
       const db = await admin();
       for (const type of ["shows", "movies", "anime"] as const) {
-        const keep = new Set((ids?.[type] ?? []).map((e) => String((e.movie ?? e.show)?.ids?.simkl)));
-        const { data: local } = await db.from("external_watch_items").select("id, external_id").eq("user_id", userId).eq("provider", "simkl").eq("external_type", type);
-        const gone = (local ?? []).filter((r) => !keep.has(r.external_id)).map((r) => r.id);
-        if (gone.length) await db.from("external_watch_items").delete().in("id", gone);
+        const keep = new Set((ids[type] ?? []).map((e) => String((e.movie ?? e.show)?.ids?.simkl)));
+        // Page through every local row (PostgREST caps responses at 1000), then delete in small chunks.
+        const gone: string[] = [];
+        for (let from = 0; ; from += 1000) {
+          const { data: page, error } = await db.from("external_watch_items").select("id, external_id").eq("user_id", userId).eq("provider", "simkl").eq("external_type", type).order("id").range(from, from + 999);
+          if (error) throw new Error("store_failed");
+          for (const r of page ?? []) if (!keep.has(r.external_id)) gone.push(r.id);
+          if (!page || page.length < 1000) break;
+        }
+        for (let i = 0; i < gone.length; i += 100) {
+          const { error } = await db.from("external_watch_items").delete().in("id", gone.slice(i, i + 100));
+          if (error) throw new Error("store_failed");
+        }
       }
     }
-    await (await admin()).rpc("simkl_sync_mark", { _user: userId, _snapshot: activities ?? null, _attempt: false });
+    // Snapshot advances only after every pull, write and reconciliation above succeeded.
+    const saved = await (await admin()).rpc("simkl_sync_mark", { _user: userId, _snapshot: activities ?? null, _attempt: false });
+    if (saved.error) throw new Error("store_failed");
     await setAccount(userId, { sync_status: "ok", sync_error: null, last_sync_at: new Date().toISOString() });
     return { ok: true as const, skipped: false, changed };
   } catch (e) {
     const code = e instanceof Error ? e.message : "error";
-    const msg = code === "rate_limited" ? "Simkl limitou as requisições; tente mais tarde." : code === "unauthorized" ? "Acesso ao Simkl expirou ou foi revogado; conecte de novo." : "Falha ao sincronizar com o Simkl.";
-    await setAccount(userId, { sync_status: "error", sync_error: msg, ...(code === "unauthorized" ? { status: "reauth_required" } : {}) });
+    const reauth = code === "unauthorized" || code === "token_400" || code === "token_401";
+    const msg = code === "rate_limited" ? "Simkl limitou as requisições; tente mais tarde." : reauth ? "Acesso ao Simkl expirou ou foi revogado; conecte de novo." : code === "store_failed" || code === "account_store_failed" ? "Falha ao salvar os dados do Simkl; nada foi marcado como sincronizado." : "Falha ao sincronizar com o Simkl.";
+    await setAccount(userId, { sync_status: "error", sync_error: msg, ...(reauth ? { status: "reauth_required" } : {}) }).catch(() => null);
     return { ok: false as const, reason: msg };
   }
 }

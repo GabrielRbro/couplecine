@@ -29,6 +29,21 @@ export function SimklSettings() {
     queryFn: async () => (await supabase.from("external_watch_items").select("external_type, title, year, status, last_watched_at, watched_episodes_count, dated_episodes_count").eq("provider", "simkl").order("last_watched_at", { ascending: false, nullsFirst: false }).limit(1000)).data ?? [],
   });
 
+  // Exact per-type totals via head counts (RLS: own rows only); the item list below is only a sample.
+  const totals = useQuery({
+    queryKey: ["simkl-items", "totals"],
+    enabled: !!account.data,
+    queryFn: async () => {
+      const out: Record<string, number> = {};
+      for (const t of ["movies", "shows", "anime"]) {
+        const { count, error } = await supabase.from("external_watch_items").select("id", { count: "exact", head: true }).eq("provider", "simkl").eq("external_type", t);
+        if (error) throw error;
+        out[t] = count ?? 0;
+      }
+      return out;
+    },
+  });
+
   useEffect(() => {
     const r = new URLSearchParams(window.location.search).get("simkl");
     if (r && RESULT[r]) { (r === "connected" ? toast.success : toast)(RESULT[r]); history.replaceState(history.state, "", window.location.pathname); }
@@ -59,7 +74,8 @@ export function SimklSettings() {
   }, [acc]);
 
   const list = items.data ?? [];
-  const count = (t: string) => list.filter((i) => i.external_type === t).length;
+  const count = (t: string) => totals.data?.[t] ?? 0;
+  const sampled = list.length >= 1000;
   const eps = list.reduce((n, i) => n + (i.watched_episodes_count ?? 0), 0);
   const dated = list.reduce((n, i) => n + i.dated_episodes_count, 0);
 
@@ -85,7 +101,8 @@ export function SimklSettings() {
           {acc.sync_error && <p role="status" className="mt-1 text-xs text-destructive">{acc.sync_error}</p>}
           {list.length > 0 && (
             <>
-              <p className="mt-2 text-xs">{count("movies")} filmes · {count("shows")} séries · {count("anime")} animes · {eps} episódios ({dated} com data real, {Math.max(0, eps - dated)} sem data conhecida)</p>
+              <p className="mt-2 text-xs">{totals.data ? `${count("movies")} filmes · ${count("shows")} séries · ${count("anime")} animes` : "Contando…"}</p>
+              <p className="mt-0.5 text-[11px] text-muted-foreground">Episódios{sampled ? " (amostra dos 1000 itens mais recentes)" : ""}: {eps} assistidos · {dated} com data real · {Math.max(0, eps - dated)} sem data conhecida</p>
               <ul className="mt-2 space-y-1 text-xs text-muted-foreground">{list.slice(0, 5).map((i) => <li key={i.external_type + i.title + i.year} className="truncate">{i.title}{i.year ? ` (${i.year})` : ""} · {i.status ?? "—"}{i.last_watched_at ? ` · ${new Date(i.last_watched_at).toLocaleDateString("pt-BR")}` : ""}</li>)}</ul>
               <p className="mt-2 text-[11px] text-muted-foreground">Prévia individual. Ainda não é atribuída ao casal.</p>
             </>

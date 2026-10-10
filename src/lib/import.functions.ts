@@ -2,7 +2,7 @@ import { createServerFn } from "@tanstack/react-start";
 import { z } from "zod";
 import { requireSupabaseAuth } from "@/integrations/supabase/auth-middleware";
 import { findImdb, lookupTmdb, type TmdbSearchItem } from "./tmdb.server";
-import { fetchCaption, parseSocial } from "./social.server";
+import { fetchCaption, parseSocial, type CaptionResult } from "./social.server";
 
 const SOCIAL = /(^|\.)(instagram\.com|tiktok\.com|youtube\.com|youtu\.be|x\.com|twitter\.com|facebook\.com|fb\.watch|threads\.net|kwai\.com|pinterest\.com|reddit\.com)$/i;
 
@@ -44,7 +44,7 @@ export const fetchSocialCaptions = createServerFn({ method: "POST" })
   .handler(async ({ data }) => {
     const refs = [...data.text.matchAll(/https?:\/\/[^\s<>"']+/gi)].map((m) => parseSocial(m[0])).filter((r): r is NonNullable<typeof r> => !!r);
     const unique = [...new Map(refs.map((r) => [r.canonical, r])).values()].slice(0, 3);
-    const results = [];
-    for (const r of unique) results.push(await fetchCaption(r).catch(() => ({ platform: r.platform === "instagram" ? "instagram" as const : "tiktok" as const, canonical: r.canonical, author: null, caption: null, status: "unavailable" as const, message: "Não foi possível ler este post. Envie uma captura." })));
+    const results: CaptionResult[] = [];
+    for (const r of unique) results.push(await fetchCaption(r).catch(() => ({ platform: r.platform === "instagram" ? "instagram" as const : "tiktok" as const, canonical: r.canonical, author: null, caption: null, status: "unavailable" as const, message: "Não foi possível ler este post. Envie uma captura.", imgIndex: r.platform === "instagram" ? r.imgIndex : null })));
     return { results, recognised: unique.length };
   });
