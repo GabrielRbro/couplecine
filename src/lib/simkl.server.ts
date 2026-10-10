@@ -1,3 +1,5 @@
+import type { Database } from "@/integrations/supabase/types";
+type Insert = Database["public"]["Tables"]["external_watch_items"]["Insert"];
 // Simkl AUTH V2 (OAuth 2.0 + PKCE S256), read-only (media:read). Server-only.
 // Tokens live in private.simkl_tokens behind service-role definer functions; never returned to clients.
 const API = "https://api.simkl.com";
@@ -112,7 +114,7 @@ type Entry = {
 type AllItems = { shows?: Entry[]; movies?: Entry[]; anime?: Entry[] } | null;
 
 function toRows(userId: string, payload: AllItems) {
-  const rows: Record<string, unknown>[] = [];
+  const rows: Insert[] = [];
   for (const [type, list] of [["shows", payload?.shows], ["movies", payload?.movies], ["anime", payload?.anime]] as const) {
     for (const e of list ?? []) {
       const m = e.movie ?? e.show;
@@ -133,7 +135,7 @@ function toRows(userId: string, payload: AllItems) {
   return rows;
 }
 
-async function upsertRows(rows: Record<string, unknown>[]) {
+async function upsertRows(rows: Insert[]) {
   const db = await admin();
   for (let i = 0; i < rows.length; i += 200) {
     const { error } = await db.from("external_watch_items").upsert(rows.slice(i, i + 200), { onConflict: "user_id,provider,external_type,external_id" });

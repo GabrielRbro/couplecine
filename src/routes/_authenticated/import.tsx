@@ -62,9 +62,9 @@ function ImportPage() {
   type Caption = Awaited<ReturnType<typeof fetchSocialCaptions>>["results"][number];
   const [captions, setCaptions] = useState<Caption[]>([]);
   const [captionBusy, setCaptionBusy] = useState<string | null>(null);
-  const hasSocial = /instagram\.com\/(?:[\w.]+\/)?(?:reels?|p)\/|tiktok\.com\/@[^/\s]+\/(?:video|photo)\/|v[tm]\.tiktok\.com\//i.test(text);
   const shared = [search.title, search.text, search.url].filter(Boolean).join("\n").slice(0, MAX_TEXT);
   const [text, setText] = useState(shared);
+  const hasSocial = /instagram\.com\/(?:[\w.]+\/)?(?:reels?|p)\/|tiktok\.com\/@[^/\s]+\/(?:video|photo)\/|v[tm]\.tiktok\.com\//i.test(text);
   const [image, setImage] = useState<{ name: string; mimeType: "image/png" | "image/jpeg" | "image/webp"; base64: string } | null>(null);
   const [busy, setBusy] = useState<null | "resolve" | "ai">(null);
   const [notice, setNotice] = useState<string | null>(null);
