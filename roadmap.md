@@ -89,3 +89,16 @@ Concluído: Lotes 1–4, 5A–5D, Rodada 6, MCP.
 - [x] Capturas dos três tabs conferidas visualmente: mesma altura/posição dos pills, sem corte ou sobreposição na linha.
 - Checks: `tsgo --noEmit` exit 0; build automático OK (16:28:08Z); `git diff --check` limpo. Commits da plataforma: `aaacddc` (linha compartilhada), `e9915e4` (remoção do bloco duplicado), `9728212` (altura mínima) — HEAD final `9728212`.
 - Limites: diferença pré-existente e não alterada — o botão `Atualizar` do Descobrir ocupa uma linha própria e adia a grade cerca de 65px; na aba Assistidos a barra inferior sobrepõe o título do último card. Custo: o conector informou 17,70 créditos de mensagens em modo build no projeto em 8/10 (dia, não desta rodada isolada).
+
+## Rodada 12 — regressões + Importação v1 (base e6a844b)
+- [x] Ficha: backdrop compartilhado agora fica abaixo da página nova (z 1 < root) e o snapshot antigo é ocultado — sem retângulo claro à frente do scrim. Pôster/Back intocados. Não verificado quadro a quadro no Android.
+- [x] Episódios: marca visual 24px dentro do alvo de 44px; estado otimista por episódio, sem desabilitar os demais; rollback em erro. Sem gravação em QA.
+- [x] Match IA: até 12 externos validados no TMDB, filtrados por sinais canônicos (original_language + gênero) derivados da intenção; internos de gênero incompatível descartados inclusive do fallback; cache v4. OFF inalterado. Gemini não chamado nesta rodada (qualidade real não comprovada). Pôsteres já carregam por carta (sem bloqueio global); prefetch extra não adicionado.
+- [x] Resultado Match: X/Back fazem o pôster voltar à grade e o frost sumir antes de fechar.
+- [x] Descobrir: Atualizar na mesma linha dos filtros (medido x284/x306, y210–254, pills centro y232 em 390/412); avança para páginas seguintes do TMDB (rerank Gemini só roda na página 1), mantém lista anterior enquanto carrega, seta horária. Dispensados abre/fecha animado com folga inferior.
+- [x] Importação: rota `/import` (Home → Importações), texto/URL/captura PNG/JPEG/WebP ≤4 MB (não armazenada), rascunho na sessão por 30 min; links TMDB e IDs IMDb resolvidos sem IA; links sociais NÃO são buscados (sem proxy/SSRF) e geram aviso para enviar captura/texto; IA só sob botão via `analyzeImport`. Pilha de revisão um a um com backdrop, pular, 🔥/👍/😐, Já assisti antes, anterior/próxima, corrigir correspondência, rever pulados e resumo; dedupe por mediaType:tmdbId; obra existente avisada (só renova indicação).
+- [x] Share Target GET (title/text/url → /import) no manifest; login preserva destino via `?next=`. Arquivos pelo menu Compartilhar NÃO suportados (exigiria POST multipart). SW inalterado.
+- [x] Smoke autenticado 390/412: TMDB 155 + tt0137523 → pilha 2 cartas; link Instagram → aviso honesto; nenhuma reação tocada, nenhum save, nenhuma IA. `tsgo` exit 0.
+- [ ] Validar no Android instalado: reinstalar PWA após publicar, compartilhar um link de outro app → AppCinema deve aparecer e abrir Importar com o texto.
+- [ ] Suporte por plataforma social só após prova com 8–12 links reais. Origem/link não persistidos (sem modelo aprovado).
+- Integrações pendentes (não iniciadas): Trakt/Simkl exigem conta + OAuth app e decisão de direção do sync; Nuvio sem API/contrato confirmado — nada prometido.
