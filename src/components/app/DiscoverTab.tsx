@@ -1,13 +1,14 @@
 import { markShared } from "@/lib/shared-transition";
 import { Button } from "@/components/ui/button";
 import { Link } from "@tanstack/react-router";
-import { useRef, useState } from "react";
+import { useEffect, useRef, useState } from "react";
+import { createPortal } from "react-dom";
 import { AnimatePresence, motion, useReducedMotion } from "motion/react";
 import { SuperReaction } from "./SuperReaction";
 import { ScoreForm } from "@/components/app/ScorePicker";
 import { useInfiniteQuery, useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { useServerFn } from "@tanstack/react-start";
-import { Check, Film, Plus, RotateCcw, Tv, X, ChevronDown } from "lucide-react";
+import { Check, Film, Plus, RotateCcw, RotateCw, Tv, X, ChevronDown } from "lucide-react";
 import { toast } from "sonner";
 import { AnimatedSheet } from "@/components/app/AnimatedSheet";
 import { EmptyState, Poster } from "@/components/app/MediaCard";
@@ -69,6 +70,7 @@ export function DiscoverTab({
 
   // Atualizar advances to later TMDB pages (Gemini rerank only runs on page 1), never refetches the same page.
   const [round, setRound] = useState(1);
+  const reduceMotion = useReducedMotion();
   const feed = useInfiniteQuery({
     queryKey: ["discover", space.spaceId, round],
     initialPageParam: round,
