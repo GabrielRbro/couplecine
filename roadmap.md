@@ -125,3 +125,12 @@ Concluído: Lotes 1–4, 5A–5D, Rodada 6, MCP.
 - POC Reel Dcbr7-kKd9K (sandbox, 1 leitura): HTTP 200, legenda pública com "The Matrix, 1999" e autor onegoodcut. No worker publicado não medido; bloqueio 429/login cai em "Precisa de ajuda" + captura/legenda.
 - Não validado em execução: as RPCs (o acesso de teste ao banco não tem permissão de executá-las nem de assumir o papel de usuário; sem writes reais). Lógica revisada, testes SQL preparados em /tmp não rodaram.
 - Capturas não são armazenadas; a escolhida na entrada só existe em memória até analisar. Share Target de imagem (POST multipart) não implementado: exigiria rota POST no servidor + armazenamento temporário; pendente.
+
+## Importações — correção de revisão (701e5b9)
+- [x] Migração 0011: holds de proveniência por (obra, usuário) com undo em qualquer ordem; restauração só onde o valor atual ainda é o que a importação gravou; links legados (`via_import=false`) nunca removidos; obra só apagada se criada para a importação e sem referências.
+- [x] `import_confirm` só para pendente/erro em sessão própria aberta; nulls rejeitados; `import_complete` exige ≥1 obra decidida e fontes analisadas ou ignoradas explicitamente (`import_skip_source`).
+- [x] Integridade: FK composta candidato↔sessão↔fonte no mesmo espaço, trigger de fontes da sessão, RLS de candidato com membership, exclusão de fonte bloqueada em sessão aberta.
+- [x] Fonte única por post: `img_index` só referência da sessão; `/reel/` reaproveita linha legada `/p/` pelo shortcode (URL corrigida, autoria mantida).
+- [x] Share: token in-flight (2 min) idempotente; novo compartilhamento = nova sessão; falha devolve o texto ao campo. Fila de sessões paginada.
+- [x] Teste SQL com rollback (`tests/sql/import_rpc_rollback.sql`) executado: T1–T6 passaram. Smoke read-only 390/412: 12 pendentes, sem writes.
+- [ ] Não validado: fluxo completo confirmar/desfazer pela interface com sessão real (evitado para não gravar dados reais); Share Target no Android.
