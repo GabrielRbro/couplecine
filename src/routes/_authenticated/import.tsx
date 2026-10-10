@@ -22,7 +22,7 @@ const DRAFT_TTL = 30 * 60_000;
 
 type Candidate = { mediaType: "movie" | "tv"; tmdbId: number; title: string; originalTitle: string | null; posterPath: string | null; backdropPath: string | null; year: number | null; existingWorkId: string | null };
 type Status = "pending" | "skipped" | "saving" | "saved" | "error";
-type Row = { c: Candidate; status: Status; note?: string };
+type Row = { c: Candidate; status: Status; note?: string | undefined };
 
 export const Route = createFileRoute("/_authenticated/import")({
   head: () => ({
@@ -129,8 +129,8 @@ function ImportPage() {
 
   function pickImage(file: File | undefined) {
     if (!file) return;
-    if (!["image/png", "image/jpeg", "image/webp"].includes(file.type)) return toast.error("Use PNG, JPEG ou WebP.");
-    if (file.size > MAX_IMAGE) return toast.error("Imagem acima de 4 MB.");
+    if (!["image/png", "image/jpeg", "image/webp"].includes(file.type)) { toast.error("Use PNG, JPEG ou WebP."); return; }
+    if (file.size > MAX_IMAGE) { toast.error("Imagem acima de 4 MB."); return; }
     const reader = new FileReader();
     reader.onload = () => {
       const base64 = String(reader.result).split(",")[1] ?? "";

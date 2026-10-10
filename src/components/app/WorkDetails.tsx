@@ -520,8 +520,8 @@ function Comparison({
         : await supabase
             .from("ratings")
             .upsert({ work_id: workId, user_id: space.userId, score }, { onConflict: "user_id,work_id" });
+    setSaving(false);
     if (error) {
-      drop();
       toast.error("Não foi possível salvar.");
       return;
     }

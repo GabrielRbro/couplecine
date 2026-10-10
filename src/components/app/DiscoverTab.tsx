@@ -6,7 +6,7 @@ import { createPortal } from "react-dom";
 import { AnimatePresence, motion, useReducedMotion } from "motion/react";
 import { SuperReaction } from "./SuperReaction";
 import { ScoreForm } from "@/components/app/ScorePicker";
-import { useInfiniteQuery, useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
+import { keepPreviousData, useInfiniteQuery, useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { useServerFn } from "@tanstack/react-start";
 import { Check, Film, Plus, RotateCcw, RotateCw, Tv, X, ChevronDown } from "lucide-react";
 import { toast } from "sonner";
@@ -75,7 +75,7 @@ export function DiscoverTab({
     queryKey: ["discover", space.spaceId, round],
     initialPageParam: round,
     staleTime: 5 * 60_000,
-    placeholderData: (prev) => prev,
+    placeholderData: keepPreviousData,
     queryFn: ({ pageParam }) => fetchFeed({ data: { spaceId: space.spaceId, page: pageParam } }),
     getNextPageParam: (last, pages) => (last?.hasMore && round + pages.length <= 20 ? round + pages.length : undefined),
   });
