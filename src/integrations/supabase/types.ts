@@ -276,6 +276,159 @@ export type Database = {
         }
         Relationships: []
       }
+      import_candidates: {
+        Row: {
+          backdrop_path: string | null
+          corrected: boolean
+          created_at: string
+          created_by: string
+          effects: Json
+          id: string
+          media_type: Database["public"]["Enums"]["media_type"]
+          note: string | null
+          original_title: string | null
+          position: number
+          poster_path: string | null
+          reaction: Database["public"]["Enums"]["interest_reaction"] | null
+          seen: boolean
+          session_id: string
+          source_post_id: string | null
+          space_id: string
+          status: string
+          title: string
+          tmdb_id: number
+          updated_at: string
+          work_id: string | null
+          year: number | null
+        }
+        Insert: {
+          backdrop_path?: string | null
+          corrected?: boolean
+          created_at?: string
+          created_by: string
+          effects?: Json
+          id?: string
+          media_type: Database["public"]["Enums"]["media_type"]
+          note?: string | null
+          original_title?: string | null
+          position?: number
+          poster_path?: string | null
+          reaction?: Database["public"]["Enums"]["interest_reaction"] | null
+          seen?: boolean
+          session_id: string
+          source_post_id?: string | null
+          space_id: string
+          status?: string
+          title: string
+          tmdb_id: number
+          updated_at?: string
+          work_id?: string | null
+          year?: number | null
+        }
+        Update: {
+          backdrop_path?: string | null
+          corrected?: boolean
+          created_at?: string
+          created_by?: string
+          effects?: Json
+          id?: string
+          media_type?: Database["public"]["Enums"]["media_type"]
+          note?: string | null
+          original_title?: string | null
+          position?: number
+          poster_path?: string | null
+          reaction?: Database["public"]["Enums"]["interest_reaction"] | null
+          seen?: boolean
+          session_id?: string
+          source_post_id?: string | null
+          space_id?: string
+          status?: string
+          title?: string
+          tmdb_id?: number
+          updated_at?: string
+          work_id?: string | null
+          year?: number | null
+        }
+        Relationships: [
+          {
+            foreignKeyName: "import_candidates_session_id_fkey"
+            columns: ["session_id"]
+            isOneToOne: false
+            referencedRelation: "import_sessions"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "import_candidates_source_post_id_fkey"
+            columns: ["source_post_id"]
+            isOneToOne: false
+            referencedRelation: "source_posts"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "import_candidates_work_id_fkey"
+            columns: ["work_id"]
+            isOneToOne: false
+            referencedRelation: "works"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+      import_sessions: {
+        Row: {
+          ai_done: boolean
+          created_at: string
+          created_by: string
+          id: string
+          note: string | null
+          origin: string
+          shared_text: string | null
+          shared_title: string | null
+          shared_url: string | null
+          source_post_ids: string[]
+          space_id: string
+          status: string
+          updated_at: string
+        }
+        Insert: {
+          ai_done?: boolean
+          created_at?: string
+          created_by: string
+          id?: string
+          note?: string | null
+          origin: string
+          shared_text?: string | null
+          shared_title?: string | null
+          shared_url?: string | null
+          source_post_ids?: string[]
+          space_id: string
+          status?: string
+          updated_at?: string
+        }
+        Update: {
+          ai_done?: boolean
+          created_at?: string
+          created_by?: string
+          id?: string
+          note?: string | null
+          origin?: string
+          shared_text?: string | null
+          shared_title?: string | null
+          shared_url?: string | null
+          source_post_ids?: string[]
+          space_id?: string
+          status?: string
+          updated_at?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "import_sessions_space_id_fkey"
+            columns: ["space_id"]
+            isOneToOne: false
+            referencedRelation: "couple_spaces"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
       indications: {
         Row: {
           created_at: string
@@ -783,9 +936,53 @@ export type Database = {
           },
         ]
       }
+      source_post_works: {
+        Row: {
+          created_at: string
+          created_by: string
+          id: string
+          source_post_id: string
+          space_id: string
+          work_id: string
+        }
+        Insert: {
+          created_at?: string
+          created_by: string
+          id?: string
+          source_post_id: string
+          space_id: string
+          work_id: string
+        }
+        Update: {
+          created_at?: string
+          created_by?: string
+          id?: string
+          source_post_id?: string
+          space_id?: string
+          work_id?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "source_post_works_source_post_id_space_id_fkey"
+            columns: ["source_post_id", "space_id"]
+            isOneToOne: false
+            referencedRelation: "source_posts"
+            referencedColumns: ["id", "space_id"]
+          },
+          {
+            foreignKeyName: "source_post_works_work_id_space_id_fkey"
+            columns: ["work_id", "space_id"]
+            isOneToOne: false
+            referencedRelation: "works"
+            referencedColumns: ["id", "space_id"]
+          },
+        ]
+      }
       source_posts: {
         Row: {
           caption: string | null
+          caption_fetched_at: string | null
+          caption_status: string | null
           created_at: string
           created_by: string
           id: string
@@ -796,6 +993,8 @@ export type Database = {
         }
         Insert: {
           caption?: string | null
+          caption_fetched_at?: string | null
+          caption_status?: string | null
           created_at?: string
           created_by: string
           id?: string
@@ -806,6 +1005,8 @@ export type Database = {
         }
         Update: {
           caption?: string | null
+          caption_fetched_at?: string | null
+          caption_status?: string | null
           created_at?: string
           created_by?: string
           id?: string
@@ -1045,6 +1246,29 @@ export type Database = {
       }
       can_create_space: { Args: never; Returns: boolean }
       demo_cleanup: { Args: { _batch: string }; Returns: number }
+      import_complete: { Args: { _session: string }; Returns: string }
+      import_confirm: {
+        Args: {
+          _candidate: string
+          _reaction: Database["public"]["Enums"]["interest_reaction"]
+          _seen: boolean
+          _work: string
+        }
+        Returns: Json
+      }
+      import_dismiss: { Args: { _session: string }; Returns: undefined }
+      import_set_reaction: {
+        Args: {
+          _candidate: string
+          _reaction: Database["public"]["Enums"]["interest_reaction"]
+        }
+        Returns: undefined
+      }
+      import_set_seen: {
+        Args: { _candidate: string; _seen: boolean }
+        Returns: undefined
+      }
+      import_undo: { Args: { _candidate: string }; Returns: Json }
       match_abandon: { Args: { _session: string }; Returns: undefined }
       match_extend: { Args: { _session: string }; Returns: number }
       match_join: { Args: { _session: string }; Returns: number }
