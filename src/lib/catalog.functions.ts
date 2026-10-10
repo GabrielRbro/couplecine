@@ -48,7 +48,7 @@ export const searchCatalog = createServerFn({ method: "POST" })
   });
 
 // Finds the space's single work for (media_type, tmdb_id) or creates it from TMDB.
-async function ensureWork(
+export async function ensureWork(
   supabase: AuthedClient,
   userId: string,
   data: { spaceId: string; mediaType: "movie" | "tv"; tmdbId: number },

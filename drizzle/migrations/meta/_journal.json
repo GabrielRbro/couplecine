@@ -57,6 +57,27 @@
       "when": 1791602115919,
       "tag": "0007_simkl_read_integration",
       "breakpoints": true
+    },
+    {
+      "idx": 8,
+      "version": "7",
+      "when": 1791661572080,
+      "tag": "0008_import_sessions_and_source_links",
+      "breakpoints": true
+    },
+    {
+      "idx": 9,
+      "version": "7",
+      "when": 1791661692997,
+      "tag": "0009_import_candidates_skip_error",
+      "breakpoints": true
+    },
+    {
+      "idx": 10,
+      "version": "7",
+      "when": 1791661894281,
+      "tag": "0010_import_tables_tighten_grants",
+      "breakpoints": true
     }
   ]
 }
