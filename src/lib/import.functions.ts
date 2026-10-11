@@ -14,7 +14,8 @@ import { ensureWork } from "./catalog.functions";
  * Session/candidate rows are written server-side (service role) after verifying the caller's membership;
  * user-facing confirm/undo run as RPCs under the caller's identity.
  */
-const CAPTION_COOLDOWN_MS = 6 * 3600_000;
+// Successful captions are reused indefinitely; failed reads may retry on a new share.
+const FAILED_CAPTION_COOLDOWN_MS = 2 * 60_000;
 type Item = TmdbSearchItem;
 
 async function admin() {
@@ -116,7 +117,7 @@ export const fetchSessionCaptions = createServerFn({ method: "POST" })
     let fetched = 0;
     for (const p of posts ?? []) {
       if (fetched >= 3) break;
-      if (p.caption || (p.caption_fetched_at && Date.now() - new Date(p.caption_fetched_at).getTime() < CAPTION_COOLDOWN_MS)) continue;
+      if (p.caption || (p.caption_fetched_at && Date.now() - new Date(p.caption_fetched_at).getTime() < FAILED_CAPTION_COOLDOWN_MS)) continue;
       const ref = extractSocial(p.source_url, 1)[0];
       if (!ref) continue;
       fetched++;
@@ -149,17 +150,18 @@ export const autoAnalyzeSession = createServerFn({ method: "POST" })
         return analysis.items;
       };
       const { data: posts, error } = await context.supabase.from("source_posts")
-        .select("id, source_url, caption, caption_fetched_at")
+        .select("id, source_url, caption, caption_status, caption_fetched_at")
         .in("id", s.source_post_ids.length ? s.source_post_ids : ["00000000-0000-0000-0000-000000000000"]);
       if (error) throw new Error("Não foi possível consultar os links.");
       const byId = new Map((posts ?? []).map((p) => [p.id, p]));
       const db = await admin();
       let found = 0;
+      let sawCaption = false;
       for (const id of s.source_post_ids.slice(0, 3)) {
         const p = byId.get(id);
         if (!p) continue;
         let caption = p.caption;
-        if (!caption && (!p.caption_fetched_at || Date.now() - new Date(p.caption_fetched_at).getTime() >= CAPTION_COOLDOWN_MS)) {
+        if (!caption && (!p.caption_fetched_at || Date.now() - new Date(p.caption_fetched_at).getTime() >= FAILED_CAPTION_COOLDOWN_MS)) {
           const ref = extractSocial(p.source_url, 1)[0];
           const result = ref ? await fetchCaption(ref).catch(() => null) : null;
           caption = result?.caption ?? null;
@@ -169,6 +171,7 @@ export const autoAnalyzeSession = createServerFn({ method: "POST" })
           if (updateError) throw new Error("Não foi possível guardar a legenda.");
         }
         if (!caption) continue;
+        sawCaption = true;
         const items = await recognize(caption);
         if (items.length) await addCandidates(s.id, s.space_id, s.created_by, items, id);
         found += items.length;
@@ -178,6 +181,10 @@ export const autoAnalyzeSession = createServerFn({ method: "POST" })
         const items = await recognize(freeText.slice(0, 4000));
         if (items.length) await addCandidates(s.id, s.space_id, s.created_by, items, s.source_post_ids.length === 1 ? s.source_post_ids[0]! : null);
         found += items.length;
+      }
+      if (!found && s.source_post_ids.length && !freeText && !sawCaption) {
+        await refreshStatus(s.id);
+        return { ok: false as const, reason: "O Instagram ou TikTok não liberou a descrição deste post. Tente compartilhar novamente em alguns minutos." };
       }
       await setStatus(s.id, { ai_done: true,
         ...(s.source_post_ids.length > 3 ? { note: "A análise automática verificou os três primeiros links deste envio." } : {}),
