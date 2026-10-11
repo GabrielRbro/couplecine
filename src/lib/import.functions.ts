@@ -2,7 +2,7 @@ import { createServerFn } from "@tanstack/react-start";
 import { z } from "zod";
 import { requireSupabaseAuth } from "@/integrations/supabase/auth-middleware";
 import { findImdb, findTitle, lookupTmdb, type TmdbSearchItem } from "./tmdb.server";
-import { fetchCaption } from "./social.server";
+import { fetchCaption, needsCaptionFetch, VIDEO_PROBE_STATUS } from "./social.server";
 import { explicitTitle } from "./explicit-title";
 import { extractSocial, sourceUrl } from "./social-url";
 import { runImportAnalysis } from "./ai.functions";
@@ -14,9 +14,16 @@ import { ensureWork } from "./catalog.functions";
  * Session/candidate rows are written server-side (service role) after verifying the caller's membership;
  * user-facing confirm/undo run as RPCs under the caller's identity.
  */
-// Successful captions are reused indefinitely; failed reads may retry on a new share.
-const FAILED_CAPTION_COOLDOWN_MS = 2 * 60_000;
 type Item = TmdbSearchItem;
+
+function captionPatch(previous: { caption: string | null; caption_status: string | null }, result: Awaited<ReturnType<typeof fetchCaption>> | null) {
+  // A failed enrichment must not erase a description that was already readable.
+  if (!result?.caption) return previous.caption ? null : {
+    caption: null, caption_status: result?.status ?? "unavailable", caption_fetched_at: new Date().toISOString(),
+  };
+  return { caption: result.caption, caption_status: result.videoProbed ? VIDEO_PROBE_STATUS : result.status,
+    caption_fetched_at: new Date().toISOString() };
+}
 
 async function admin() {
   return (await import("@/integrations/supabase/client.server")).supabaseAdmin;
@@ -117,13 +124,16 @@ export const fetchSessionCaptions = createServerFn({ method: "POST" })
     let fetched = 0;
     for (const p of posts ?? []) {
       if (fetched >= 3) break;
-      if (p.caption || (p.caption_fetched_at && Date.now() - new Date(p.caption_fetched_at).getTime() < FAILED_CAPTION_COOLDOWN_MS)) continue;
+      if (!needsCaptionFetch(p)) continue;
       const ref = extractSocial(p.source_url, 1)[0];
       if (!ref) continue;
       fetched++;
       const r = await fetchCaption(ref).catch(() => null);
-      const { error } = await db.from("source_posts").update({ caption: r?.caption ?? null, caption_status: r?.status ?? "unavailable", caption_fetched_at: new Date().toISOString() }).eq("id", p.id);
-      if (error) throw new Error("Não foi possível guardar a legenda lida. Tente de novo.");
+      const patch = captionPatch(p, r);
+      if (patch) {
+        const { error } = await db.from("source_posts").update(patch).eq("id", p.id);
+        if (error) throw new Error("Não foi possível guardar a legenda lida. Tente de novo.");
+      }
     }
     return { fetched };
   });
@@ -161,14 +171,15 @@ export const autoAnalyzeSession = createServerFn({ method: "POST" })
         const p = byId.get(id);
         if (!p) continue;
         let caption = p.caption;
-        if (!caption && (!p.caption_fetched_at || Date.now() - new Date(p.caption_fetched_at).getTime() >= FAILED_CAPTION_COOLDOWN_MS)) {
+        if (needsCaptionFetch(p)) {
           const ref = extractSocial(p.source_url, 1)[0];
           const result = ref ? await fetchCaption(ref).catch(() => null) : null;
-          caption = result?.caption ?? null;
-          const { error: updateError } = await db.from("source_posts").update({
-            caption, caption_status: result?.status ?? "unavailable", caption_fetched_at: new Date().toISOString(),
-          }).eq("id", id);
-          if (updateError) throw new Error("Não foi possível guardar a legenda.");
+          const patch = captionPatch(p, result);
+          if (patch) {
+            caption = patch.caption;
+            const { error: updateError } = await db.from("source_posts").update(patch).eq("id", id);
+            if (updateError) throw new Error("Não foi possível guardar a legenda.");
+          }
         }
         if (!caption) continue;
         sawCaption = true;

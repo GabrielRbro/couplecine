@@ -142,3 +142,9 @@ Concluído: Lotes 1–4, 5A–5D, Rodada 6, MCP.
 - [x] Falha do Share Target preserva a URL inteira no campo (`shareFallbackText`, testado com 4000 caracteres + URL).
 - [x] `tests/sql/import_rpc_rollback.sql` com ASSERTs e rollback final; executado: todos passaram. Vitest 8/8.
 - [x] Migração 0013: desfazer não-final restaura renewed_at da decisão ativa anterior (NULL se só criação); edição externa vence; ASSERTs adicionados e executados com rollback.
+
+## Importação social — camada de fala legendada do TikTok
+- [x] Para descrição sem título/ano explícito, o servidor tenta ler `subtitleInfos` da página do vídeo e até duas faixas WebVTT em hosts de legenda do TikTok validados, com preferência por português brasileiro. Limita tempo e bytes; não segue redirecionamento da faixa. Combina descrição e fala como evidência para a análise existente, seguida de validação no TMDB e confirmação humana.
+- [x] Uma nova sessão pode reler uma descrição ambígua do TikTok que foi salva antes dessa camada. Falha na releitura preserva o texto anterior; uma leitura concluída recebe uma versão em `caption_status` para não repetir a tentativa em cada compartilhamento.
+- [x] Testes com respostas simuladas para link curto, faixa de legenda, faixa indisponível, VTT com nota/repetição e host externo bloqueado; TypeScript e build passam.
+- [ ] Falta medir um post real **sem título na descrição** no servidor publicado e no Android, com obra esperada, trecho obtido e resultado do TMDB. Os links Watcher/Zodíaco validaram apenas o nível de descrição explícita. A camada atual não lê texto gravado nos frames nem transcreve áudio quando não há faixa de legenda; a POC de navegador com contas dedicadas em `tools/social-poc/` segue separada do app.
