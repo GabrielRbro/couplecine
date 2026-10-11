@@ -12,7 +12,18 @@ export const Route = createFileRoute("/api/public/social-check")({
           const result = await fetchCaption(ref);
           return { platform: result.platform, status: result.status, firstLine: result.caption?.split("\n", 1)[0]?.slice(0, 120) ?? null };
         }));
-        return Response.json(results, { headers: { "Cache-Control": "no-store" } });
+        const probeUrls = [
+          "https://r.jina.ai/https://www.instagram.com/reel/DXXrooqjCI9/",
+          "https://r.jina.ai/https://www.tiktok.com/oembed?url=https%3A%2F%2Fvt.tiktok.com%2FZSb3uY7AE%2F",
+        ];
+        const probes = await Promise.all(probeUrls.map(async (url) => {
+          try {
+            const response = await fetch(url, { redirect: "error", headers: { Accept: "text/plain" }, signal: AbortSignal.timeout(20_000) });
+            const body = await response.text();
+            return { status: response.status, bytes: body.length, start: body.slice(0, 140), reader: url.includes("instagram") ? "instagram" : "tiktok" };
+          } catch (error) { return { error: error instanceof Error ? error.message : String(error), reader: url.includes("instagram") ? "instagram" : "tiktok" }; }
+        }));
+        return Response.json({ results, probes }, { headers: { "Cache-Control": "no-store" } });
       },
     },
   },
