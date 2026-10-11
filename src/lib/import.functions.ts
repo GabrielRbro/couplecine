@@ -23,7 +23,7 @@ async function admin() {
 async function ownSession(supabase: { from: (t: "import_sessions") => any }, sessionId: string) {
   const { data, error } = await supabase.from("import_sessions").select("*").eq("id", sessionId).maybeSingle();
   if (error || !data) throw new Error("Sessão não encontrada.");
-  return data as { id: string; space_id: string; created_by: string; status: string; shared_title: string | null; shared_text: string | null; shared_url: string | null; source_post_ids: string[]; ai_done: boolean };
+  return data as { id: string; space_id: string; created_by: string; status: string; origin: string; shared_title: string | null; shared_text: string | null; shared_url: string | null; source_post_ids: string[]; ai_done: boolean };
 }
 
 async function addCandidates(sessionId: string, spaceId: string, userId: string, items: Item[], sourcePostId: string | null) {
@@ -124,6 +124,61 @@ export const fetchSessionCaptions = createServerFn({ method: "POST" })
       if (error) throw new Error("Não foi possível guardar a legenda lida. Tente de novo.");
     }
     return { fetched };
+  });
+
+/** Share Target: capture and recognize without a second tap. This is deliberately bounded to
+ * three sources while the authenticated media worker is still being evaluated. */
+export const autoAnalyzeSession = createServerFn({ method: "POST" })
+  .middleware([requireSupabaseAuth])
+  .inputValidator((d) => z.object({ sessionId: z.string().uuid() }).parse(d))
+  .handler(async ({ data, context }) => {
+    const s = await ownSession(context.supabase, data.sessionId);
+    if (s.status === "completed" || s.ai_done) return { ok: true as const, alreadyDone: true };
+    if (s.origin !== "share") throw new Error("Análise automática disponível apenas para links compartilhados.");
+    await setStatus(s.id, { status: "analyzing" });
+    try {
+      const { data: posts, error } = await context.supabase.from("source_posts")
+        .select("id, source_url, caption, caption_fetched_at")
+        .in("id", s.source_post_ids.length ? s.source_post_ids : ["00000000-0000-0000-0000-000000000000"]);
+      if (error) throw new Error("Não foi possível consultar os links.");
+      const byId = new Map((posts ?? []).map((p) => [p.id, p]));
+      const db = await admin();
+      let found = 0;
+      for (const id of s.source_post_ids.slice(0, 3)) {
+        const p = byId.get(id);
+        if (!p) continue;
+        let caption = p.caption;
+        if (!caption && (!p.caption_fetched_at || Date.now() - new Date(p.caption_fetched_at).getTime() >= CAPTION_COOLDOWN_MS)) {
+          const ref = extractSocial(p.source_url, 1)[0];
+          const result = ref ? await fetchCaption(ref).catch(() => null) : null;
+          caption = result?.caption ?? null;
+          const { error: updateError } = await db.from("source_posts").update({
+            caption, caption_status: result?.status ?? "unavailable", caption_fetched_at: new Date().toISOString(),
+          }).eq("id", id);
+          if (updateError) throw new Error("Não foi possível guardar a legenda.");
+        }
+        if (!caption) continue;
+        const analysis = await runImportAnalysis({ supabase: context.supabase, userId: context.userId, spaceId: s.space_id, text: caption });
+        if (!analysis.ok) throw new Error(analysis.reason);
+        if (analysis.items.length) await addCandidates(s.id, s.space_id, s.created_by, analysis.items, id);
+        found += analysis.items.length;
+      }
+      const freeText = [s.shared_title, s.shared_text].filter(Boolean).join("\n").replace(/https?:\/\/\S+/g, " ").trim();
+      if (freeText && !found) {
+        const analysis = await runImportAnalysis({ supabase: context.supabase, userId: context.userId, spaceId: s.space_id, text: freeText.slice(0, 4000) });
+        if (!analysis.ok) throw new Error(analysis.reason);
+        if (analysis.items.length) await addCandidates(s.id, s.space_id, s.created_by, analysis.items, s.source_post_ids.length === 1 ? s.source_post_ids[0]! : null);
+        found += analysis.items.length;
+      }
+      await setStatus(s.id, { ai_done: true,
+        ...(s.source_post_ids.length > 3 ? { note: "A análise automática verificou os três primeiros links deste envio." } : {}),
+      });
+      await refreshStatus(s.id);
+      return { ok: true as const, found };
+    } catch (e) {
+      await refreshStatus(s.id, "interrupted");
+      return { ok: false as const, reason: e instanceof Error ? e.message : "A análise foi interrompida." };
+    }
   });
 
 /** Explicit tap: Gemini on one source caption (candidates attributed to that source) or on the session text/capture. */

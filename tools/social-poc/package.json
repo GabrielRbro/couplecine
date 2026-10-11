@@ -1,0 +1,12 @@
+{
+  "name": "appcinema-social-poc",
+  "private": true,
+  "type": "module",
+  "scripts": {
+    "login": "node capture.mjs login",
+    "capture": "node capture.mjs capture"
+  },
+  "dependencies": {
+    "playwright": "1.58.2"
+  }
+}
