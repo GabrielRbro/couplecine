@@ -11,7 +11,7 @@ import { BackButton } from "@/components/app/ui";
 import { Poster } from "@/components/app/MediaCard";
 import { Button } from "@/components/ui/button";
 import { searchCatalog } from "@/lib/catalog.functions";
-import { analyzeSession, confirmCandidate, correctCandidate, createImportSession, fetchSessionCaptions, resolveSession } from "@/lib/import.functions";
+import { analyzeSession, autoAnalyzeSession, confirmCandidate, correctCandidate, createImportSession, fetchSessionCaptions, resolveSession } from "@/lib/import.functions";
 import { carouselIndexes, parseSocial } from "@/lib/social-url";
 import { shareFallbackText } from "@/lib/share-fallback";
 import { tmdbImage } from "@/lib/format";
@@ -210,6 +210,10 @@ function SessionView({ id }: { id: string }) {
   const qc = useQueryClient();
   const captionsFn = useServerFn(fetchSessionCaptions);
   const analyzeFn = useServerFn(analyzeSession);
+  const autoFn = useServerFn(autoAnalyzeSession);
+  const autoStarted = useRef(false);
+  const [autoError, setAutoError] = useState<string | null>(null);
+  const [manualHelp, setManualHelp] = useState(false);
   const [image, setImage] = useState<Img | null>(() => pendingImages.get(id) ?? null);
   const [busy, setBusy] = useState<string | null>(null);
   const [notice, setNotice] = useState<string | null>(null);
@@ -236,6 +240,23 @@ function SessionView({ id }: { id: string }) {
   });
   const refresh = () => qc.invalidateQueries({ queryKey: ["import-session", id] });
 
+  useEffect(() => {
+    const s = q.data?.session;
+    if (!s || s.origin !== "share" || s.ai_done || s.status === "completed" || autoStarted.current) return;
+    autoStarted.current = true;
+    void autoFn({ data: { sessionId: id } }).then((result) => {
+      if (!result.ok) setAutoError(result.reason);
+    }).catch((error) => {
+      setAutoError(error instanceof Error ? error.message : "Não foi possível analisar o link.");
+    }).finally(() => { void refresh(); });
+    // The ref prevents another request when the session query refreshes.
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [q.data?.session?.id]);
+
+  useEffect(() => {
+    if (q.data?.session.origin === "share" && (q.data.session.ai_done || autoError) && q.data.cands.length) setReviewing(true);
+  }, [q.data?.session.ai_done, q.data?.cands.length, q.data?.session.origin, autoError]);
+
   async function run(label: string, fn: () => Promise<{ ok?: boolean; reason?: string; found?: number } | unknown>) {
     setBusy(label);
     setNotice(null);
@@ -254,6 +275,11 @@ function SessionView({ id }: { id: string }) {
   if (q.isLoading) return <main className="flex min-h-[60dvh] items-center justify-center"><LoaderCircle className="animate-spin text-muted-foreground" /></main>;
   if (!q.data) return <main className="mx-auto max-w-md px-4 pt-10 text-center text-sm text-muted-foreground">Sessão não encontrada.<Button asChild variant="ghost" className="mt-4 min-h-11 w-full"><Link to="/import" search={{}}>Voltar</Link></Button></main>;
   const { session: s, sources, cands, lib } = q.data;
+
+  if (s.origin === "share" && !s.ai_done && !autoError)
+    return <main role="status" className="flex min-h-[60dvh] items-center justify-center gap-2 px-6 text-center text-sm text-muted-foreground"><LoaderCircle className="animate-spin" />Analisando o link e procurando filmes e séries…</main>;
+  if (s.origin === "share" && !cands.length && !manualHelp)
+    return <main className="mx-auto max-w-md px-4 pt-16 text-center text-sm text-muted-foreground"><p>{autoError ?? "Não consegui identificar uma obra com segurança neste link."}</p><Button variant="secondary" className="mt-5 min-h-11" onClick={() => setManualHelp(true)}>Enviar captura ou texto</Button><Button asChild variant="ghost" className="mt-5 min-h-11"><Link to="/import" search={{}}>Voltar</Link></Button></main>;
 
   if (reviewing && cands.length) return <ReviewStack cands={cands} lib={lib} spaceId={s.space_id} sources={sources} onChanged={refresh} onBack={() => setReviewing(false)} onDone={async () => { const { data, error } = await supabase.rpc("import_complete", { _session: id }); void refresh(); if (error) { toast.error("Não foi possível concluir. Tente de novo."); return; } if (data === "completed") { toast.success("Sessão concluída"); void qc.invalidateQueries({ queryKey: ["library", s.space_id] }); void qc.invalidateQueries({ queryKey: ["import-sessions"] }); void navigate({ search: {}, replace: true }); } else { toast(data === "sources_open" ? "Há links sem obra identificada. Analise ou marque “Ignorar esta fonte”." : data === "empty" ? "Nenhuma obra decidida ainda." : "Ainda há obras pendentes ou com erro."); setReviewing(false); } }} />;
 
