@@ -4,8 +4,6 @@
 const HOSTS = new Set(["www.instagram.com", "instagram.com", "www.tiktok.com", "m.tiktok.com", "vt.tiktok.com", "vm.tiktok.com"]);
 const MAX_BYTES = 600_000;
 const TIMEOUT = 6000;
-const READER_BYTES = 120_000;
-const READER_TIMEOUT = 20_000;
 const UA = "Mozilla/5.0 (compatible; AppCinemaImport/1.0)";
 
 import { parseSocial, type SocialRef } from "./social-url";
@@ -64,57 +62,6 @@ const decode = (s: string) => s.replace(/&quot;/g, '"').replace(/&#x27;|&#39;/g,
 
 export type CaptionResult = { platform: "instagram" | "tiktok"; canonical: string; author: string | null; caption: string | null; status: "ok" | "blocked" | "unavailable"; message: string | null; imgIndex?: number | null };
 
-// Public pages can block the app host even while remaining readable elsewhere. Reader receives
-// only a canonical public post or TikTok's public oEmbed URL assembled from a parsed SocialRef.
-// Its output is untrusted text; titles still have to match a real TMDB work before review.
-async function readerText(target: string) {
-  const ctrl = new AbortController();
-  const timer = setTimeout(() => ctrl.abort(), READER_TIMEOUT);
-  try {
-    const res = await fetch(`https://r.jina.ai/${target}`, { redirect: "manual", signal: ctrl.signal,
-      headers: { Accept: "text/plain" } });
-    if (!res.ok) return null;
-    const reader = res.body?.getReader();
-    if (!reader) return null;
-    const chunks: Uint8Array[] = [];
-    let size = 0;
-    while (true) {
-      const { done, value } = await reader.read();
-      if (done) break;
-      size += value.byteLength;
-      if (size > READER_BYTES) { await reader.cancel(); break; }
-      chunks.push(value);
-    }
-    const body = new Uint8Array(chunks.reduce((n, c) => n + c.byteLength, 0));
-    let offset = 0;
-    for (const chunk of chunks) { body.set(chunk, offset); offset += chunk.byteLength; }
-    return new TextDecoder().decode(body);
-  } catch { return null; }
-  finally { clearTimeout(timer); }
-}
-
-async function readerInstagram(ref: Extract<SocialRef, { platform: "instagram" }>) {
-  const body = await readerText(ref.canonical);
-  if (!body?.includes(`URL Source: ${ref.canonical}`)) return null;
-  const title = body.match(/^Title:\s*[^\r\n]*?on Instagram:\s*["“]?([^\r\n]+)/i)?.[1];
-  const caption = title?.replace(/["”]\s*$/, "").trim().slice(0, 2000);
-  return caption || null;
-}
-
-async function readerTikTok(ref: Extract<SocialRef, { platform: "tiktok" | "tiktok-short" }>) {
-  const target = `https://www.tiktok.com/oembed?url=${encodeURIComponent(ref.canonical)}`;
-  const body = await readerText(target);
-  const raw = body?.split("Markdown Content:\n", 2)[1]?.split("\n", 1)[0];
-  if (!raw) return null;
-  try {
-    const data = JSON.parse(raw) as { title?: unknown; author_name?: unknown; html?: unknown };
-    const id = typeof data.html === "string" ? data.html.match(/data-video-id=\\?"(\d{8,25})/)?.[1] : null;
-    if (!id || (ref.platform === "tiktok" && id !== ref.id) || typeof data.title !== "string") return null;
-    const caption = data.title.trim().slice(0, 2000);
-    return caption ? { caption, author: typeof data.author_name === "string" ? data.author_name : null } : null;
-  } catch { return null; }
-}
-
 async function tiktokPageCaption(ref: Extract<SocialRef, { platform: "tiktok" }>) {
   const { res, body } = await boundedFetch(ref.canonical).catch(() => ({ res: null, body: "" }));
   if (!res?.ok) return null;
@@ -134,11 +81,7 @@ async function tiktokPageCaption(ref: Extract<SocialRef, { platform: "tiktok" }>
 export async function fetchCaption(ref: SocialRef): Promise<CaptionResult> {
   if (ref.platform === "tiktok-short") {
     const full = await expandShort(ref.canonical).catch(() => null);
-    if (!full) {
-      const page = await readerTikTok(ref);
-      if (page) return { platform: "tiktok", canonical: ref.canonical, ...page, status: "ok", message: null };
-      return { platform: "tiktok", canonical: ref.canonical, author: null, caption: null, status: "unavailable", message: "Não foi possível abrir o link curto do TikTok. Envie uma captura ou cole a legenda." };
-    }
+    if (!full) return { platform: "tiktok", canonical: ref.canonical, author: null, caption: null, status: "unavailable", message: "Não foi possível abrir o link curto do TikTok. Envie uma captura ou cole a legenda." };
     return fetchCaption(full);
   }
   if (ref.platform === "tiktok") {
@@ -151,7 +94,7 @@ export async function fetchCaption(ref: SocialRef): Promise<CaptionResult> {
         if (caption) return { platform: "tiktok", canonical: ref.canonical, author: j.author_name ?? null, caption, status: "ok", message: null };
       } catch { /* Try the public post page below. */ }
     }
-    const page = await tiktokPageCaption(ref) ?? await readerTikTok(ref);
+    const page = await tiktokPageCaption(ref);
     if (page) return { platform: "tiktok", canonical: ref.canonical, ...page, status: "ok", message: null };
     return { platform: "tiktok", canonical: ref.canonical, author: null, caption: null, status: res?.status === 429 ? "blocked" : "unavailable", message: ref.kind === "photo" ? "O TikTok não forneceu dados deste post de fotos. Envie capturas das imagens." : "O TikTok não forneceu a legenda deste post. Envie uma captura ou cole a legenda." };
   }
@@ -160,14 +103,11 @@ export async function fetchCaption(ref: SocialRef): Promise<CaptionResult> {
 
 async function instagram(ref: Extract<SocialRef, { platform: "instagram" }>): Promise<CaptionResult> {
   const { res, body } = await boundedFetch(ref.canonical).catch(() => ({ res: null, body: "" }));
-  const blocked = !res || res.status === 429 || !res.ok || /accounts\/login/.test(res.url);
-  const meta = blocked ? null : body.match(/<meta[^>]+property="og:description"[^>]+content="([^"]*)"/i)?.[1] ?? body.match(/<meta[^>]+name="description"[^>]+content="([^"]*)"/i)?.[1];
-  const title = blocked ? null : body.match(/<meta[^>]+property="og:title"[^>]+content="([^"]*)"/i)?.[1];
-  if (!meta) {
-    const caption = await readerInstagram(ref);
-    if (caption) return { platform: "instagram", canonical: ref.canonical, author: null, caption, status: "ok", message: null };
-    return { platform: "instagram", canonical: ref.canonical, author: null, caption: null, status: blocked ? "blocked" : "unavailable", message: "O Instagram não liberou a descrição deste post. Envie uma captura de tela ou cole a legenda." };
-  }
+  if (!res || res.status === 429 || !res.ok || /accounts\/login/.test(res.url))
+    return { platform: "instagram", canonical: ref.canonical, author: null, caption: null, status: "blocked", message: "O Instagram bloqueou a leitura pública (limite ou login). Envie uma captura de tela ou cole a legenda." };
+  const meta = body.match(/<meta[^>]+property="og:description"[^>]+content="([^"]*)"/i)?.[1] ?? body.match(/<meta[^>]+name="description"[^>]+content="([^"]*)"/i)?.[1];
+  const title = body.match(/<meta[^>]+property="og:title"[^>]+content="([^"]*)"/i)?.[1];
+  if (!meta) return { platform: "instagram", canonical: ref.canonical, author: null, caption: null, status: "unavailable", message: "O Instagram não expôs a legenda deste post. Envie uma captura de tela ou cole a legenda." };
   const text = decode(meta);
   // Typical: '12 likes, 3 comments - user on May 1, 2025: "caption"'. Keep the quoted caption when present.
   const quoted = text.match(/:\s*"([\s\S]*)"\.?\s*$/)?.[1];

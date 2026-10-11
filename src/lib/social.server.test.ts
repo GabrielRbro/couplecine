@@ -23,36 +23,33 @@ describe("TikTok public caption fallback", () => {
     expect(fetch.mock.calls.every(([, options]) => options?.redirect === "manual")).toBe(true);
   });
 
-  it("reads an oEmbed through the public reader when the short URL is blocked", async () => {
+  it("expands a short URL and reads its oEmbed title", async () => {
     const short = "https://vt.tiktok.com/ZSb3uY7AE/";
-    const fetch = vi.fn(async (input: string) => {
-      if (input === short) return new Response("Blocked", { status: 403 });
-      if (input.startsWith("https://r.jina.ai/https://www.tiktok.com/oembed?url=")) {
-        return new Response(`Title: \n\nURL Source: ${input}\n\nMarkdown Content:\n${JSON.stringify({ title: "Zodíaco (2007) #filmes", author_name: "Cinema em Questão", html: '<blockquote data-video-id="7673536585962523922">' })}`);
-      }
+    const full = "https://www.tiktok.com/@cinema_em_questao/video/7673536585962523922";
+    const fetch = vi.fn(async (input: string, _options?: RequestInit) => {
+      if (input === short) return new Response(null, { status: 301, headers: { location: `${full}?_t=share` } });
+      if (input.startsWith("https://www.tiktok.com/oembed?url=")) return new Response(JSON.stringify({ title: "Zodíaco (2007) #filmes", author_name: "Cinema em Questão" }));
       throw new Error("Unexpected URL");
     });
     vi.stubGlobal("fetch", fetch);
     const result = await fetchCaption(parseSocial(short)!);
-    expect(result).toMatchObject({ status: "ok", caption: "Zodíaco (2007) #filmes", canonical: short });
+    expect(result).toMatchObject({ status: "ok", caption: "Zodíaco (2007) #filmes", canonical: full });
     expect(fetch).toHaveBeenCalledTimes(2);
+    expect(fetch.mock.calls.every(([, options]) => options?.redirect === "manual")).toBe(true);
   });
 
-  it("ignores a reader response for a different TikTok video", async () => {
-    const full = "https://www.tiktok.com/@cinema_em_questao/video/7673536585962523922";
-    vi.stubGlobal("fetch", vi.fn(async (input: string) => input.startsWith("https://r.jina.ai/")
-      ? new Response(`Markdown Content:\n${JSON.stringify({ title: "Wrong (2007)", html: '<blockquote data-video-id="1234567890123456789">' })}`)
-      : new Response("Blocked", { status: 403 })));
-    expect((await fetchCaption(parseSocial(full)!)).caption).toBeNull();
+  it("does not follow a short-link redirect outside the allowed hosts", async () => {
+    const fetch = vi.fn(async () => new Response(null, { status: 302, headers: { location: "https://example.org/post" } }));
+    vi.stubGlobal("fetch", fetch);
+    expect((await fetchCaption(parseSocial("https://vt.tiktok.com/ZSb3uY7AE/")!)).status).toBe("unavailable");
+    expect(fetch).toHaveBeenCalledTimes(1);
   });
 });
 
-describe("Instagram public caption fallback", () => {
-  it("reads the caption title when direct access is blocked", async () => {
+describe("Instagram public caption", () => {
+  it("reads the description from the public Reel HTML", async () => {
     const reel = "https://www.instagram.com/reel/DXXrooqjCI9/";
-    vi.stubGlobal("fetch", vi.fn(async (input: string) => input.startsWith("https://r.jina.ai/")
-      ? new Response(`Title: Legend Original on Instagram: "Movie Name :- Watcher (2022)\n\nURL Source: ${reel}\n\nMarkdown Content:\n`)
-      : new Response("Login", { status: 403 })));
+    vi.stubGlobal("fetch", vi.fn(async () => new Response('<meta property="og:description" content="Legend Original on Instagram: &quot;Movie Name :- Watcher (2022)&quot;" />')));
     expect(await fetchCaption(parseSocial(reel)!)).toMatchObject({ status: "ok", caption: "Movie Name :- Watcher (2022)" });
   });
 });
