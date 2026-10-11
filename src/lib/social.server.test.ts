@@ -8,7 +8,7 @@ describe("TikTok public caption fallback", () => {
     const full = "https://www.tiktok.com/@cinema_em_questao/video/7673536585962523922";
     const item = { id: "7673536585962523922", desc: "Zodíaco (2007) #filmes #cinema", author: { uniqueId: "cinema_em_questao" } };
     const page = `<script id="__UNIVERSAL_DATA_FOR_REHYDRATION__" type="application/json">${JSON.stringify({ __DEFAULT_SCOPE__: { "webapp.video-detail": { itemInfo: { itemStruct: item } } } })}</script>`;
-    const fetch = vi.fn(async (input: string) => {
+    const fetch = vi.fn(async (input: string, _options?: RequestInit) => {
       if (input.startsWith("https://vt.tiktok.com/")) return new Response(null, { status: 301, headers: { location: `${full}?_t=test` } });
       if (input.includes("/oembed?")) return new Response("Rate limit", { status: 429 });
       if (input === full) return new Response(page, { status: 200 });
@@ -20,6 +20,7 @@ describe("TikTok public caption fallback", () => {
     const result = await fetchCaption(ref!);
     expect(result).toMatchObject({ status: "ok", canonical: full, caption: item.desc, author: "cinema_em_questao" });
     expect(fetch).toHaveBeenCalledTimes(3);
+    expect(fetch.mock.calls.every(([, options]) => options?.redirect === "manual")).toBe(true);
   });
 
   it("reads an oEmbed through the public reader when the short URL is blocked", async () => {

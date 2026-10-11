@@ -18,13 +18,15 @@ function allowed(url: string) {
   } catch { return false; }
 }
 
-async function boundedFetch(url: string, redirect: "manual" | "error" = "error") {
+async function boundedFetch(url: string, readBody = true) {
   if (!allowed(url)) throw new Error("blocked_host");
   const ctrl = new AbortController();
   const t = setTimeout(() => ctrl.abort(), TIMEOUT);
   try {
-    const res = await fetch(url, { redirect, signal: ctrl.signal, headers: { "User-Agent": UA, Accept: "text/html,application/json" } });
-    if (redirect === "manual") return { res, body: "" };
+    // The hosted edge runtime rejects redirect: "error". Manual prevents an unchecked hop;
+    // only expandShort explicitly follows a Location after validating the next host.
+    const res = await fetch(url, { redirect: "manual", signal: ctrl.signal, headers: { "User-Agent": UA, Accept: "text/html,application/json" } });
+    if (!readBody || !res.ok) return { res, body: "" };
     const reader = res.body?.getReader();
     let size = 0;
     const chunks: Uint8Array[] = [];
@@ -46,7 +48,7 @@ async function boundedFetch(url: string, redirect: "manual" | "error" = "error")
 async function expandShort(start: string): Promise<SocialRef | null> {
   let url = start;
   for (let hop = 0; hop < 3; hop++) {
-    const { res } = await boundedFetch(url, "manual");
+    const { res } = await boundedFetch(url, false);
     const loc = res.headers.get("location");
     if (!loc || res.status < 300 || res.status >= 400) return null;
     const next = new URL(loc, url).toString();
@@ -69,7 +71,7 @@ async function readerText(target: string) {
   const ctrl = new AbortController();
   const timer = setTimeout(() => ctrl.abort(), READER_TIMEOUT);
   try {
-    const res = await fetch(`https://r.jina.ai/${target}`, { redirect: "error", signal: ctrl.signal,
+    const res = await fetch(`https://r.jina.ai/${target}`, { redirect: "manual", signal: ctrl.signal,
       headers: { Accept: "text/plain" } });
     if (!res.ok) return null;
     const reader = res.body?.getReader();
