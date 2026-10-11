@@ -174,10 +174,10 @@ export async function runImportAnalysis(opts: { supabase: Parameters<typeof gemi
       supabase: opts.supabase,
       userId: opts.userId,
       feature: "import",
-      system: `Extraia apenas filmes e séries realmente citados ou mostrados no conteúdo recebido (texto, legenda ou captura de tela). Não invente. ${GUESS_SCHEMA_HINT}`,
+      system: `Identifique filmes e séries a partir da evidência recebida (descrição, fala legendada ou imagem). Inclua títulos citados e também uma obra sem nome explícito somente se detalhes específicos de enredo, personagens, elenco ou direção permitirem identificá-la com alta confiança. Se várias obras forem plausíveis, omita a inferência. Preserve todas as obras distintas de listas, até o limite. Não invente títulos ou anos. ${GUESS_SCHEMA_HINT}`,
       parts,
       cacheTtlHours: 24 * 14,
-      cacheSeed: `import-v2:${opts.text ? "t" : ""}${opts.image ? `i:${opts.image.mimeType}` : ""}:${textHash}:${imageHash}`,
+      cacheSeed: `import-v3:${opts.text ? "t" : ""}${opts.image ? `i:${opts.image.mimeType}` : ""}:${textHash}:${imageHash}`,
     });
     return { ok: true as const, items: await validate(res.items ?? [], opts.spaceId, opts.supabase) };
   } catch (e) {

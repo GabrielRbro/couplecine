@@ -7,17 +7,20 @@ const TIMEOUT = 6000;
 const UA = "Mozilla/5.0 (compatible; AppCinemaImport/1.0)";
 
 import { parseSocial, type SocialRef } from "./social-url";
+import { explicitTitle } from "./explicit-title";
 export { parseSocial, type SocialRef };
 
-function allowed(url: string) {
+function allowed(url: string, subtitle = false) {
   try {
     const u = new URL(url);
-    return u.protocol === "https:" && !u.username && !u.password && !u.port && HOSTS.has(u.hostname.toLowerCase());
+    const host = u.hostname.toLowerCase();
+    return u.protocol === "https:" && !u.username && !u.password && !u.port &&
+      (subtitle ? /^v\d+-webapp(?:-[a-z0-9-]+)?\.tiktok\.com$/.test(host) : HOSTS.has(host));
   } catch { return false; }
 }
 
-async function boundedFetch(url: string, readBody = true) {
-  if (!allowed(url)) throw new Error("blocked_host");
+async function boundedFetch(url: string, readBody = true, subtitle = false) {
+  if (!allowed(url, subtitle)) throw new Error("blocked_host");
   const ctrl = new AbortController();
   const t = setTimeout(() => ctrl.abort(), TIMEOUT);
   try {
@@ -32,7 +35,7 @@ async function boundedFetch(url: string, readBody = true) {
       const { done, value } = await reader.read();
       if (done) break;
       size += value.byteLength;
-      if (size > MAX_BYTES) { await reader.cancel(); break; }
+      if (size > (subtitle ? 60_000 : MAX_BYTES)) { await reader.cancel(); throw new Error("body_too_large"); }
       chunks.push(value);
     }
     const buf = new Uint8Array(chunks.reduce((n, c) => n + c.byteLength, 0));
@@ -60,7 +63,50 @@ async function expandShort(start: string): Promise<SocialRef | null> {
 
 const decode = (s: string) => s.replace(/&quot;/g, '"').replace(/&#x27;|&#39;/g, "'").replace(/&amp;/g, "&").replace(/&lt;/g, "<").replace(/&gt;/g, ">").replace(/&#(\d+);/g, (_, n) => String.fromCodePoint(Number(n))).replace(/&#x([0-9a-f]+);/gi, (_, n) => String.fromCodePoint(parseInt(n, 16)));
 
-export type CaptionResult = { platform: "instagram" | "tiktok"; canonical: string; author: string | null; caption: string | null; status: "ok" | "blocked" | "unavailable"; message: string | null; imgIndex?: number | null };
+export type CaptionResult = { platform: "instagram" | "tiktok"; canonical: string; author: string | null; caption: string | null; status: "ok" | "blocked" | "unavailable"; message: string | null; imgIndex?: number | null; videoProbed?: boolean };
+
+export const VIDEO_PROBE_STATUS = "ok_video_probe_v1";
+
+export function needsCaptionFetch(p: { source_url: string; caption: string | null; caption_status: string | null; caption_fetched_at: string | null }, now = Date.now()) {
+  if (p.caption) {
+    const ref = parseSocial(p.source_url);
+    return p.caption_status !== VIDEO_PROBE_STATUS && !!ref && ref.platform !== "instagram" && !explicitTitle(p.caption);
+  }
+  return !p.caption_fetched_at || now - new Date(p.caption_fetched_at).getTime() >= 2 * 60_000;
+}
+
+function vttSpeech(vtt: string) {
+  if (!/^\uFEFF?WEBVTT(?:[ \t]|\r?\n|$)/.test(vtt)) return null;
+  const cues = vtt.replace(/^\uFEFF/, "").split(/\r?\n\s*\r?\n/).slice(1);
+  const lines: string[] = [];
+  for (const cue of cues) {
+    const rows = cue.split(/\r?\n/);
+    if (/^(NOTE|STYLE|REGION)(?:\s|$)/.test(rows[0]?.trim() ?? "")) continue;
+    const timing = rows.findIndex((row) => /^\s*(?:\d{2}:)?\d{2}:\d{2}\.\d{3}\s+-->/.test(row));
+    if (timing < 0) continue;
+    const words = rows.slice(timing + 1).map((row) => decode(row.replace(/<[^>]*>/g, "")).trim()).filter(Boolean).join(" ");
+    if (words && words !== lines.at(-1)) lines.push(words);
+  }
+  const speech = lines.join(" ").slice(0, 2500);
+  return speech || null;
+}
+
+async function tiktokSpeech(video: { subtitleInfos?: unknown }) {
+  type Track = { Format?: unknown; Url?: unknown; Size?: unknown; LanguageCodeName?: unknown };
+  const tracks = Array.isArray(video.subtitleInfos) ? video.subtitleInfos as Track[] : [];
+  const ranked = tracks.filter((t) => t.Format === "webvtt" && typeof t.Url === "string" &&
+    allowed(t.Url, true) && (t.Size == null || (Number(t.Size) > 0 && Number(t.Size) <= 60_000)))
+    .sort((a, b) => {
+      const rank = (t: Track) => /^por-BR$/i.test(String(t.LanguageCodeName)) ? 0 : /^por-/i.test(String(t.LanguageCodeName)) ? 1 : /^eng-/i.test(String(t.LanguageCodeName)) ? 2 : 3;
+      return rank(a) - rank(b);
+    });
+  for (const track of ranked.slice(0, 2)) {
+    const { res, body } = await boundedFetch(String(track.Url), true, true).catch(() => ({ res: null, body: "" }));
+    const speech = res?.ok ? vttSpeech(body) : null;
+    if (speech) return speech;
+  }
+  return null;
+}
 
 async function tiktokPageCaption(ref: Extract<SocialRef, { platform: "tiktok" }>) {
   const { res, body } = await boundedFetch(ref.canonical).catch(() => ({ res: null, body: "" }));
@@ -71,10 +117,11 @@ async function tiktokPageCaption(ref: Extract<SocialRef, { platform: "tiktok" }>
   try {
     const data = JSON.parse(raw);
     const item = data?.__DEFAULT_SCOPE__?.["webapp.video-detail"]?.itemInfo?.itemStruct;
-    if (String(item?.id) !== ref.id || typeof item?.desc !== "string") return null;
-    const caption = item.desc.trim().slice(0, 2000);
-    if (!caption) return null;
-    return { caption, author: typeof item.author?.uniqueId === "string" ? item.author.uniqueId : null };
+    if (String(item?.id) !== ref.id) return null;
+    const caption = typeof item.desc === "string" ? item.desc.trim().slice(0, 2000) : "";
+    const speech = ref.kind === "video" && !explicitTitle(caption) ? await tiktokSpeech(item.video ?? {}) : null;
+    if (!caption && !speech) return null;
+    return { caption, speech, author: typeof item.author?.uniqueId === "string" ? item.author.uniqueId : null };
   } catch { return null; }
 }
 
@@ -87,15 +134,21 @@ export async function fetchCaption(ref: SocialRef): Promise<CaptionResult> {
   if (ref.platform === "tiktok") {
     // Official oEmbed (developers.tiktok.com/docs/en/embed-videos): `title` carries the post caption.
     const { res, body } = await boundedFetch(`https://www.tiktok.com/oembed?url=${encodeURIComponent(ref.canonical)}`).catch(() => ({ res: null, body: "" }));
+    let embedCaption = "";
+    let embedAuthor: string | null = null;
     if (res?.ok) {
       try {
         const j = JSON.parse(body) as { title?: string; author_name?: string };
-        const caption = typeof j.title === "string" ? j.title.trim().slice(0, 2000) : "";
-        if (caption) return { platform: "tiktok", canonical: ref.canonical, author: j.author_name ?? null, caption, status: "ok", message: null };
+        embedCaption = typeof j.title === "string" ? j.title.trim().slice(0, 2000) : "";
+        embedAuthor = j.author_name ?? null;
+        // A clear title needs no video analysis; ambiguous/missing descriptions get native speech.
+        if (embedCaption && explicitTitle(embedCaption)) return { platform: "tiktok", canonical: ref.canonical, author: embedAuthor, caption: embedCaption, status: "ok", message: null };
       } catch { /* Try the public post page below. */ }
     }
     const page = await tiktokPageCaption(ref);
-    if (page) return { platform: "tiktok", canonical: ref.canonical, ...page, status: "ok", message: null };
+    const caption = embedCaption || page?.caption || "";
+    const evidence = [caption, ...(page?.speech ? [`Legendas automáticas do vídeo:\n${page.speech}`] : [])].filter(Boolean).join("\n\n").slice(0, 4000);
+    if (evidence) return { platform: "tiktok", canonical: ref.canonical, author: embedAuthor ?? page?.author ?? null, caption: evidence, status: "ok", message: null, videoProbed: !!page };
     return { platform: "tiktok", canonical: ref.canonical, author: null, caption: null, status: res?.status === 429 ? "blocked" : "unavailable", message: ref.kind === "photo" ? "O TikTok não forneceu dados deste post de fotos. Envie capturas das imagens." : "O TikTok não forneceu a legenda deste post. Envie uma captura ou cole a legenda." };
   }
   return { ...(await instagram(ref)), imgIndex: ref.imgIndex };

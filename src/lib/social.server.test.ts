@@ -1,7 +1,16 @@
 import { afterEach, describe, expect, it, vi } from "vitest";
-import { fetchCaption, parseSocial } from "./social.server";
+import { fetchCaption, needsCaptionFetch, parseSocial, VIDEO_PROBE_STATUS } from "./social.server";
 
 afterEach(() => vi.unstubAllGlobals());
+
+it("rechecks an older ambiguous TikTok description once, preserving the retry cooldown for failed reads", () => {
+  const source_url = "https://www.tiktok.com/@film/video/7673536585962523922";
+  const old = { source_url, caption: "A história desse filme é incrível", caption_status: "ok", caption_fetched_at: "2026-10-01T00:00:00Z" };
+  expect(needsCaptionFetch(old)).toBe(true);
+  expect(needsCaptionFetch({ ...old, caption_status: VIDEO_PROBE_STATUS })).toBe(false);
+  expect(needsCaptionFetch({ ...old, caption: "Zodíaco (2007) #filmes" })).toBe(false);
+  expect(needsCaptionFetch({ ...old, caption: null, caption_status: "blocked", caption_fetched_at: "2026-10-11T20:00:00Z" }, Date.parse("2026-10-11T20:01:00Z"))).toBe(false);
+});
 
 describe("TikTok public caption fallback", () => {
   it("expands a short link and reads the post when oEmbed is rate-limited", async () => {
@@ -43,6 +52,50 @@ describe("TikTok public caption fallback", () => {
     vi.stubGlobal("fetch", fetch);
     expect((await fetchCaption(parseSocial("https://vt.tiktok.com/ZSb3uY7AE/")!)).status).toBe("unavailable");
     expect(fetch).toHaveBeenCalledTimes(1);
+  });
+
+  it("adds native TikTok speech when the post description does not name a work", async () => {
+    const full = "https://www.tiktok.com/@cinema_em_questao/video/7673536585962523922";
+    const vttUrl = "https://v16-webapp.tiktok.com/subtitles/track.vtt?signature=test";
+    const item = { id: "7673536585962523922", desc: "Esse suspense me surpreendeu", video: { subtitleInfos: [
+      { Format: "webvtt", LanguageCodeName: "eng-US", Size: "300", Url: "https://example.org/forbidden" },
+      { Format: "webvtt", LanguageCodeName: "por-PT", Size: "300", Url: vttUrl },
+    ] } };
+    const page = `<script id="__UNIVERSAL_DATA_FOR_REHYDRATION__">${JSON.stringify({ __DEFAULT_SCOPE__: { "webapp.video-detail": { itemInfo: { itemStruct: item } } } })}</script>`;
+    const fetch = vi.fn(async (input: string, options?: RequestInit) => {
+      expect(options?.redirect).toBe("manual");
+      if (input.includes("/oembed?")) return new Response(JSON.stringify({ title: item.desc }));
+      if (input === full) return new Response(page);
+      if (input === vttUrl) return new Response("WEBVTT\n\n00:00:01.000 --> 00:00:02.000\nO filme é Zodíaco\n\n00:00:02.000 --> 00:00:03.000\nde David Fincher\n");
+      throw new Error("Unexpected URL");
+    });
+    vi.stubGlobal("fetch", fetch);
+    const result = await fetchCaption(parseSocial(full)!);
+    expect(result).toMatchObject({ status: "ok", caption: "Esse suspense me surpreendeu\n\nLegendas automáticas do vídeo:\nO filme é Zodíaco de David Fincher" });
+    expect(fetch).toHaveBeenCalledTimes(3);
+  });
+
+  it("uses a second safe track if the preferred one fails, without treating VTT notes as speech", async () => {
+    const full = "https://www.tiktok.com/@film/video/7673536585962523922";
+    const pt = "https://v16-webapp.tiktok.com/subtitles/pt.vtt";
+    const en = "https://v16-webapp.tiktok.com/subtitles/en.vtt";
+    const item = { id: "7673536585962523922", desc: "A história desse filme é incrível", video: { subtitleInfos: [
+      { Format: "webvtt", LanguageCodeName: "por-BR", Url: pt },
+      { Format: "webvtt", LanguageCodeName: "eng-US", Url: en },
+      { Format: "webvtt", LanguageCodeName: "eng-US", Url: "https://example.org/private" },
+    ] } };
+    const page = `<script id="__UNIVERSAL_DATA_FOR_REHYDRATION__">${JSON.stringify({ __DEFAULT_SCOPE__: { "webapp.video-detail": { itemInfo: { itemStruct: item } } } })}</script>`;
+    const fetch = vi.fn(async (input: string) => {
+      if (input.includes("/oembed?")) return new Response(JSON.stringify({ title: item.desc }));
+      if (input === full) return new Response(page);
+      if (input === pt) return new Response("Forbidden", { status: 403 });
+      if (input === en) return new Response("WEBVTT\n\nNOTE this is metadata\nignore this line\n\n00:00:01.000 --> 00:00:02.000\n<v Narrator>In the film Burning</v>\n\n00:00:02.000 --> 00:00:03.000\nIn the film Burning\n");
+      throw new Error("Unexpected URL");
+    });
+    vi.stubGlobal("fetch", fetch);
+    const result = await fetchCaption(parseSocial(full)!);
+    expect(result).toMatchObject({ status: "ok", videoProbed: true, caption: "A história desse filme é incrível\n\nLegendas automáticas do vídeo:\nIn the film Burning" });
+    expect(fetch).toHaveBeenCalledTimes(4);
   });
 });
 
