@@ -18,7 +18,7 @@ export const Route = createFileRoute("/api/public/social-check")({
         ];
         const probes = await Promise.all(probeUrls.map(async (url) => {
           try {
-            const response = await fetch(url, { redirect: "error", headers: { Accept: "text/plain" }, signal: AbortSignal.timeout(20_000) });
+            const response = await fetch(url, { redirect: "manual", headers: { Accept: "text/plain" }, signal: AbortSignal.timeout(20_000) });
             const body = await response.text();
             return { status: response.status, bytes: body.length, start: body.slice(0, 140), reader: url.includes("instagram") ? "instagram" : "tiktok" };
           } catch (error) { return { error: error instanceof Error ? error.message : String(error), reader: url.includes("instagram") ? "instagram" : "tiktok" }; }
