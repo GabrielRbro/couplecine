@@ -1,8 +1,9 @@
 import { createServerFn } from "@tanstack/react-start";
 import { z } from "zod";
 import { requireSupabaseAuth } from "@/integrations/supabase/auth-middleware";
-import { findImdb, lookupTmdb, type TmdbSearchItem } from "./tmdb.server";
+import { findImdb, findTitle, lookupTmdb, type TmdbSearchItem } from "./tmdb.server";
 import { fetchCaption } from "./social.server";
+import { explicitTitle } from "./explicit-title";
 import { extractSocial, sourceUrl } from "./social-url";
 import { runImportAnalysis } from "./ai.functions";
 import { ensureWork } from "./catalog.functions";
@@ -137,6 +138,16 @@ export const autoAnalyzeSession = createServerFn({ method: "POST" })
     if (s.origin !== "share") throw new Error("Análise automática disponível apenas para links compartilhados.");
     await setStatus(s.id, { status: "analyzing" });
     try {
+      const recognize = async (text: string): Promise<Item[]> => {
+        const guess = explicitTitle(text);
+        if (guess) {
+          const item = await findTitle(guess).catch(() => null);
+          if (item) return [item];
+        }
+        const analysis = await runImportAnalysis({ supabase: context.supabase, userId: context.userId, spaceId: s.space_id, text });
+        if (!analysis.ok) throw new Error(analysis.reason);
+        return analysis.items;
+      };
       const { data: posts, error } = await context.supabase.from("source_posts")
         .select("id, source_url, caption, caption_fetched_at")
         .in("id", s.source_post_ids.length ? s.source_post_ids : ["00000000-0000-0000-0000-000000000000"]);
@@ -158,17 +169,15 @@ export const autoAnalyzeSession = createServerFn({ method: "POST" })
           if (updateError) throw new Error("Não foi possível guardar a legenda.");
         }
         if (!caption) continue;
-        const analysis = await runImportAnalysis({ supabase: context.supabase, userId: context.userId, spaceId: s.space_id, text: caption });
-        if (!analysis.ok) throw new Error(analysis.reason);
-        if (analysis.items.length) await addCandidates(s.id, s.space_id, s.created_by, analysis.items, id);
-        found += analysis.items.length;
+        const items = await recognize(caption);
+        if (items.length) await addCandidates(s.id, s.space_id, s.created_by, items, id);
+        found += items.length;
       }
       const freeText = [s.shared_title, s.shared_text].filter(Boolean).join("\n").replace(/https?:\/\/\S+/g, " ").trim();
       if (freeText && !found) {
-        const analysis = await runImportAnalysis({ supabase: context.supabase, userId: context.userId, spaceId: s.space_id, text: freeText.slice(0, 4000) });
-        if (!analysis.ok) throw new Error(analysis.reason);
-        if (analysis.items.length) await addCandidates(s.id, s.space_id, s.created_by, analysis.items, s.source_post_ids.length === 1 ? s.source_post_ids[0]! : null);
-        found += analysis.items.length;
+        const items = await recognize(freeText.slice(0, 4000));
+        if (items.length) await addCandidates(s.id, s.space_id, s.created_by, items, s.source_post_ids.length === 1 ? s.source_post_ids[0]! : null);
+        found += items.length;
       }
       await setStatus(s.id, { ai_done: true,
         ...(s.source_post_ids.length > 3 ? { note: "A análise automática verificou os três primeiros links deste envio." } : {}),

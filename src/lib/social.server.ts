@@ -60,6 +60,22 @@ const decode = (s: string) => s.replace(/&quot;/g, '"').replace(/&#x27;|&#39;/g,
 
 export type CaptionResult = { platform: "instagram" | "tiktok"; canonical: string; author: string | null; caption: string | null; status: "ok" | "blocked" | "unavailable"; message: string | null; imgIndex?: number | null };
 
+async function tiktokPageCaption(ref: Extract<SocialRef, { platform: "tiktok" }>) {
+  const { res, body } = await boundedFetch(ref.canonical).catch(() => ({ res: null, body: "" }));
+  if (!res?.ok) return null;
+  // TikTok's public video page can expose the post description even when oEmbed is rate-limited.
+  const raw = body.match(/<script[^>]*\bid=["']__UNIVERSAL_DATA_FOR_REHYDRATION__["'][^>]*>([\s\S]*?)<\/script>/i)?.[1];
+  if (!raw) return null;
+  try {
+    const data = JSON.parse(raw);
+    const item = data?.__DEFAULT_SCOPE__?.["webapp.video-detail"]?.itemInfo?.itemStruct;
+    if (String(item?.id) !== ref.id || typeof item?.desc !== "string") return null;
+    const caption = item.desc.trim().slice(0, 2000);
+    if (!caption) return null;
+    return { caption, author: typeof item.author?.uniqueId === "string" ? item.author.uniqueId : null };
+  } catch { return null; }
+}
+
 export async function fetchCaption(ref: SocialRef): Promise<CaptionResult> {
   if (ref.platform === "tiktok-short") {
     const full = await expandShort(ref.canonical).catch(() => null);
@@ -69,12 +85,16 @@ export async function fetchCaption(ref: SocialRef): Promise<CaptionResult> {
   if (ref.platform === "tiktok") {
     // Official oEmbed (developers.tiktok.com/docs/en/embed-videos): `title` carries the post caption.
     const { res, body } = await boundedFetch(`https://www.tiktok.com/oembed?url=${encodeURIComponent(ref.canonical)}`).catch(() => ({ res: null, body: "" }));
-    if (!res?.ok) return { platform: "tiktok", canonical: ref.canonical, author: null, caption: null, status: res?.status === 429 ? "blocked" : "unavailable", message: ref.kind === "photo" ? "O TikTok não forneceu dados deste post de fotos. Envie capturas das imagens." : "O TikTok não forneceu a legenda deste post. Envie uma captura ou cole a legenda." };
-    try {
-      const j = JSON.parse(body) as { title?: string; author_name?: string };
-      const caption = (j.title ?? "").trim().slice(0, 2000) || null;
-      return { platform: "tiktok", canonical: ref.canonical, author: j.author_name ?? null, caption, status: "ok", message: caption ? null : "Post sem legenda. Envie uma captura." };
-    } catch { return { platform: "tiktok", canonical: ref.canonical, author: null, caption: null, status: "unavailable", message: "Resposta inesperada do TikTok. Envie uma captura." }; }
+    if (res?.ok) {
+      try {
+        const j = JSON.parse(body) as { title?: string; author_name?: string };
+        const caption = typeof j.title === "string" ? j.title.trim().slice(0, 2000) : "";
+        if (caption) return { platform: "tiktok", canonical: ref.canonical, author: j.author_name ?? null, caption, status: "ok", message: null };
+      } catch { /* Try the public post page below. */ }
+    }
+    const page = await tiktokPageCaption(ref);
+    if (page) return { platform: "tiktok", canonical: ref.canonical, ...page, status: "ok", message: null };
+    return { platform: "tiktok", canonical: ref.canonical, author: null, caption: null, status: res?.status === 429 ? "blocked" : "unavailable", message: ref.kind === "photo" ? "O TikTok não forneceu dados deste post de fotos. Envie capturas das imagens." : "O TikTok não forneceu a legenda deste post. Envie uma captura ou cole a legenda." };
   }
   return { ...(await instagram(ref)), imgIndex: ref.imgIndex };
 }
