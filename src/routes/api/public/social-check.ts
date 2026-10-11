@@ -1,5 +1,7 @@
 import { createFileRoute } from "@tanstack/react-router";
 import { fetchCaption, parseSocial } from "@/lib/social.server";
+import { explicitTitle } from "@/lib/explicit-title";
+import { findTitle } from "@/lib/tmdb.server";
 
 // Temporary read-only production probe for the two public example posts. Remove after verification.
 export const Route = createFileRoute("/api/public/social-check")({
@@ -10,20 +12,12 @@ export const Route = createFileRoute("/api/public/social-check")({
         const results = await Promise.all(urls.map(async (url) => {
           const ref = parseSocial(url)!;
           const result = await fetchCaption(ref);
-          return { platform: result.platform, status: result.status, firstLine: result.caption?.split("\n", 1)[0]?.slice(0, 120) ?? null };
+          const guess = result.caption ? explicitTitle(result.caption) : null;
+          const work = guess ? await findTitle(guess).catch(() => null) : null;
+          return { platform: result.platform, status: result.status, firstLine: result.caption?.split("\n", 1)[0]?.slice(0, 120) ?? null,
+            guess, work: work ? { title: work.title, tmdbId: work.tmdbId, year: work.year } : null };
         }));
-        const probeUrls = [
-          "https://r.jina.ai/https://www.instagram.com/reel/DXXrooqjCI9/",
-          "https://r.jina.ai/https://www.tiktok.com/oembed?url=https%3A%2F%2Fvt.tiktok.com%2FZSb3uY7AE%2F",
-        ];
-        const probes = await Promise.all(probeUrls.map(async (url) => {
-          try {
-            const response = await fetch(url, { redirect: "manual", headers: { Accept: "text/plain" }, signal: AbortSignal.timeout(20_000) });
-            const body = await response.text();
-            return { status: response.status, bytes: body.length, start: body.slice(0, 140), reader: url.includes("instagram") ? "instagram" : "tiktok" };
-          } catch (error) { return { error: error instanceof Error ? error.message : String(error), reader: url.includes("instagram") ? "instagram" : "tiktok" }; }
-        }));
-        return Response.json({ results, probes }, { headers: { "Cache-Control": "no-store" } });
+        return Response.json(results, { headers: { "Cache-Control": "no-store" } });
       },
     },
   },
