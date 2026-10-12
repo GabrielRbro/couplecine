@@ -142,10 +142,10 @@ export const fetchSessionCaptions = createServerFn({ method: "POST" })
  * three sources while the authenticated media worker is still being evaluated. */
 export const autoAnalyzeSession = createServerFn({ method: "POST" })
   .middleware([requireSupabaseAuth])
-  .inputValidator((d) => z.object({ sessionId: z.string().uuid() }).parse(d))
+  .inputValidator((d) => z.object({ sessionId: z.string().uuid(), retry: z.boolean().optional() }).parse(d))
   .handler(async ({ data, context }) => {
     const s = await ownSession(context.supabase, data.sessionId);
-    if (s.status === "completed" || s.ai_done) return { ok: true as const, alreadyDone: true };
+    if (s.status === "completed" || (s.ai_done && !data.retry)) return { ok: true as const, alreadyDone: true };
     if (s.origin !== "share") throw new Error("Análise automática disponível apenas para links compartilhados.");
     await setStatus(s.id, { status: "analyzing" });
     try {
@@ -197,10 +197,11 @@ export const autoAnalyzeSession = createServerFn({ method: "POST" })
         await refreshStatus(s.id);
         return { ok: false as const, reason: "Este post não trouxe descrição ou legenda pública. Confira o link recebido ou envie uma captura do vídeo." };
       }
+      await refreshStatus(s.id);
+      if (!found) return { ok: false as const, reason: "Não consegui identificar uma obra com segurança. Tente novamente ou envie uma captura." };
       await setStatus(s.id, { ai_done: true,
         ...(s.source_post_ids.length > 3 ? { note: "A análise automática verificou os três primeiros links deste envio." } : {}),
       });
-      await refreshStatus(s.id);
       return { ok: true as const, found };
     } catch (e) {
       await refreshStatus(s.id, "interrupted");

@@ -285,6 +285,14 @@ function SessionView({ id }: { id: string }) {
         <p className="text-xs">Link recebido</p>
         <a href={p.source_url} target="_blank" rel="noopener noreferrer" className="mt-1 block break-all text-xs text-primary underline">{p.source_url}</a>
       </div>)}
+      <Button variant="outline" className="mt-5 min-h-11" disabled={!!busy} onClick={async () => {
+        setBusy("retry"); setAutoError(null);
+        try {
+          const result = await autoFn({ data: { sessionId: id, retry: true } });
+          if (!result.ok) setAutoError(result.reason);
+        } catch (e) { setAutoError(e instanceof Error ? e.message : "Não foi possível tentar novamente."); }
+        finally { setBusy(null); void refresh(); }
+      }}>{busy === "retry" ? <LoaderCircle className="animate-spin" /> : <Search />}Tentar novamente</Button>
       <Button variant="secondary" className="mt-5 min-h-11" onClick={() => setManualHelp(true)}>Enviar captura ou texto</Button>
       <Button asChild variant="ghost" className="mt-5 min-h-11"><Link to="/import" search={{}}>Voltar</Link></Button>
     </main>;
