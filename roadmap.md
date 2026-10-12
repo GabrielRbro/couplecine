@@ -1,10 +1,14 @@
 # Roadmap
 
 ## Refinamentos focados — 12/10/2026
-- [ ] Backdrop morph e entrada radial Match sem transição global; poster preservado.
-- [ ] Biblioteca X, Galeria filtros/chips e Back replace, Rever alinhado a Assistidos, Home compacta, ficha sem link Nuvio e PriorWatch slim.
-- [ ] Importações: limite atômico de 3 com confirmação, Entry visual, revisão/meta/burst, resumo com retorno e conclusão explícita.
-- [ ] QA isolado/mobile e checks automáticos; sem Gemini, writes reais ou publicação. Share Target Android já comprovado pelo usuário, preservado.
+- [x] Backdrop old/new 320ms atrás do scrim extraído; poster intocado. Match radial navega sem snapshot raiz; superfície escura desde o primeiro render.
+- [x] Biblioteca X replace; Galeria filtros/chips compatíveis, duração só Filmes, estado local enquanto sheet aberto e replace ao fechar (Back testado); Rever usa isWatched sem indicação obrigatória; Home compacta; removidos bloco Nuvio e texto import morto; PriorWatch 40px/full-width.
+- [x] Migração 0014: capacidade 3 por usuário/espaço, lock transacional, idempotência e confirmação pelo ID exato da mais antiga; candidatos salvos são arquivados com sessão concluída (não deletados: outras sessões podem depender da proveniência), fontes preservadas. RPC separada para concluir pulando pendentes.
+- [x] Entry compacta com contador, revisão com poster 208/224px e metadata title-preview, origem sem URL, burst imediato sem trocar emoji, resumo sticky com retorno à última carta e confirmação de pendentes/fontes.
+- [x] Smoke mock 390×844/412×915: Biblioteca X sem history; Match radial 5x por largura; Galeria tipo/gênero/slider/both/limpar/chips e ficha→Back→origem→Back sai sem filtros; Rever 2 assistidos sem veto, incluindo obra sem indicação; quarta sessão cancelar/confirmar; review burst/avanço/resumo/retorno/concluir pulando; Share recebido no limite e cancelado preserva URL no campo. Zero page errors; sem Gemini, gravação real ou Match real.
+- Checks: build/typecheck automáticos OK; 11 Vitest (incluem 3 assertions estáticas do contrato SQL, NÃO teste runtime de concorrência); lint dirigido sem Prettier: 0 erros, 3 warnings preexistentes. git diff --check limpo.
+- Fontes reais: 39 antes/depois (12 era contagem histórica); 69 candidatos na leitura final. Migração não muda linhas existentes. Share Target Android já comprovado pelo usuário, PWA/SW/social/carrosséis preservados.
+- Limites de QA: morph quadro a quadro/oclusão durante toda animação e flash sub-frame não comprovados (capturas mostram destino/primeiro paint escuros); PriorWatch só inspeção; lock/race/RPCs novas sem execução SQL com rollback. Sem publicação; hash final automático e custo individual não disponíveis antes do fechamento.
 
 Concluído: Lotes 1–4, 5A–5D, Rodada 6, MCP.
 
