@@ -37,7 +37,7 @@ import { AnimatedSheet } from "@/components/app/AnimatedSheet";
 import { ScrollToTop } from "@/components/app/ScrollToTop";
 import { AppShell } from "@/components/app/AppShell";
 import { Button } from "@/components/ui/button";
-import { FilterPills } from "@/components/app/ui";
+import { FilterPills, TogglePill } from "@/components/app/ui";
 import { EmptyState } from "@/components/app/MediaCard";
 import { formatRuntime, REACTION_EMOJI, tmdbImage } from "@/lib/format";
 import {
@@ -282,18 +282,21 @@ function GalleryPage() {
       </span>
       <h1 className="mt-1 font-display text-2xl font-semibold">Galeria</h1>
       <p className="mt-0.5 text-sm text-muted-foreground">O que vamos assistir?</p>
-      <div className="no-scrollbar -mx-4 mt-3 flex min-h-11 items-center gap-2 overflow-x-auto px-4 py-1">
-        <FilterPills options={[["all", "Todos"], ["movie", "Filmes"], ["tv", "Séries"]] as const} value={kind} onChange={setKind} />
-        {kind === "movie" && (
-          <Button variant={duration ? "secondary" : "ghost"} className="min-h-11 shrink-0 rounded-full border border-border px-3 text-xs" onClick={() => setSheet("duration")}>
-            <Clock3 className="h-4 w-4" />
-            {duration ? formatRuntime(duration) : "Duração"}
-          </Button>
-        )}
-        <Button variant={advanced ? "secondary" : "ghost"} size="icon" aria-label="Filtros" onClick={() => setSheet("filters")} className="relative h-11 w-11 shrink-0 rounded-full border border-border">
-          <SlidersHorizontal className="h-4 w-4" />
-          {advanced > 0 && <span className="absolute right-0 top-0 flex h-4 min-w-4 items-center justify-center rounded-full bg-primary text-[10px] text-primary-foreground">{advanced}</span>}
-        </Button>
+      <div className="-mx-4 mt-3 flex min-h-11 items-center gap-2 px-4 py-1">
+        <div className="no-scrollbar flex min-w-0 flex-1 items-center gap-2 overflow-x-auto">
+          <FilterPills options={[["all", "Todos"], ["movie", "Filmes"], ["tv", "Séries"]] as const} value={kind} onChange={setKind} />
+          {kind === "movie" && (
+            <TogglePill on={Boolean(duration)} onClick={() => setSheet("duration")}>
+              <span className="flex items-center gap-1.5">
+                <Clock3 className="h-4 w-4" />
+                {duration ? formatRuntime(duration) : "Duração"}
+              </span>
+            </TogglePill>
+          )}
+        </div>
+        <button aria-label="Filtros" onClick={() => setSheet("filters")} className="pressable flex h-11 w-11 shrink-0 items-center justify-center rounded-full">
+          <SlidersHorizontal className={`h-5 w-5 ${advanced > 0 ? "text-primary" : "text-muted-foreground"}`} />
+        </button>
       </div>
       <div className="mt-4 space-y-4">
         <AnimatePresence initial={false} mode="popLayout">
