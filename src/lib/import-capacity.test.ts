@@ -2,6 +2,7 @@ import { describe, expect, it } from "vitest";
 import { readFileSync } from "node:fs";
 
 const sql = readFileSync("drizzle/migrations/0014_import_session_capacity_and_finish.sql", "utf8");
+const finishSql = readFileSync("drizzle/migrations/0015_import_finish_empty_sessions.sql", "utf8");
 describe("Import capacity safeguards (migration contract)", () => {
   it("serializes creation by user/space and requires the exact oldest approval", () => {
     expect(sql).toContain("pg_advisory_xact_lock");
@@ -20,5 +21,10 @@ describe("Import capacity safeguards (migration contract)", () => {
     expect(sql).toContain("public.import_complete(_session)");
     expect(sql).toContain("status IN ('pending','error')");
     expect(sql).toContain("REVOKE ALL ON FUNCTION public.import_finish_remaining(uuid) FROM PUBLIC,anon");
+  });
+  it("lets an explicit close release an empty legacy session", () => {
+    expect(finishSql).toContain("SET status = 'completed'");
+    expect(finishSql).toContain("skipped_source_ids = source_post_ids");
+    expect(finishSql).toContain("REVOKE ALL ON FUNCTION public.import_finish_remaining(uuid) FROM PUBLIC, anon");
   });
 });

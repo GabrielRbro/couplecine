@@ -35,6 +35,12 @@ describe("title recognition from a spoken list", () => {
     expect(result).toBeNull();
   });
 
+  it("does not auto-select an old namesake without an old year in the post", async () => {
+    const silentNamesake = { id: 101, title: "Odisseia", original_title: "Odisseia", release_date: "1911-01-01", vote_count: 1 };
+    searchResults({ Odisseia: [silentNamesake] });
+    await expect(findImportTitle({ title: "Odisseia", mentionedTitle: "Odisseia", mediaType: "movie" })).resolves.toBeNull();
+  });
+
   it("corrects a subtitle that joins 'O Culto' into 'oculto'", async () => {
     searchResults({ Oculto: [], "The Endless": [endless] });
     const result = await findImportTitle({ title: "The Endless", originalTitle: "The Endless", mentionedTitle: "Oculto", year: 2017, mediaType: "movie" });

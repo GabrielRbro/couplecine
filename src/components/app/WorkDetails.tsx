@@ -24,7 +24,7 @@ import {
   type Reaction,
 } from "@/lib/format";
 import { firstName, useLibrary, useSpace, type LibraryWork, type SpaceInfo } from "@/lib/space";
-import { useSharedStyle } from "@/lib/shared-transition";
+import { useBackdropHandoff, useSharedStyle } from "@/lib/shared-transition";
 import { Button } from "@/components/ui/button";
 import { restoreWorkDeletion, scheduleWorkDelete, useWorkDeletion } from "@/lib/pending-delete";
 
@@ -204,9 +204,10 @@ export function WorkDetails({
     if (optimisticReaction && !save.isPending && local.data?.indications.length) setOptimisticReaction(null);
   }, [local.data, save.isPending, optimisticReaction]);
   const transitionId = workId ?? `tmdb-${mediaType}-${tmdbId}`;
-  // Backdrops stay in ordinary hero paint; poster-only transitions cannot cover text.
+  // The hero uses the already-cached gallery image and animates in its final bounds.
+  // It deliberately does not morph a short card crop into a tall hero snapshot.
   const sharedPoster = useSharedStyle(transitionId, "poster");
-  const sharedBackdrop = useSharedStyle(transitionId, "backdrop");
+  const backdropHandoff = useBackdropHandoff(transitionId);
   const m = meta.data?.details;
   const internal =
     Boolean(optimisticReaction) ||
@@ -278,17 +279,16 @@ export function WorkDetails({
   return (
     <div>
       <div className="relative h-64 overflow-hidden">
-        {tmdbImage(work.backdrop_path, "w1280") ? (
+        {tmdbImage(work.backdrop_path, "w780") ? (
           <img
-            src={tmdbImage(work.backdrop_path, "w1280") ?? ""}
+            src={tmdbImage(work.backdrop_path, "w780") ?? ""}
             alt=""
-            style={sharedBackdrop}
-            className="h-full w-full object-cover opacity-80"
+            className={`h-full w-full object-cover opacity-80 ${backdropHandoff ? "detail-backdrop-arrive" : ""}`}
           />
         ) : (
           <div className="h-full w-full bg-gradient-to-br from-accent to-card" />
         )}
-        <div style={sharedBackdrop.viewTransitionName ? { viewTransitionName: "detail-scrim" } : undefined} className="absolute inset-0 bg-gradient-to-b from-background/30 via-transparent to-background" />
+        <div className="absolute inset-0 bg-gradient-to-b from-background/30 via-transparent to-background" />
         <div
           style={{ viewTransitionName: "detail-controls" }}
           className="absolute inset-0 pointer-events-none [&_button]:pointer-events-auto"
@@ -301,7 +301,7 @@ export function WorkDetails({
           <Poster
             path={work.poster_path}
             title={work.title}
-            transitionStyle={sharedBackdrop.viewTransitionName ? { viewTransitionName: "detail-poster" } : sharedPoster}
+            transitionStyle={sharedPoster}
           />
         </div>
         <div className="min-w-0 self-end" style={{ viewTransitionName: "detail-meta" }}>
