@@ -427,12 +427,15 @@ export async function findImportTitleWithChoices(guess: ImportTitleGuess): Promi
       return (heard && names.includes(heard) ? 100 : 0) +
         (canonical.some((x) => names.includes(x)) ? 50 : 0) +
         (guess.year && item.year && Math.abs(item.year - guess.year) <= 1 ? 10 : 0) +
+        (item.posterPath ? 4 : 0) +
+        Math.min(4, Math.log10(1 + (item.popularity ?? 0))) +
         Math.min(9, Math.log10(1 + (item.voteCount ?? 0)));
     };
     return rank(b) - rank(a);
   });
   const selected = candidates[0];
   if (!selected) return null;
+  const selectedHasLocalizedMatch = !!(heard && distinctOriginal && normalizedTitle(selected.title) === heard);
   // Keep only an actual catalog namesake, not a loosely related search hit.
   // A review choice is never automatically added to the user's library.
   const alternatives = eligible.filter((item) => item.tmdbId !== selected.tmdbId || item.mediaType !== selected.mediaType)
@@ -440,7 +443,9 @@ export async function findImportTitleWithChoices(guess: ImportTitleGuess): Promi
       const names = [item.title, item.originalTitle ?? ""].map(normalizedTitle);
       const exactName = !!(heard && names.includes(heard)) || names.some((name) => canonical.includes(name));
       const closeYear = !guess.year || !item.year || Math.abs(item.year - guess.year) <= 3;
-      return item.mediaType === selected.mediaType && exactName && closeYear;
+      const catalogSupport = !!item.posterPath && ((item.voteCount ?? 0) >= 3 || (item.popularity ?? 0) >= 1);
+      const localizedMatch = !selectedHasLocalizedMatch || normalizedTitle(item.title) === heard;
+      return item.mediaType === selected.mediaType && exactName && closeYear && catalogSupport && localizedMatch;
     }).sort((a, b) => {
       const score = (item: TmdbSearchItem) => (guess.year && item.year && Math.abs(item.year - guess.year) <= 1 ? 10 : 0) + Math.min(9, Math.log10(1 + (item.voteCount ?? 0)));
       return score(b) - score(a);

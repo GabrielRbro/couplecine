@@ -1,5 +1,5 @@
 import { afterEach, describe, expect, it, vi } from "vitest";
-import { fetchCaption, fetchTikTokPhotoImages, needsCaptionFetch, parseSocial, VIDEO_PROBE_STATUS } from "./social.server";
+import { fetchCaption, fetchTikTokPhotoImages, fetchTikTokVideo, needsCaptionFetch, parseSocial, VIDEO_PROBE_STATUS } from "./social.server";
 
 afterEach(() => vi.unstubAllGlobals());
 
@@ -16,6 +16,31 @@ it("rechecks an older ambiguous TikTok description once, preserving the retry co
 });
 
 describe("TikTok public caption fallback", () => {
+  it("downloads a small public TikTok video for automatic visual title reading", async () => {
+    const short = "https://vt.tiktok.com/ZSbKdVvqU/";
+    const videoUrl = "https://v16m.tiktokcdn-us.com/video/tos/test.mp4?signature=ok";
+    const mp4 = new Uint8Array([0, 0, 0, 24, 0x66, 0x74, 0x79, 0x70, 0x69, 0x73, 0x6f, 0x6d]);
+    const fetch = vi.fn(async (input: string) => {
+      if (input.startsWith("https://tikwm.com/api/?")) return Response.json({ code: 0, data: {
+        id: "7691824225664961800", author: { unique_id: "loadingseries" }, play: videoUrl, duration: 89, size: mp4.length,
+      } });
+      if (input === videoUrl) return new Response(mp4, { headers: { "content-type": "video/mp4", "content-length": String(mp4.length) } });
+      throw new Error("Unexpected URL");
+    });
+    vi.stubGlobal("fetch", fetch);
+    const result = await fetchTikTokVideo(parseSocial(short)!);
+    expect(result).toMatchObject({ mimeType: "video/mp4" });
+    expect(result?.base64).toBe(btoa(String.fromCharCode(...mp4)));
+    expect(fetch).toHaveBeenCalledTimes(2);
+  });
+
+  it("refuses TikTok video URLs outside the trusted media CDN", async () => {
+    vi.stubGlobal("fetch", vi.fn(async () => Response.json({ code: 0, data: {
+      id: "7691824225664961800", author: { unique_id: "loadingseries" }, play: "https://example.org/private.mp4", duration: 30, size: 100,
+    } })));
+    expect(await fetchTikTokVideo(parseSocial("https://vt.tiktok.com/ZSbKdVvqU/")!)).toBeNull();
+  });
+
   it("reads a photo share URL directly when TikTok's shortlink redirect is blocked", async () => {
     const short = "https://vt.tiktok.com/ZSbwrPmMh/";
     const imageUrl = "https://p16-common-sign.tiktokcdn-us.com/tos-alisg-i-photomode-sg/a~tplv-photomode-image.jpeg";

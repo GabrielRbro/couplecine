@@ -7,7 +7,6 @@ import { Check, ChevronLeft, ChevronRight, ImagePlus, LoaderCircle, Search, Spar
 import { toast } from "sonner";
 import { supabase } from "@/integrations/supabase/client";
 import { AnimatedSheet } from "@/components/app/AnimatedSheet";
-import { SuperReaction } from "@/components/app/SuperReaction";
 import { AppShell } from "@/components/app/AppShell";
 import { BackButton } from "@/components/app/ui";
 import { Poster } from "@/components/app/MediaCard";
@@ -524,7 +523,6 @@ function ReviewStack({ cands, lib, spaceId, sessionId, sources, onChanged, onBac
   const correctFn = useServerFn(correctCandidate);
   const chooseFn = useServerFn(resolveCandidateChoice);
   const find = useServerFn(searchCatalog);
-  const [burst, setBurst] = useState<{emoji:string;origin:{x:number;y:number}} | null>(null);
   const [finishPrompt,setFinishPrompt]=useState(false);
   const [finishing,setFinishing]=useState(false);
   const lastCard=useRef(0);
@@ -579,7 +577,6 @@ function ReviewStack({ cands, lib, spaceId, sessionId, sources, onChanged, onBac
       <ul className="mt-5 space-y-2 text-left">{cands.map((c, i) => <li key={c.id} className="flex items-center gap-3 rounded-xl border border-border p-2"><div className="w-9 shrink-0"><Poster path={c.poster_path} title={c.title} /></div><div className="min-w-0 flex-1"><p className="truncate text-sm font-medium">{c.title}</p><p className="text-[11px] text-muted-foreground">{label(c)}</p></div><Button variant="ghost" className="min-h-11 text-xs" onClick={() => go(i)}>Abrir</Button></li>)}</ul>
       <div className="fixed inset-x-4 bottom-[var(--nav-space)] z-40 mx-auto max-w-[416px] rounded-2xl border border-border nav-glass p-3"><Button className="min-h-12 w-full" onClick={()=>summary.open>0 || sources.some((source)=>!cands.some((c)=>c.source_post_id===source.id)) ? setFinishPrompt(true) : onDone()}>Concluir sessão</Button><Button variant="ghost" className="mt-1 min-h-11 w-full" onClick={()=>go(Math.min(lastCard.current,cands.length-1))}>Voltar à sessão</Button>{sources.length>0 && <Button variant="ghost" className="min-h-11 w-full text-xs" onClick={onBack}>Conferir nomes com captura</Button>}</div>
       {finishSheet}
-      {burst && <SuperReaction {...burst} onComplete={()=>setBurst(null)} />}
     </main>
   );
 
@@ -590,7 +587,9 @@ function ReviewStack({ cands, lib, spaceId, sessionId, sources, onChanged, onBac
   const choices = row.status === "pending" ? parseChoiceNote(row.note) : null;
   return (
     <main className="relative mx-auto min-h-[100dvh] max-w-md overflow-hidden px-4 pb-32 pt-[max(env(safe-area-inset-top),16px)]">
-      {backdrop && <img src={backdrop} alt="" aria-hidden className="pointer-events-none absolute inset-x-0 top-0 h-[32rem] w-full object-cover opacity-45 [mask-image:linear-gradient(to_bottom,black_0%,black_58%,transparent_100%)]" />}
+      <AnimatePresence initial={false} mode="sync">
+        {backdrop && <motion.img key={`backdrop-${row.id}-${row.tmdb_id}`} src={backdrop} alt="" aria-hidden initial={{ opacity: 0 }} animate={{ opacity: .45 }} exit={{ opacity: 0 }} transition={{ duration: reduce ? .01 : .24 }} className="pointer-events-none absolute inset-x-0 top-0 h-[32rem] w-full object-cover [mask-image:linear-gradient(to_bottom,black_0%,black_58%,transparent_100%)]" />}
+      </AnimatePresence>
       <div className="pointer-events-none absolute inset-x-0 top-0 h-[32rem] bg-gradient-to-b from-background/20 via-background/50 to-background" />
       <div className="relative">
         <div className="grid grid-cols-[1fr_auto_1fr] items-center">
@@ -598,8 +597,8 @@ function ReviewStack({ cands, lib, spaceId, sessionId, sources, onChanged, onBac
           <span className="text-xs text-muted-foreground">{index + 1}/{cands.length}</span>
           <Button variant="ghost" className="min-h-11 justify-self-end text-xs" onClick={() => go(cands.length)}>Resumo</Button>
         </div>
-        <AnimatePresence mode="popLayout" initial={false} custom={dir}>
-          <motion.section key={row.id + row.tmdb_id} custom={dir} initial={reduce ? { opacity: 0 } : { opacity: 0, x: 60 * dir, rotate: 2 * dir }} animate={{ opacity: 1, x: 0, rotate: 0 }} exit={reduce ? { opacity: 0 } : { opacity: 0, x: -60 * dir, rotate: -2 * dir }} transition={{ duration: reduce ? 0.01 : 0.28, ease: [0.22, 1, 0.36, 1] }} className="mt-4 text-center">
+        <AnimatePresence mode="wait" initial={false} custom={dir}>
+          <motion.section key={row.id + row.tmdb_id} custom={dir} initial={reduce ? { opacity: 0 } : { opacity: 0, x: 28 * dir }} animate={{ opacity: 1, x: 0 }} exit={reduce ? { opacity: 0 } : { opacity: 0, x: -28 * dir }} transition={{ duration: reduce ? 0.01 : 0.2, ease: [0.22, 1, 0.36, 1] }} className="mt-4 text-center">
             <div className="relative mx-auto w-52 min-[412px]:w-56">
               <div className="art-edge relative overflow-hidden rounded-xl"><Poster eager path={row.poster_path} title={row.title} /></div>
             </div>
@@ -638,7 +637,7 @@ function ReviewStack({ cands, lib, spaceId, sessionId, sources, onChanged, onBac
             : <Button variant="secondary" aria-label={row.status === "skipped" ? "Voltar a pendente" : "Pular"} className="min-h-14" disabled={busy} onClick={() => act(row, async () => { const { error } = await supabase.from("import_candidates").update({ status: row.status === "skipped" ? "pending" : "skipped" }).eq("id", row.id); if (error) throw error; }, row.status !== "skipped")}>{row.status === "skipped" ? <Undo2 /> : <X />}</Button>}
           {([["fire", "🔥"], ["like", "👍"], ["neutral", "😐"]] as const).map(([r, e]) => (
             <Button key={r} variant="secondary" aria-label={row.status === "saved" ? `Mudar reação para ${e}` : `Indicar com ${e}`} aria-pressed={row.status === "saved" && row.reaction === r} disabled={busy || !!choices} className={`min-h-14 text-2xl emoji ${row.status === "saved" && row.reaction === r ? "ring-2 ring-primary" : ""}`}
-              onClick={(event) => {const box=event.currentTarget.getBoundingClientRect();setBurst({emoji:e,origin:{x:box.x+box.width/2,y:box.y+box.height/2}});void (row.status === "saved" ? act(row, () => rpc("import_set_reaction", { _candidate: row.id, _reaction: r })) : act(row, () => confirmFn({ data: { candidateId: row.id, reaction: r } }), true));}}>{e}</Button>
+              onClick={() => {void (row.status === "saved" ? act(row, () => rpc("import_set_reaction", { _candidate: row.id, _reaction: r })) : act(row, () => confirmFn({ data: { candidateId: row.id, reaction: r } }), true));}}>{e}</Button>
           ))}
         </div>
 
@@ -657,7 +656,6 @@ function ReviewStack({ cands, lib, spaceId, sessionId, sources, onChanged, onBac
           </motion.div>
         )}</AnimatePresence>
       </div>
-      {burst && <SuperReaction {...burst} onComplete={()=>setBurst(null)} />}
     </main>
   );
 }

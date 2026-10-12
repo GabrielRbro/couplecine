@@ -130,6 +130,36 @@ async function tiktokPageCaption(ref: Extract<SocialRef, { platform: "tiktok" }>
 }
 
 type PhotoImage = { mimeType: "image/jpeg" | "image/png" | "image/webp"; base64: string };
+type TikwmData = {
+  id?: unknown;
+  title?: unknown;
+  images?: unknown;
+  play?: unknown;
+  duration?: unknown;
+  size?: unknown;
+  author?: { unique_id?: unknown };
+};
+
+async function fetchTikwmData(ref: SocialRef): Promise<TikwmData | null> {
+  if (ref.platform !== "tiktok-short" && ref.platform !== "tiktok") return null;
+  const ctrl = new AbortController();
+  const timer = setTimeout(() => ctrl.abort(), 8000);
+  try {
+    const res = await fetch(`https://tikwm.com/api/?url=${encodeURIComponent(ref.canonical)}`, {
+      redirect: "manual", signal: ctrl.signal, headers: { Accept: "application/json", "User-Agent": "Mozilla/5.0" },
+    });
+    if (!res.ok || res.status >= 300 || Number(res.headers.get("content-length")) > 150_000) return null;
+    const body = await readLimited(res, 150_000);
+    const json = JSON.parse(new TextDecoder().decode(body)) as { code?: unknown; data?: TikwmData };
+    if (json.code !== 0 || !json.data) return null;
+    const postId = String(json.data.id);
+    if (ref.platform === "tiktok" && postId !== ref.id) return null;
+    if (ref.platform === "tiktok-short" && (!/^\d{8,25}$/.test(postId) ||
+      !/^[\w.-]{1,40}$/.test(String(json.data.author?.unique_id)))) return null;
+    return json.data;
+  } catch { return null; }
+  finally { clearTimeout(timer); }
+}
 
 /** TikTok's public page does not consistently expose photo-mode slides to a server fetch.
  * Resolve only a canonical public photo post through TikWM's public media endpoint, then
@@ -138,24 +168,8 @@ export async function fetchTikTokPhotoImages(ref: SocialRef): Promise<{ caption:
   // The shortlink redirect is sometimes blocked in the hosted worker even when
   // the public media endpoint can resolve that exact share URL itself.
   if (ref.platform !== "tiktok-short" && (ref.platform !== "tiktok" || ref.kind !== "photo")) return null;
-  const ctrl = new AbortController();
-  const timer = setTimeout(() => ctrl.abort(), 8000);
-  let data: { id?: unknown; title?: unknown; images?: unknown; author?: { unique_id?: unknown } };
-  try {
-    const res = await fetch(`https://tikwm.com/api/?url=${encodeURIComponent(ref.canonical)}`, {
-      redirect: "manual", signal: ctrl.signal, headers: { Accept: "application/json", "User-Agent": "Mozilla/5.0" },
-    });
-    if (!res.ok || res.status >= 300 || Number(res.headers.get("content-length")) > 100_000) return null;
-    const body = await readLimited(res, 100_000);
-    const json = JSON.parse(new TextDecoder().decode(body)) as { code?: unknown; data?: typeof data };
-    if (json.code !== 0 || !Array.isArray(json.data?.images)) return null;
-    const postId = String(json.data.id);
-    if (ref.platform === "tiktok" && postId !== ref.id) return null;
-    if (ref.platform === "tiktok-short" && (!/^\d{8,25}$/.test(postId) ||
-      !/^[\w.-]{1,40}$/.test(String(json.data.author?.unique_id)))) return null;
-    data = json.data!;
-  } catch { return null; }
-  finally { clearTimeout(timer); }
+  const data = await fetchTikwmData(ref);
+  if (!data || !Array.isArray(data.images)) return null;
 
   const urls = data.images as unknown[];
   if (!urls.length || urls.length > 10 || urls.some((u) => typeof u !== "string" || !photoCdnUrl(u))) return null;
@@ -172,6 +186,37 @@ export async function fetchTikTokPhotoImages(ref: SocialRef): Promise<{ caption:
     }
   }
   return { caption: typeof data.title === "string" ? data.title.trim().slice(0, 2000) || null : null, images };
+}
+
+function videoCdnUrl(raw: string) {
+  try {
+    const u = new URL(raw);
+    return u.protocol === "https:" && !u.username && !u.password && !u.port &&
+      /^v\d+m?\.tiktokcdn(?:-us|-eu|-in)?\.com$/.test(u.hostname) && u.pathname.startsWith("/video/");
+  } catch { return false; }
+}
+
+/** Small public TikTok videos can be sent directly to Gemini. This lets the
+ * import read titles drawn on screen instead of relying only on speech captions. */
+export async function fetchTikTokVideo(ref: SocialRef): Promise<{ mimeType: "video/mp4"; base64: string } | null> {
+  if (ref.platform !== "tiktok-short" && (ref.platform !== "tiktok" || ref.kind !== "video")) return null;
+  const data = await fetchTikwmData(ref);
+  if (!data || Array.isArray(data.images) || typeof data.play !== "string" || !videoCdnUrl(data.play)) return null;
+  if (Number(data.duration) > 180 || Number(data.size) > 8_000_000) return null;
+  const ctrl = new AbortController();
+  const timer = setTimeout(() => ctrl.abort(), 12_000);
+  try {
+    const res = await fetch(data.play, { redirect: "manual", signal: ctrl.signal, headers: { Accept: "video/mp4", "User-Agent": "Mozilla/5.0" } });
+    if (!res.ok || res.status >= 300 || Number(res.headers.get("content-length")) > 8_000_000) return null;
+    const mime = res.headers.get("content-type")?.split(";")[0]?.trim();
+    if (mime !== "video/mp4" && mime !== "application/octet-stream") return null;
+    const bytes = await readLimited(res, 8_000_000);
+    if (bytes.length < 12 || String.fromCharCode(...bytes.subarray(4, 8)) !== "ftyp") return null;
+    let binary = "";
+    for (let i = 0; i < bytes.length; i += 8192) binary += String.fromCharCode(...bytes.subarray(i, i + 8192));
+    return { mimeType: "video/mp4", base64: btoa(binary) };
+  } catch { return null; }
+  finally { clearTimeout(timer); }
 }
 
 function photoCdnUrl(raw: string) {
