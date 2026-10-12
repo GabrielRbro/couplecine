@@ -351,10 +351,14 @@ input, textarea, [contenteditable="true"] { -webkit-user-select: text; user-sele
 .scroll-top-control { bottom: calc(var(--nav-space) + 12px); right: max(20px, calc((100vw - 448px) / 2 + 20px)); }
 ::view-transition-old(root) { animation: none; opacity: 0; }
 ::view-transition-new(root) { animation: none; mix-blend-mode: normal; }
-/* Both art snapshots morph under the root scrim/foreground; poster rules remain untouched. */
-::view-transition-group(shared-backdrop) { z-index: 1; animation-duration: 320ms; animation-timing-function: var(--ease-out); }
-::view-transition-image-pair(shared-backdrop) { isolation: isolate; }
-::view-transition-old(shared-backdrop), ::view-transition-new(shared-backdrop) { mix-blend-mode: normal; }
+/* The gallery backdrop is a wide card while the detail backdrop is a hero.
+   A short crossfade prevents the source card's dark lower edge becoming a bar
+   across the destination title while the geometry changes. */
+::view-transition-group(shared-backdrop) { z-index: 1; animation-duration: 260ms; animation-timing-function: var(--ease-out); }
+::view-transition-old(shared-backdrop) { animation: backdrop-leave 120ms ease-out both; mix-blend-mode: normal; }
+::view-transition-new(shared-backdrop) { animation: backdrop-arrive 260ms var(--ease-out) both; mix-blend-mode: normal; }
+@keyframes backdrop-leave { to { opacity: 0; } }
+@keyframes backdrop-arrive { from { opacity: 0.28; } to { opacity: 1; } }
 @media (prefers-reduced-motion: reduce) {
   ::view-transition-group(shared-backdrop), ::view-transition-old(shared-backdrop), ::view-transition-new(shared-backdrop) { animation: none !important; }
   ::view-transition-old(shared-backdrop) { display: none; }

@@ -1,5 +1,6 @@
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { useServerFn } from "@tanstack/react-start";
+import { Link } from "@tanstack/react-router";
 import { useEffect, useRef, useState } from "react";
 import { ArrowLeft, Check, ChevronDown, Plus, Trash2, Tv, X } from "lucide-react";
 import { DetailSkeleton, useBack } from "@/components/app/ui";
@@ -22,7 +23,7 @@ import {
   tmdbImage,
   type Reaction,
 } from "@/lib/format";
-import { firstName, useSpace, type LibraryWork, type SpaceInfo } from "@/lib/space";
+import { firstName, useLibrary, useSpace, type LibraryWork, type SpaceInfo } from "@/lib/space";
 import { useSharedStyle } from "@/lib/shared-transition";
 import { Button } from "@/components/ui/button";
 import { restoreWorkDeletion, scheduleWorkDelete, useWorkDeletion } from "@/lib/pending-delete";
@@ -96,6 +97,7 @@ export function WorkDetails({
   tmdbId?: number;
 }) {
   const { data: space } = useSpace();
+  const { data: library = [] } = useLibrary(space?.spaceId);
   const qc = useQueryClient();
   const [activeId, setActiveId] = useState(workId ?? null);
   const [identity, setIdentity] = useState(mediaType && tmdbId ? { mediaType, tmdbId } : null);
@@ -155,6 +157,7 @@ export function WorkDetails({
         void qc.cancelQueries({ queryKey: ["library", space.spaceId] });
         const temp: LibraryWork = {
           id: activeId ?? `optimistic-${details.mediaType}-${details.tmdbId}`,
+          tmdb_id: details.tmdbId,
           title: details.title,
           original_title: details.originalTitle,
           media_type: details.mediaType,
@@ -262,7 +265,7 @@ export function WorkDetails({
     return <DetailSkeleton />;
   }
   const isTv = work.media_type === "tv";
-  const cachedSeasons = (qc.getQueryData<LibraryWork[]>(["library", space.spaceId]) ?? []).find((w) => w.id === id)
+  const cachedSeasons = library.find((w) => w.id === id)
     ?.work_metadata_cache[0]?.seasons;
   const seasons = m?.seasons?.length
     ? m.seasons
@@ -400,6 +403,15 @@ export function WorkDetails({
           <Synopsis text={m?.overview ?? work.overview} />
         )}
 
+        {m?.universe && m.universe.parts.length > 1 && (
+          <Universe
+            title={m.universe.name}
+            currentTmdbId={work.tmdb_id}
+            parts={m.universe.parts}
+            library={library}
+          />
+        )}
+
         {m && (
           <section>
             <h2 className="mb-3 font-semibold">Elenco</h2>
@@ -455,6 +467,43 @@ export function WorkDetails({
       </AnimatedSheet>
       {burst && <SuperReaction {...burst} onComplete={() => setBurst(null)} />}
     </div>
+  );
+}
+
+function Universe({
+  title,
+  currentTmdbId,
+  parts,
+  library,
+}: {
+  title: string;
+  currentTmdbId: number;
+  parts: { tmdbId: number; title: string; posterPath: string | null; year: number | null }[];
+  library: LibraryWork[];
+}) {
+  const others = parts.filter((part) => part.tmdbId !== currentTmdbId);
+  if (!others.length) return null;
+  const local = new Map(library.filter((work) => work.media_type === "movie").map((work) => [work.tmdb_id, work]));
+  return (
+    <section>
+      <h2 className="font-semibold">Universo</h2>
+      <p className="mt-1 text-xs text-muted-foreground">{title}</p>
+      <div className="no-scrollbar -mx-4 mt-3 flex gap-3 overflow-x-auto px-4 pb-1">
+        {others.map((part) => {
+          const saved = local.get(part.tmdbId);
+          const target = saved
+            ? { to: "/work/$id" as const, params: { id: saved.id } }
+            : { to: "/title/$mediaType/$tmdbId" as const, params: { mediaType: "movie", tmdbId: String(part.tmdbId) } };
+          return (
+            <Link key={part.tmdbId} {...target} className="pressable w-24 shrink-0 text-left">
+              <Poster path={part.posterPath} title={part.title} className="rounded-xl" />
+              <p className="mt-1.5 line-clamp-2 text-xs font-semibold leading-tight">{part.title}</p>
+              {part.year && <p className="mt-0.5 text-[11px] text-muted-foreground">{part.year}</p>}
+            </Link>
+          );
+        })}
+      </div>
+    </section>
   );
 }
 
