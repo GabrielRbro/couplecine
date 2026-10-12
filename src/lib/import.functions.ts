@@ -195,7 +195,7 @@ export const autoAnalyzeSession = createServerFn({ method: "POST" })
       }
       if (!found && s.source_post_ids.length && !freeText && !sawCaption) {
         await refreshStatus(s.id);
-        return { ok: false as const, reason: "O Instagram ou TikTok não liberou a descrição deste post. Tente compartilhar novamente em alguns minutos." };
+        return { ok: false as const, reason: "Este post não trouxe descrição ou legenda pública. Confira o link recebido ou envie uma captura do vídeo." };
       }
       await setStatus(s.id, { ai_done: true,
         ...(s.source_post_ids.length > 3 ? { note: "A análise automática verificou os três primeiros links deste envio." } : {}),
