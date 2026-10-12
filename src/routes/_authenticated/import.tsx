@@ -330,7 +330,7 @@ function SessionView({ id }: { id: string }) {
         );
       })}
       {needCaption && <Button variant="outline" className="mt-2 min-h-12 w-full" disabled={!!busy} onClick={() => run("cap", () => captionsFn({ data: { sessionId: id } }))}>{busy === "cap" ? <LoaderCircle className="animate-spin" /> : <Search />}Buscar legenda do post</Button>}
-      {sources.length > 0 && <p className="mt-1 text-[11px] text-muted-foreground">Só a legenda pública é lida; vídeo e imagens não são analisados.</p>}
+      {sources.length > 0 && <p className="mt-1 text-[11px] text-muted-foreground">O link fornece a descrição e a fala. Se os nomes aparecem escritos no vídeo, envie uma captura para conferi-los.</p>}
 
       {freeText && (
         <div className="mt-3 rounded-2xl border border-border bg-card p-3">
@@ -341,9 +341,10 @@ function SessionView({ id }: { id: string }) {
       )}
 
       <input ref={fileRef} type="file" accept="image/png,image/jpeg,image/webp" hidden onChange={(e) => { readImage(e.target.files?.[0], setImage); e.target.value = ""; }} />
+      {sources.length > 0 && <p className="mt-3 text-xs text-muted-foreground">Captura com a lista na tela: o texto visível tem prioridade sobre erros da legenda automática.</p>}
       <div className="mt-3 flex items-center gap-2">
         <Button variant="secondary" className="min-h-11" onClick={() => fileRef.current?.click()}><ImagePlus />{image ? "Trocar captura" : "Escolher captura"}</Button>
-        {image && <Button className="min-h-11 flex-1" disabled={!!busy} onClick={() => run("img", async () => { const r = await analyzeFn({ data: { sessionId: id, image: { mimeType: image.mimeType, base64: image.base64 } } }); if (r.ok) { pendingImages.delete(id); setImage(null); } return r; })}>{busy === "img" ? <LoaderCircle className="animate-spin" /> : <Sparkles />}Analisar captura</Button>}
+        {image && <Button className="min-h-11 flex-1" disabled={!!busy} onClick={() => run("img", async () => { const sourcePostId = sources.length === 1 && sources[0]?.caption ? sources[0].id : undefined; const r = await analyzeFn({ data: { sessionId: id, ...(sourcePostId ? { sourcePostId } : {}), image: { mimeType: image.mimeType, base64: image.base64 } } }); if (r.ok) { pendingImages.delete(id); setImage(null); } return r; })}>{busy === "img" ? <LoaderCircle className="animate-spin" /> : <Sparkles />}Conferir com captura</Button>}
       </div>
 
       {notice && <p role="status" className="mt-4 rounded-xl border border-border bg-card p-3 text-sm text-muted-foreground">{notice}</p>}
@@ -393,6 +394,7 @@ function ReviewStack({ cands, lib, spaceId, sources, onChanged, onBack, onDone }
       <p className="mt-2 text-sm text-muted-foreground">{summary.saved} indicadas · {summary.skipped} puladas · {summary.open} pendentes</p>
       <ul className="mt-5 space-y-2 text-left">{cands.map((c, i) => <li key={c.id} className="flex items-center gap-3 rounded-xl border border-border p-2"><div className="w-9 shrink-0"><Poster path={c.poster_path} title={c.title} /></div><div className="min-w-0 flex-1"><p className="truncate text-sm font-medium">{c.title}</p><p className="text-[11px] text-muted-foreground">{label(c)}</p></div><Button variant="ghost" className="min-h-11 text-xs" onClick={() => go(i)}>Abrir</Button></li>)}</ul>
       <Button className="mt-6 min-h-12 w-full" disabled={summary.open > 0} onClick={onDone}>Concluir sessão</Button>
+      {sources.length > 0 && <Button variant="secondary" className="mt-2 min-h-12 w-full" onClick={onBack}><ImagePlus />Conferir nomes com captura</Button>}
       <Button variant="ghost" className="mt-2 min-h-12 w-full" onClick={onBack}>Voltar à sessão</Button>
     </main>
   );
