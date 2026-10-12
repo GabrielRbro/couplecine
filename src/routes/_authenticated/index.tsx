@@ -48,26 +48,15 @@ function ContextList({ items, empty }: { items: LibraryWork[]; empty: string }) 
             key={w.id}
             to="/work/$id"
             params={{ id: w.id }}
-            onClick={(e) =>
-              markShared(e.currentTarget.querySelector("[data-context-poster]"), w.id, "poster")
-            }
+            onClick={(e) => markShared(e.currentTarget.querySelector("[data-context-poster]"), w.id, "poster")}
             className="pressable relative flex h-20 items-center gap-3 overflow-hidden rounded-2xl bg-card pr-3"
           >
             {art && (
-              <img
-                src={art}
-                alt=""
-                loading="lazy"
-                className="absolute inset-0 h-full w-full object-cover opacity-35"
-              />
+              <img src={art} alt="" loading="lazy" className="absolute inset-0 h-full w-full object-cover opacity-35" />
             )}
             <div className="absolute inset-0 bg-gradient-to-r from-background/90 via-background/70 to-background/30" />
             <div data-context-poster className="relative h-full w-14 shrink-0">
-              <Poster
-                path={w.poster_path}
-                title={w.title}
-                className="h-full rounded-none rounded-l-2xl"
-              />
+              <Poster path={w.poster_path} title={w.title} className="h-full rounded-none rounded-l-2xl" />
             </div>
             <div className="relative min-w-0 flex-1">
               <p className="line-clamp-1 font-display text-sm font-semibold">{w.title}</p>
@@ -116,9 +105,7 @@ function ContinueCard({
       </div>
       <div className="absolute inset-0 bg-gradient-to-t from-background via-background/40 to-transparent" />
       <div className={`absolute inset-x-0 bottom-0 ${hero ? "p-4" : "p-3"}`}>
-        <p
-          className={`line-clamp-2 font-display font-semibold leading-tight ${hero ? "text-xl" : "text-sm"}`}
-        >
+        <p className={`line-clamp-2 font-display font-semibold leading-tight ${hero ? "text-xl" : "text-sm"}`}>
           {w.title}
         </p>
         <p className="mt-1 text-[11px] text-foreground/75">
@@ -174,10 +161,10 @@ function Home() {
   );
 
   const quick =
-    "pressable flex min-h-24 flex-col items-start justify-between gap-1 rounded-xl border border-border bg-card p-3";
+    "pressable flex min-h-20 flex-col items-start justify-between gap-1 rounded-xl border border-border bg-card p-2.5";
 
   return (
-    <div className="px-4 pt-6">
+    <div className="px-4 pt-4">
       <header className="flex items-center justify-between">
         <div>
           <p className="text-sm text-muted-foreground">{greeting()},</p>
@@ -201,7 +188,7 @@ function Home() {
         </div>
       </header>
 
-      <section className="mt-5 grid grid-cols-2 gap-2" aria-label="Atalhos">
+      <section className="mt-4 grid grid-cols-2 gap-2" aria-label="Atalhos">
         {unrated[0] ? (
           <button onClick={() => setPile(true)} className={`${quick} text-left`}>
             <Star className="h-5 w-5 text-primary" />
@@ -247,9 +234,7 @@ function Home() {
               <ContinueCard
                 key={w.id}
                 work={w}
-                layout={
-                  continuing.length === 1 ? "hero" : continuing.length === 2 ? "half" : "strip"
-                }
+                layout={continuing.length === 1 ? "hero" : continuing.length === 2 ? "half" : "strip"}
                 className={continuing.length >= 3 ? "w-[37%] shrink-0 snap-start" : ""}
               />
             ))}

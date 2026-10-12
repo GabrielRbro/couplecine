@@ -41,7 +41,7 @@ export function AppShell({
   useScrollKeyboardDismiss();
   return (
     <div
-      className="mx-auto min-h-screen min-h-[100dvh] max-w-md"
+      className="mx-auto min-h-screen min-h-[100dvh] max-w-md bg-background"
       style={{
         paddingBottom: fullscreen ? "env(safe-area-inset-bottom)" : "var(--nav-space)",
         paddingTop: "env(safe-area-inset-top)",
@@ -83,7 +83,7 @@ export function BottomNav() {
     }
     if (!open) return;
     event.preventDefault();
-    closeOverlaysThen(() => navigate({ to }));
+    closeOverlaysThen(() => navigate({ to, viewTransition: to !== "/match" }));
   };
 
   const tab = (active: boolean) =>
@@ -109,6 +109,7 @@ export function BottomNav() {
               <Link
                 key={item.to}
                 to={item.to}
+                viewTransition={item.to !== "/match"}
                 onClick={(event) => go(event, item.to)}
                 tabIndex={open ? 0 : -1}
                 aria-hidden={!open}

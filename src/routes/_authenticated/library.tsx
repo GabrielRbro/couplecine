@@ -1,7 +1,7 @@
 import { createFileRoute, Link, useNavigate } from "@tanstack/react-router";
 import { useMemo, useState } from "react";
 import { z } from "zod";
-import { Plus, Search, ChevronDown } from "lucide-react";
+import { Plus, Search, ChevronDown, X } from "lucide-react";
 import { AnimatePresence, motion, useReducedMotion } from "motion/react";
 import { AppShell } from "@/components/app/AppShell";
 import { EmptyState, MediaCard } from "@/components/app/MediaCard";
@@ -100,6 +100,7 @@ function LibraryPage() {
           aria-label="Buscar"
           className="w-full bg-transparent py-3 text-sm outline-none"
         />
+        {q && <Button variant="ghost" size="icon" aria-label="Limpar busca" className="h-11 w-11 shrink-0 text-muted-foreground" onClick={() => setQ("")}><X className="h-4 w-4" /></Button>}
       </div>
       <div className="mt-4 grid grid-cols-3 rounded-xl bg-card p-1 text-sm">
         {(

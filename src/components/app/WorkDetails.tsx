@@ -27,15 +27,9 @@ import { useSharedStyle } from "@/lib/shared-transition";
 import { Button } from "@/components/ui/button";
 import { restoreWorkDeletion, scheduleWorkDelete, useWorkDeletion } from "@/lib/pending-delete";
 
-function differentTitle(title: string, original: string | null) {
-  const normalize = (value: string) =>
-    value
-      .normalize("NFD")
-      .replace(/\p{Diacritic}/gu, "")
-      .replace(/\s+/g, " ")
-      .trim()
-      .toLocaleLowerCase("pt-BR");
-  return Boolean(original && normalize(original) !== normalize(title));
+function hasDifferentOriginalTitle(title: string, originalTitle: string | null) {
+  const normalize = (value: string) => value.normalize("NFD").replace(/\p{Diacritic}/gu, "").replace(/\s+/g, " ").trim().toLocaleLowerCase("pt-BR");
+  return Boolean(originalTitle && normalize(title) !== normalize(originalTitle));
 }
 
 function BackOverlay() {
@@ -62,10 +56,7 @@ export function workQuery(id: string) {
         supabase.from("ratings").select("user_id, score").eq("work_id", id),
         supabase.from("prior_watch_status").select("user_id, watched").eq("work_id", id),
         supabase.from("series_states").select("*").eq("work_id", id).maybeSingle(),
-        supabase
-          .from("watch_events")
-          .select("id, season_number, episode_number, watched_at")
-          .eq("work_id", id),
+        supabase.from("watch_events").select("id, season_number, episode_number, watched_at").eq("work_id", id),
         supabase
           .from("joint_watch_sessions")
           .select("id, watched_at")
@@ -109,22 +100,14 @@ export function WorkDetails({
   const [activeId, setActiveId] = useState(workId ?? null);
   const [identity, setIdentity] = useState(mediaType && tmdbId ? { mediaType, tmdbId } : null);
   const [picking, setPicking] = useState(false);
-  const [optimisticReaction, setOptimisticReaction] = useState<"fire" | "like" | "neutral" | null>(
-    null,
-  );
-  const [burst, setBurst] = useState<{ emoji: string; origin: { x: number; y: number } } | null>(
-    null,
-  );
+  const [optimisticReaction, setOptimisticReaction] = useState<"fire" | "like" | "neutral" | null>(null);
+  const [burst, setBurst] = useState<{ emoji: string; origin: { x: number; y: number } } | null>(null);
   const deletion = useWorkDeletion(activeId ?? "");
-  const local = useQuery({
-    ...workQuery(activeId ?? ""),
-    enabled: Boolean(activeId) && deletion === "active",
-  });
+  const local = useQuery({ ...workQuery(activeId ?? ""), enabled: Boolean(activeId) && deletion === "active" });
   const retained = useRef(local.data?.work ?? null);
   if (local.data?.work) retained.current = local.data.work;
   useEffect(() => {
-    if (local.data?.work)
-      setIdentity({ mediaType: local.data.work.media_type, tmdbId: local.data.work.tmdb_id });
+    if (local.data?.work) setIdentity({ mediaType: local.data.work.media_type, tmdbId: local.data.work.tmdb_id });
   }, [local.data?.work]);
   const details = useServerFn(getTitlePreview);
   const meta = useQuery({
@@ -163,9 +146,7 @@ export function WorkDetails({
               ...old,
               pages: old.pages.map((page) => ({
                 ...page,
-                items: page.items.filter(
-                  (i) => i.mediaType !== identity.mediaType || i.tmdbId !== identity.tmdbId,
-                ),
+                items: page.items.filter((i) => i.mediaType !== identity.mediaType || i.tmdbId !== identity.tmdbId),
               })),
             },
         );
@@ -186,18 +167,13 @@ export function WorkDetails({
           created_at: new Date().toISOString(),
           interests: [{ user_id: space.userId, reaction }],
           ratings: [],
-          indications: [
-            { indicated_by: space.userId, created_at: new Date().toISOString(), renewed_at: null },
-          ],
+          indications: [{ indicated_by: space.userId, created_at: new Date().toISOString(), renewed_at: null }],
           joint_watch_sessions: [],
           watch: null,
           series_states: [],
           work_metadata_cache: [],
         };
-        qc.setQueryData(
-          ["library", space.spaceId],
-          [temp, ...(library ?? []).filter((w) => w.id !== temp.id)],
-        );
+        qc.setQueryData(["library", space.spaceId], [temp, ...(library ?? []).filter((w) => w.id !== temp.id)]);
       }
       return { snapshots, library, activeId };
     },
@@ -222,8 +198,7 @@ export function WorkDetails({
     },
   });
   useEffect(() => {
-    if (optimisticReaction && !save.isPending && local.data?.indications.length)
-      setOptimisticReaction(null);
+    if (optimisticReaction && !save.isPending && local.data?.indications.length) setOptimisticReaction(null);
   }, [local.data, save.isPending, optimisticReaction]);
   const transitionId = workId ?? `tmdb-${mediaType}-${tmdbId}`;
   // Backdrops stay in ordinary hero paint; poster-only transitions cannot cover text.
@@ -265,12 +240,7 @@ export function WorkDetails({
           interests: [{ user_id: space.userId, reaction: optimisticReaction }],
           ratings: [],
           indications: [
-            {
-              id: "optimistic",
-              indicated_by: space.userId,
-              created_at: new Date().toISOString(),
-              renewed_at: null,
-            },
+            { id: "optimistic", indicated_by: space.userId, created_at: new Date().toISOString(), renewed_at: null },
           ],
           prior: [],
           sessions: [],
@@ -279,32 +249,21 @@ export function WorkDetails({
         }
       : internal && local.data
         ? local.data
-        : {
-            interests: [],
-            ratings: [],
-            indications: [],
-            prior: [],
-            sessions: [],
-            state: null,
-            events: [],
-          };
+        : { interests: [], ratings: [], indications: [], prior: [], sessions: [], state: null, events: [] };
   const id = activeId ?? "";
   if (!space || !work) {
     if (local.error || meta.error)
       return (
         <div className="p-6">
           <BackOverlay />
-          <p className="mt-12 text-sm text-destructive">
-            {local.error?.message ?? meta.error?.message}
-          </p>
+          <p className="mt-12 text-sm text-destructive">{local.error?.message ?? meta.error?.message}</p>
         </div>
       );
     return <DetailSkeleton />;
   }
   const isTv = work.media_type === "tv";
-  const cachedSeasons = (qc.getQueryData<LibraryWork[]>(["library", space.spaceId]) ?? []).find(
-    (w) => w.id === id,
-  )?.work_metadata_cache[0]?.seasons;
+  const cachedSeasons = (qc.getQueryData<LibraryWork[]>(["library", space.spaceId]) ?? []).find((w) => w.id === id)
+    ?.work_metadata_cache[0]?.seasons;
   const seasons = m?.seasons?.length
     ? m.seasons
     : Array.from({ length: m?.seasonCount ?? cachedSeasons?.length ?? 0 }, (_, i) => ({
@@ -326,7 +285,7 @@ export function WorkDetails({
         ) : (
           <div className="h-full w-full bg-gradient-to-br from-accent to-card" />
         )}
-        <div className="absolute inset-0 bg-gradient-to-b from-background/30 via-transparent to-background" />
+        <div style={sharedBackdrop.viewTransitionName ? { viewTransitionName: "detail-scrim" } : undefined} className="absolute inset-0 bg-gradient-to-b from-background/30 via-transparent to-background" />
         <div
           style={{ viewTransitionName: "detail-controls" }}
           className="absolute inset-0 pointer-events-none [&_button]:pointer-events-auto"
@@ -339,25 +298,19 @@ export function WorkDetails({
           <Poster
             path={work.poster_path}
             title={work.title}
-            transitionStyle={
-              sharedBackdrop.viewTransitionName
-                ? { viewTransitionName: "detail-poster" }
-                : sharedPoster
-            }
+            transitionStyle={sharedBackdrop.viewTransitionName ? { viewTransitionName: "detail-poster" } : sharedPoster}
           />
         </div>
         <div className="min-w-0 self-end" style={{ viewTransitionName: "detail-meta" }}>
           <h1 className="text-2xl font-semibold leading-tight">{work.title}</h1>
-          {differentTitle(work.title, work.original_title) && (
+          {hasDifferentOriginalTitle(work.title, work.original_title) && (
             <p className="text-xs text-muted-foreground">{work.original_title}</p>
           )}
           <p className="mt-1 text-xs text-muted-foreground">
             {isTv ? "Série" : "Filme"}
             {work.release_year ? ` · ${work.release_year}` : ""}
             {isTv ? (
-              <span className="inline-block min-w-[4.5rem]">
-                {seasonCount ? ` · ${seasonCount} temp.` : ""}
-              </span>
+              <span className="inline-block min-w-[4.5rem]">{seasonCount ? ` · ${seasonCount} temp.` : ""}</span>
             ) : work.runtime_minutes ? (
               ` · ${formatRuntime(work.runtime_minutes)}`
             ) : (
@@ -365,9 +318,7 @@ export function WorkDetails({
             )}
           </p>
           {work.genres.length > 0 && (
-            <p className="mt-1 line-clamp-1 text-xs text-muted-foreground">
-              {work.genres.join(", ")}
-            </p>
+            <p className="mt-1 line-clamp-1 text-xs text-muted-foreground">{work.genres.join(", ")}</p>
           )}
         </div>
       </div>
@@ -398,20 +349,13 @@ export function WorkDetails({
             Exclusão pendente · Desfazer disponível.
           </p>
         ) : !internal ? (
-          <Button
-            disabled={save.isPending}
-            onClick={() => setPicking(true)}
-            className="min-h-12 w-full"
-          >
+          <Button disabled={save.isPending} onClick={() => setPicking(true)} className="min-h-12 w-full">
             <Plus />
             Adicionar à biblioteca
           </Button>
         ) : null}
         {internal && (
-          <div
-            aria-busy={save.isPending}
-            className={optimisticReaction ? "pointer-events-none" : ""}
-          >
+          <div aria-busy={save.isPending} className={optimisticReaction ? "pointer-events-none" : ""}>
             <Comparison
               space={space}
               workId={id}
@@ -431,14 +375,7 @@ export function WorkDetails({
                 >
                   <PriorWatch space={space} workId={id} prior={data.prior} onChange={refresh} />
                 </IndicationsBlock>
-                {!isTv && (
-                  <MovieWatched
-                    space={space}
-                    workId={id}
-                    sessions={data.sessions}
-                    onChange={refresh}
-                  />
-                )}
+                {!isTv && <MovieWatched space={space} workId={id} sessions={data.sessions} onChange={refresh} />}
               </div>
             </section>
           </div>
@@ -470,29 +407,18 @@ export function WorkDetails({
               {(m.crewLeads?.length || m.crewLead) && (
                 <>
                   {(m.crewLeads ?? (m.crewLead ? [m.crewLead] : [])).map((lead) => (
-                    <Person
-                      key={lead.name}
-                      name={lead.name}
-                      top={lead.role}
-                      path={lead.profilePath}
-                    />
+                    <Person key={lead.name} name={lead.name} top={lead.role} path={lead.profilePath} />
                   ))}
                   <div className="h-24 w-px shrink-0 self-center bg-border" />
                 </>
               )}
               {m.cast.map((c) => (
-                <Person
-                  key={c.name + c.character}
-                  top={c.character}
-                  name={c.name}
-                  path={c.profilePath}
-                />
+                <Person key={c.name + c.character} top={c.character} name={c.name} path={c.profilePath} />
               ))}
             </div>
           </section>
         )}
         {meta.error && <p className="text-xs text-muted-foreground">{meta.error.message}</p>}
-        <NuvioLink mediaType={work.media_type} tmdbId={work.tmdb_id} />
       </div>
       <AnimatedSheet
         open={picking}
@@ -536,9 +462,7 @@ function Synopsis({ text }: { text: string | null }) {
   return (
     <section>
       <h2 className="mb-2 font-semibold">Sinopse</h2>
-      <p className="text-sm leading-relaxed text-muted-foreground">
-        {text || "Sem sinopse disponível."}
-      </p>
+      <p className="text-sm leading-relaxed text-muted-foreground">{text || "Sem sinopse disponível."}</p>
     </section>
   );
 }
@@ -584,10 +508,7 @@ function Comparison({
   async function setReaction(reaction: Reaction) {
     const { error } = await supabase
       .from("interests")
-      .upsert(
-        { work_id: workId, user_id: space.userId, reaction },
-        { onConflict: "user_id,work_id" },
-      );
+      .upsert({ work_id: workId, user_id: space.userId, reaction }, { onConflict: "user_id,work_id" });
     if (error) toast.error("Não foi possível salvar.");
     else onChange();
     setEditing(null);
@@ -599,10 +520,7 @@ function Comparison({
         ? await supabase.from("ratings").delete().eq("work_id", workId).eq("user_id", space.userId)
         : await supabase
             .from("ratings")
-            .upsert(
-              { work_id: workId, user_id: space.userId, score },
-              { onConflict: "user_id,work_id" },
-            );
+            .upsert({ work_id: workId, user_id: space.userId, score }, { onConflict: "user_id,work_id" });
     setSaving(false);
     if (error) {
       toast.error("Não foi possível salvar.");
@@ -625,15 +543,11 @@ function Comparison({
               aria-expanded={editing === "reaction"}
               className={cell}
             >
-              <span className="emoji text-xl leading-none">
-                {mine ? REACTION_EMOJI[mine.reaction] : "—"}
-              </span>
+              <span className="emoji text-xl leading-none">{mine ? REACTION_EMOJI[mine.reaction] : "—"}</span>
               <span className="text-[10px] text-muted-foreground">Eu</span>
             </button>
             <div className={cell} aria-label={`${partnerLabel}: interesse`}>
-              <span className="emoji text-xl leading-none">
-                {theirs ? REACTION_EMOJI[theirs.reaction] : "—"}
-              </span>
+              <span className="emoji text-xl leading-none">{theirs ? REACTION_EMOJI[theirs.reaction] : "—"}</span>
               <span className="text-[10px] text-muted-foreground">{partnerLabel}</span>
             </div>
           </div>
@@ -641,20 +555,12 @@ function Comparison({
         <div className="rounded-xl border border-border bg-card px-2 py-1.5">
           <div className="flex items-baseline justify-between px-1">
             <h2 className="text-[11px] font-semibold text-muted-foreground">Avaliação</h2>
-            {avg !== null && (
-              <span className="text-[10px] font-semibold text-primary">
-                Média {formatScore(avg)}
-              </span>
-            )}
+            {avg !== null && <span className="text-[10px] font-semibold text-primary">Média {formatScore(avg)}</span>}
           </div>
           <div className="flex divide-x divide-border">
             <button onClick={() => setEditing("score")} aria-label="Eu: dar nota" className={cell}>
               <span className="text-base font-semibold leading-tight">
-                {myScore ? (
-                  formatScore(Number(myScore.score))
-                ) : (
-                  <span className="text-xs text-primary">Dar nota</span>
-                )}
+                {myScore ? formatScore(Number(myScore.score)) : <span className="text-xs text-primary">Dar nota</span>}
               </span>
               <span className="text-[10px] text-muted-foreground">Eu</span>
             </button>
@@ -710,21 +616,19 @@ function PriorWatch({
   async function toggle() {
     const { error } = await supabase
       .from("prior_watch_status")
-      .upsert(
-        { work_id: workId, user_id: space.userId, watched: !mine },
-        { onConflict: "user_id,work_id" },
-      );
+      .upsert({ work_id: workId, user_id: space.userId, watched: !mine }, { onConflict: "user_id,work_id" });
     if (error) toast.error("Não foi possível salvar.");
     else onChange();
   }
   return (
     <div className="flex flex-col items-center gap-2 text-center text-sm">
-      <button
+      <Button variant="ghost"
         onClick={toggle}
-        className={`hit pressable inline-flex min-h-11 items-center justify-center gap-1.5 rounded-full border px-4 py-2 text-sm ${mine ? "border-primary text-primary" : "border-border text-muted-foreground"}`}
+        aria-pressed={mine}
+        className={`pressable inline-flex h-10 w-full items-center justify-center gap-1.5 rounded-lg border px-3 text-[11px] ${mine ? "border-primary/35 bg-primary/10 text-primary" : "border-border text-muted-foreground"}`}
       >
         {mine && <Check className="h-3.5 w-3.5" />} Eu já assisti antes
-      </button>
+      </Button>
       {theirs && (
         <span className="text-xs text-muted-foreground">
           {firstName(space.partner?.display_name)} já assistiu antes
@@ -801,17 +705,11 @@ function prefetchImages(urls: string[], concurrency = 2) {
   };
 }
 
-type SeasonMeta = {
-  seasonNumber: number;
-  name: string;
-  episodeCount: number;
-  posterPath?: string | null;
-};
+type SeasonMeta = { seasonNumber: number; name: string; episodeCount: number; posterPath?: string | null };
 
 function nextEpisode(seen: Set<string>, seasons: SeasonMeta[]) {
   for (const s of seasons)
-    for (let e = 1; e <= s.episodeCount; e++)
-      if (!seen.has(`${s.seasonNumber}:${e}`)) return { s: s.seasonNumber, e };
+    for (let e = 1; e <= s.episodeCount; e++) if (!seen.has(`${s.seasonNumber}:${e}`)) return { s: s.seasonNumber, e };
   return null;
 }
 
@@ -847,9 +745,7 @@ function SeriesProgressStrip({
     };
     const { error } = state
       ? await supabase.from("series_states").update(payload).eq("id", state.id)
-      : await supabase
-          .from("series_states")
-          .insert({ ...payload, space_id: space.spaceId, work_id: workId });
+      : await supabase.from("series_states").insert({ ...payload, space_id: space.spaceId, work_id: workId });
     setWriting(false);
     setChoosingStatus(false);
     if (error) toast.error("Não foi possível salvar o status.");
@@ -930,17 +826,8 @@ function EpisodeArt({
   void posterPath;
   return (
     <div className="relative h-full w-full bg-muted">
-      {src && (
-        <img
-          src={src}
-          alt=""
-          loading={big ? "eager" : "lazy"}
-          className="h-full w-full object-cover"
-        />
-      )}
-      {big && (
-        <div className="pointer-events-none absolute inset-0 bg-gradient-to-t from-card/70 to-transparent" />
-      )}
+      {src && <img src={src} alt="" loading={big ? "eager" : "lazy"} className="h-full w-full object-cover" />}
+      {big && <div className="pointer-events-none absolute inset-0 bg-gradient-to-t from-card/70 to-transparent" />}
     </div>
   );
 }
@@ -971,9 +858,7 @@ function SeriesBlock({
   // Optimistic per-episode overrides: only the tapped card changes; others never re-render as disabled.
   const [overrides, setOverrides] = useState<Record<string, boolean>>({});
   const seen = new Set(events.map((e) => `${e.season_number}:${e.episode_number}`));
-  for (const [k, v] of Object.entries(overrides))
-    if (v) seen.add(k);
-    else seen.delete(k);
+  for (const [k, v] of Object.entries(overrides)) if (v) seen.add(k); else seen.delete(k);
   const next = nextEpisode(seen, seasons);
   const [season, setSeason] = useState<number | null>(null);
   const [openEp, setOpenEp] = useState<Episode | null>(null);
@@ -1009,8 +894,7 @@ function SeriesBlock({
       );
       for (const s of order) {
         if (stop) return;
-        if (s.seasonNumber !== activeSeason)
-          await qc.prefetchQuery(seasonQuery(s.seasonNumber)).catch(() => {});
+        if (s.seasonNumber !== activeSeason) await qc.prefetchQuery(seasonQuery(s.seasonNumber)).catch(() => {});
       }
     })();
     return () => {
@@ -1040,12 +924,7 @@ function SeriesBlock({
     const n = nextEpisode(after, seasons);
     if (key in overrides) return;
     setOverrides((o) => ({ ...o, [key]: watched }));
-    const drop = () =>
-      setOverrides((o) => {
-        const { [key]: _, ...rest } = o;
-        void _;
-        return rest;
-      });
+    const drop = () => setOverrides((o) => { const { [key]: _, ...rest } = o; void _; return rest; });
     const { error } = await supabase.rpc("set_episode_watched", {
       _work: workId,
       _season: s,
@@ -1132,11 +1011,7 @@ function SeriesBlock({
                     <div
                       className={`relative aspect-video overflow-hidden rounded-xl bg-muted ${isNext ? "ring-2 ring-primary" : ""} ${done ? "opacity-60" : ""}`}
                     >
-                      <EpisodeArt
-                        ep={ep}
-                        posterPath={seasonPoster(ep.seasonNumber)}
-                        fallbackImage={fallbackImage}
-                      />
+                      <EpisodeArt ep={ep} posterPath={seasonPoster(ep.seasonNumber)} fallbackImage={fallbackImage} />
                       {isNext && (
                         <span className="absolute left-1.5 top-1.5 rounded-md bg-primary px-1.5 py-0.5 text-[10px] font-semibold text-primary-foreground">
                           Próximo
@@ -1146,9 +1021,7 @@ function SeriesBlock({
                     <p className="mt-1.5 line-clamp-1 text-xs font-semibold">
                       T{ep.seasonNumber}E{ep.episodeNumber} · {ep.name}
                     </p>
-                    <p className="text-[11px] text-muted-foreground">
-                      {formatRuntime(ep.runtimeMinutes) ?? "—"}
-                    </p>
+                    <p className="text-[11px] text-muted-foreground">{formatRuntime(ep.runtimeMinutes) ?? "—"}</p>
                   </button>
                   <Button
                     variant="ghost"
@@ -1160,11 +1033,7 @@ function SeriesBlock({
                     className="absolute right-0 top-0 z-10 h-11 w-11 rounded-full hover:bg-transparent"
                   >
                     {/* Small visual mark inside the full 44px touch target. */}
-                    <span
-                      className={`grid h-6 w-6 place-items-center rounded-full transition-colors ${done ? "nav-glass text-primary" : "bg-background/50 text-foreground/60"}`}
-                    >
-                      <Check className="h-3.5 w-3.5" />
-                    </span>
+                    <span className={`grid h-6 w-6 place-items-center rounded-full transition-colors ${done ? "nav-glass text-primary" : "bg-background/50 text-foreground/60"}`}><Check className="h-3.5 w-3.5" /></span>
                   </Button>
                 </div>
               );
@@ -1217,18 +1086,13 @@ function SeriesBlock({
                   T{openEp.seasonNumber}E{openEp.episodeNumber} · {openEp.name}
                 </h3>
                 <p className="mt-1 text-xs text-muted-foreground">
-                  {[formatRuntime(openEp.runtimeMinutes), formatDate(openEp.airDate)]
-                    .filter(Boolean)
-                    .join(" · ") || "Sem data"}
+                  {[formatRuntime(openEp.runtimeMinutes), formatDate(openEp.airDate)].filter(Boolean).join(" · ") ||
+                    "Sem data"}
                 </p>
                 <p className="mt-3 text-sm leading-relaxed text-muted-foreground">
                   {openEp.overview || "Sem sinopse disponível."}
                 </p>
-                <div
-                  className="mt-5 grid grid-cols-2 gap-2"
-                  role="group"
-                  aria-label="Status do episódio"
-                >
+                <div className="mt-5 grid grid-cols-2 gap-2" role="group" aria-label="Status do episódio">
                   <button
                     disabled={!workId || saving || !openDone}
                     onClick={() => toggle(openEp.seasonNumber, openEp.episodeNumber, false)}
@@ -1276,8 +1140,7 @@ function IndicationsBlock({
   const [confirming, setConfirming] = useState(false);
   const [removing, setRemoving] = useState(false);
   const mine = indications.find((i) => i.indicated_by === space.userId);
-  const nameOf = (id: string) =>
-    id === space.userId ? "Você" : firstName(space.partner?.display_name);
+  const nameOf = (id: string) => (id === space.userId ? "Você" : firstName(space.partner?.display_name));
 
   async function removeMine() {
     if (!mine || removing) return;
@@ -1293,9 +1156,7 @@ function IndicationsBlock({
       );
       qc.setQueriesData<LibraryWork[]>({ queryKey: ["library"] }, (old) =>
         old?.map((w) =>
-          w.id === workId
-            ? { ...w, indications: w.indications.filter((i) => i.indicated_by !== space.userId) }
-            : w,
+          w.id === workId ? { ...w, indications: w.indications.filter((i) => i.indicated_by !== space.userId) } : w,
         ),
       );
       toast.success("Sua indicação foi removida");
@@ -1325,10 +1186,7 @@ function IndicationsBlock({
       )}
       <div className="mt-3 flex gap-2">
         {mine && (
-          <button
-            onClick={removeMine}
-            className="pressable min-h-11 flex-1 rounded-xl border border-border text-xs"
-          >
+          <button onClick={removeMine} className="pressable min-h-11 flex-1 rounded-xl border border-border text-xs">
             Remover minha indicação
           </button>
         )}
@@ -1350,8 +1208,8 @@ function IndicationsBlock({
           Excluir "{title}"?
         </h3>
         <p className="mt-2 text-sm text-muted-foreground">
-          A obra sai da biblioteca dos dois, junto com reações, notas, indicações, episódios e
-          sessões assistidas. Você terá alguns segundos para desfazer.
+          A obra sai da biblioteca dos dois, junto com reações, notas, indicações, episódios e sessões assistidas. Você
+          terá alguns segundos para desfazer.
         </p>
         <div className="mt-5 grid grid-cols-2 gap-2">
           <button
@@ -1372,33 +1230,3 @@ function IndicationsBlock({
   );
 }
 
-/** Canonical Nuvio TV deep link (beta 1.1.0+ parser). Copy-only: no remote send/playback claims. */
-function NuvioLink({ mediaType, tmdbId }: { mediaType: "movie" | "tv"; tmdbId: number }) {
-  const link = `nuvio://tmdb/${mediaType}/${tmdbId}`;
-  return (
-    <section>
-      <h2 className="mb-1 font-semibold">Nuvio TV</h2>
-      <p className="text-xs text-muted-foreground">
-        Link da ficha para abrir no dispositivo com Nuvio TV (versão beta 1.1.0 ou mais nova). Não
-        envia à TV nem inicia reprodução.
-      </p>
-      <div className="mt-2 flex items-center gap-2">
-        <code className="min-w-0 flex-1 truncate rounded-lg border border-border bg-card px-2 py-2 text-xs">
-          {link}
-        </code>
-        <Button
-          variant="secondary"
-          className="min-h-11"
-          onClick={() => {
-            void navigator.clipboard?.writeText(link).then(
-              () => toast("Link copiado"),
-              () => toast.error("Não foi possível copiar"),
-            );
-          }}
-        >
-          Copiar
-        </Button>
-      </div>
-    </section>
-  );
-}

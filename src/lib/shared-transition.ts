@@ -14,6 +14,7 @@ export function markShared(el: HTMLElement | null, id: string, kind: Kind) {
   if (!image) return;
   const started = Date.now();
   pending = { id, kind, at: started };
+  if (kind === "backdrop") document.documentElement.classList.add("shared-backdrop-active");
   image.style.viewTransitionName = `shared-${kind}`;
   const cleanup = () => { image.style.viewTransitionName = ""; if (pending?.at === started) clearShared(); };
   // activeViewTransition is supported by modern Chromium; other engines expose pseudo animations.
@@ -36,6 +37,7 @@ export function sharedStyle(id: string, kind: Kind): { viewTransitionName?: stri
 
 export function clearShared() {
   pending = null;
+  if (typeof document !== "undefined") document.documentElement.classList.remove("shared-backdrop-active");
 }
 
 import { useEffect, useState } from "react";
