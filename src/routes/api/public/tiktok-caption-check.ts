@@ -22,7 +22,7 @@ export const Route = createFileRoute("/api/public/tiktok-caption-check")({
           const found = item?.video?.subtitleInfos ?? [];
           const checked = v.name === "language" ? await Promise.all(found.slice(0, 3).map(async (track: { Url?: string; Format?: string; LanguageCodeName?: string }) => {
             const host = track.Url ? new URL(track.Url).hostname : null;
-            if (!host || !/^v\d+-webapp(?:-[a-z0-9-]+)?\.tiktok\.com$/.test(host)) return { format: track.Format, lang: track.LanguageCodeName, host, safe: false };
+            if (!host || !/^v\d+-webapp(?:-[a-z0-9-]+)?\.(?:tiktok\.com|tiktokcdn-eu\.com)$/.test(host)) return { format: track.Format, lang: track.LanguageCodeName, host, safe: false };
             try {
               const r = await fetch(track.Url!, { redirect: "manual", headers: v.headers, signal: AbortSignal.timeout(6000) });
               const text = await r.text();

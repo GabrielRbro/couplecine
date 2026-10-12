@@ -15,7 +15,7 @@ function allowed(url: string, subtitle = false) {
     const u = new URL(url);
     const host = u.hostname.toLowerCase();
     return u.protocol === "https:" && !u.username && !u.password && !u.port &&
-      (subtitle ? /^v\d+-webapp(?:-[a-z0-9-]+)?\.tiktok\.com$/.test(host) : HOSTS.has(host));
+      (subtitle ? /^v\d+-webapp(?:-[a-z0-9-]+)?\.(?:tiktok\.com|tiktokcdn-eu\.com)$/.test(host) : HOSTS.has(host));
   } catch { return false; }
 }
 
