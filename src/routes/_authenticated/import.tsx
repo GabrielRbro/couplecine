@@ -33,6 +33,11 @@ type Cand = { id: string; source_post_id: string | null; media_type: "movie" | "
 type Source = { id: string; platform: string; source_url: string; caption: string | null; caption_status: string | null; caption_fetched_at: string | null };
 const STATUS: Record<string, string> = { analyzing: "Analisando", review: "Em revisão", needs_help: "Precisa de ajuda", interrupted: "Interrompida", completed: "Concluída" };
 
+function hasDifferentOriginalTitle(title: string, originalTitle: string | null) {
+  const normalize = (value: string) => value.normalize("NFD").replace(/\p{Diacritic}/gu, "").replace(/\s+/g, " ").trim().toLocaleLowerCase("pt-BR");
+  return Boolean(originalTitle && normalize(title) !== normalize(originalTitle));
+}
+
 export const Route = createFileRoute("/_authenticated/import")({
   head: () => ({
     meta: [
@@ -179,6 +184,16 @@ function EntryView() {
   }
 
   if (shared && !shareFailed) return <><main className="flex min-h-[60dvh] items-center justify-center gap-2 text-sm text-muted-foreground"><LoaderCircle className="animate-spin" />Guardando o compartilhamento…</main>{replacementSheet}</>;
+
+  // Keep /import exclusively as a Web Share Target. The old dashboard for
+  // manual imports, pending links and saved sessions is intentionally hidden.
+  if (!shared || shareFailed) return (
+    <main className="mx-auto flex min-h-[60dvh] max-w-md flex-col items-center justify-center px-6 text-center">
+      <h1 className="text-xl font-semibold">Compartilhe um post para analisar</h1>
+      <p className="mt-3 text-sm text-muted-foreground">No TikTok ou Instagram, abra Compartilhar e escolha o AppCinema. Os títulos encontrados aparecerão para revisão.</p>
+      {shareFailed && <p role="status" className="mt-5 text-sm text-muted-foreground">Não foi possível receber este compartilhamento. Tente enviá-lo novamente pelo aplicativo.</p>}
+    </main>
+  );
 
   return (
     <main className="mx-auto max-w-md px-4 pb-32 pt-[max(env(safe-area-inset-top),16px)]">
@@ -481,8 +496,8 @@ function ReviewStack({ cands, lib, spaceId, sessionId, sources, onChanged, onBac
   const choices = row.status === "pending" ? parseChoiceNote(row.note) : null;
   return (
     <main className="relative mx-auto min-h-[100dvh] max-w-md overflow-hidden px-4 pb-32 pt-[max(env(safe-area-inset-top),16px)]">
-      {backdrop && <img src={backdrop} alt="" aria-hidden className="pointer-events-none absolute inset-x-0 top-0 h-[520px] w-full object-cover opacity-30 blur-2xl" />}
-      <div className="pointer-events-none absolute inset-x-0 top-0 h-[520px] bg-gradient-to-b from-background/30 to-background" />
+      {backdrop && <img src={backdrop} alt="" aria-hidden className="pointer-events-none absolute inset-x-0 top-0 h-[32rem] w-full object-cover opacity-45 [mask-image:linear-gradient(to_bottom,black_0%,black_58%,transparent_100%)]" />}
+      <div className="pointer-events-none absolute inset-x-0 top-0 h-[32rem] bg-gradient-to-b from-background/20 via-background/50 to-background" />
       <div className="relative">
         <div className="grid grid-cols-[1fr_auto_1fr] items-center">
           <Button variant="ghost" size="icon" aria-label="Voltar à sessão" className="h-11 w-11" onClick={onBack}><ChevronLeft /></Button>
@@ -495,11 +510,13 @@ function ReviewStack({ cands, lib, spaceId, sessionId, sources, onChanged, onBac
               <div className="art-edge relative overflow-hidden rounded-xl"><Poster eager path={row.poster_path} title={row.title} /></div>
             </div>
             <h2 className="mt-4 text-xl font-semibold">{row.title}</h2>
-            {row.original_title && row.original_title !== row.title && <p className="mt-1 text-sm font-medium text-foreground/80">{row.original_title}</p>}
+            {hasDifferentOriginalTitle(row.title, row.original_title) && <p className="mt-1 text-sm font-medium text-foreground/80">{row.original_title}</p>}
             <p className="mt-1 text-xs text-muted-foreground">{[row.year, row.media_type === "tv" ? "Série" : "Filme", meta?.runtimeMinutes ? formatRuntime(meta.runtimeMinutes) : meta?.seasonCount ? `${meta.seasonCount} temp.` : null, meta?.genres?.[0], meta && "voteAverage" in meta && typeof meta.voteAverage === "number" && meta.voteAverage > 0 ? `★ ${meta.voteAverage.toFixed(1)}` : null].filter(Boolean).join(" · ")}</p>
             <p className="mt-1 truncate text-[11px] text-muted-foreground">Fonte: {source ? source.platform === "instagram" ? "Instagram" : source.platform === "tiktok" ? "TikTok" : source.platform : "Texto / captura"}</p>
-            {row.status !== "saved" && libInfo && <p className="mt-2 text-xs text-primary">{libInfo.mine ? "Já está na biblioteca e você já indicou · confirmar renova sua indicação" : "Já está na biblioteca · você ainda não indicou"}</p>}
-            {label(row) && <p className="mt-2 text-xs text-muted-foreground">{label(row)}</p>}
+            <div className="mt-2 min-h-12">
+              {row.status !== "saved" && libInfo && <p className="text-xs text-primary">{libInfo.mine ? "Já está na biblioteca e você já indicou · confirmar renova sua indicação" : "Já está na biblioteca · você ainda não indicou"}</p>}
+              {label(row) && <p className="text-xs text-muted-foreground">{label(row)}</p>}
+            </div>
           </motion.section>
         </AnimatePresence>
 
@@ -512,7 +529,7 @@ function ReviewStack({ cands, lib, spaceId, sessionId, sources, onChanged, onBac
                 <div className="w-full max-w-28"><Poster path={option.posterPath} title={option.title} /></div>
                 <strong className="mt-2 text-xs">{option.title}</strong>
                 <span className="text-[11px] text-muted-foreground">{option.year ?? "Ano desconhecido"}</span>
-                {option.originalTitle && option.originalTitle !== option.title && <span className="mt-1 text-[11px] text-muted-foreground">Original: {option.originalTitle}</span>}
+                {hasDifferentOriginalTitle(option.title, option.originalTitle) && <span className="mt-1 text-[11px] text-muted-foreground">Original: {option.originalTitle}</span>}
                 {option.overview && <span className="mt-1 line-clamp-3 text-[11px] text-muted-foreground">{option.overview}</span>}
                 <span className="mt-auto pt-2 text-xs font-semibold text-primary">Escolher este</span>
               </button>)}
@@ -531,7 +548,7 @@ function ReviewStack({ cands, lib, spaceId, sessionId, sources, onChanged, onBac
           ))}
         </div>
 
-        <button type="button" aria-pressed={row.seen} disabled={busy} onClick={() => act(row, () => rpc("import_set_seen", { _candidate: row.id, _seen: !row.seen }))} className={`pressable mx-auto mt-5 flex min-h-11 items-center gap-2 rounded-full border px-4 text-xs ${row.seen ? "border-primary bg-primary/15 text-primary" : "border-border text-muted-foreground"}`}><Check className="h-4 w-4" />Já assisti antes</button>
+        <button type="button" aria-pressed={row.seen} disabled={busy} onClick={() => act(row, () => rpc("import_set_seen", { _candidate: row.id, _seen: !row.seen }))} className={`pressable mt-5 flex min-h-14 w-full items-center justify-center gap-2 rounded-xl border px-4 text-sm ${row.seen ? "border-primary bg-primary/15 text-primary" : "border-border text-muted-foreground"}`}><Check className="h-4 w-4" />Já assisti antes</button>
 
         <div className="mt-4 flex items-center justify-between">
           <Button variant="ghost" className="min-h-11" disabled={index === 0} onClick={() => go(index - 1)}><ChevronLeft />Anterior</Button>

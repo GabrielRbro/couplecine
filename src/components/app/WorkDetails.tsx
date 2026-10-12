@@ -27,6 +27,11 @@ import { useSharedStyle } from "@/lib/shared-transition";
 import { Button } from "@/components/ui/button";
 import { restoreWorkDeletion, scheduleWorkDelete, useWorkDeletion } from "@/lib/pending-delete";
 
+function hasDifferentOriginalTitle(title: string, originalTitle: string | null) {
+  const normalize = (value: string) => value.normalize("NFD").replace(/\p{Diacritic}/gu, "").replace(/\s+/g, " ").trim().toLocaleLowerCase("pt-BR");
+  return Boolean(originalTitle && normalize(title) !== normalize(originalTitle));
+}
+
 function BackOverlay() {
   const back = useBack("/library");
   return (
@@ -298,7 +303,7 @@ export function WorkDetails({
         </div>
         <div className="min-w-0 self-end" style={{ viewTransitionName: "detail-meta" }}>
           <h1 className="text-2xl font-semibold leading-tight">{work.title}</h1>
-          {work.original_title && work.original_title !== work.title && (
+          {hasDifferentOriginalTitle(work.title, work.original_title) && (
             <p className="text-xs text-muted-foreground">{work.original_title}</p>
           )}
           <p className="mt-1 text-xs text-muted-foreground">

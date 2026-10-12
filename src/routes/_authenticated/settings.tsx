@@ -132,7 +132,7 @@ function SettingsPage() {
   }
 
   if (!space) return null;
-  const integrations = ["Envio para a TV", "Tracker de séries", "Tela de Importações"];
+  const integrations = ["Envio para a TV", "Tracker de séries"];
 
   return (
     <div className="space-y-6 px-4 pt-6">

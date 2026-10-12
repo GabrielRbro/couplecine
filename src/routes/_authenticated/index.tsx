@@ -2,7 +2,7 @@ import { createFileRoute, Link } from "@tanstack/react-router";
 import { useRef, useState } from "react";
 import { markShared } from "@/lib/shared-transition";
 import { UnratedPile } from "@/components/app/UnratedPile";
-import { ArrowRight, Heart, Plus, Settings, Star, Upload } from "lucide-react";
+import { ArrowRight, Heart, Plus, Settings, Star } from "lucide-react";
 import { useQuery } from "@tanstack/react-query";
 import { supabase } from "@/integrations/supabase/client";
 import { HomeSkeleton } from "@/components/app/ui";
@@ -188,7 +188,7 @@ function Home() {
         </div>
       </header>
 
-      <section className="mt-4 grid grid-cols-3 gap-2" aria-label="Atalhos">
+      <section className="mt-4 grid grid-cols-2 gap-2" aria-label="Atalhos">
         {unrated[0] ? (
           <button onClick={() => setPile(true)} className={`${quick} text-left`}>
             <Star className="h-5 w-5 text-primary" />
@@ -210,11 +210,6 @@ function Home() {
               ? `${lastMatch.data.result_work_ids?.length ?? 0} em comum`
               : "Nenhum ainda"}
           </span>
-        </Link>
-        <Link to="/import" className={quick}>
-          <Upload className="h-5 w-5 text-primary" />
-          <span className="text-xs font-semibold">Importações</span>
-          <span className="text-[11px] text-muted-foreground">Link, texto ou captura</span>
         </Link>
       </section>
 
