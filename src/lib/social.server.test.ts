@@ -59,9 +59,9 @@ describe("TikTok public caption fallback", () => {
 
   it("adds native TikTok speech when the post description does not name a work", async () => {
     const full = "https://www.tiktok.com/@cinema_em_questao/video/7673536585962523922";
-    const vttUrl = "https://v16-webapp.tiktok.com/subtitles/track.vtt?signature=test";
+    const vttUrl = "https://v16-webapp.tiktokcdn-eu.com/subtitles/track.vtt?signature=test";
     const item = { id: "7673536585962523922", desc: "Esse suspense me surpreendeu", video: { subtitleInfos: [
-      { Format: "webvtt", LanguageCodeName: "eng-US", Size: "300", Url: "https://example.org/forbidden" },
+      { Format: "webvtt", LanguageCodeName: "eng-US", Size: "300", Url: "https://v16-webapp.tiktokcdn-eu.com.evil.org/forbidden" },
       { Format: "webvtt", LanguageCodeName: "por-PT", Size: "300", Url: vttUrl },
     ] } };
     const page = `<script id="__UNIVERSAL_DATA_FOR_REHYDRATION__">${JSON.stringify({ __DEFAULT_SCOPE__: { "webapp.video-detail": { itemInfo: { itemStruct: item } } } })}</script>`;
