@@ -24,7 +24,6 @@ import { Route as DotlovableOauthConsentRouteImport } from './routes/[.]lovable.
 import { Route as AuthenticatedWatchDiceRouteImport } from './routes/_authenticated/watch.dice'
 import { Route as AuthenticatedWatchGalleryRouteImport } from './routes/_authenticated/watch.gallery'
 import { Route as AuthenticatedWorkIdRouteImport } from './routes/_authenticated/work.$id'
-import { Route as ApiPublicPhotoProbeRouteImport } from './routes/api/public/photo-probe'
 import { Route as AuthenticatedTitleMediaTypeTmdbIdRouteImport } from './routes/_authenticated/title.$mediaType.$tmdbId'
 import { Route as ApiPublicSimklCallbackRouteImport } from './routes/api/public/simkl/callback'
 
@@ -104,11 +103,6 @@ const AuthenticatedWorkIdRoute = AuthenticatedWorkIdRouteImport.update({
   path: '/work/$id',
   getParentRoute: () => AuthenticatedRouteRoute,
 } as any)
-const ApiPublicPhotoProbeRoute = ApiPublicPhotoProbeRouteImport.update({
-  id: '/api/public/photo-probe',
-  path: '/api/public/photo-probe',
-  getParentRoute: () => rootRouteImport,
-} as any)
 const AuthenticatedTitleMediaTypeTmdbIdRoute =
   AuthenticatedTitleMediaTypeTmdbIdRouteImport.update({
     id: '/title/$mediaType/$tmdbId',
@@ -136,7 +130,6 @@ export interface FileRoutesByFullPath {
   '/watch/dice': typeof AuthenticatedWatchDiceRoute
   '/watch/gallery': typeof AuthenticatedWatchGalleryRoute
   '/work/$id': typeof AuthenticatedWorkIdRoute
-  '/api/public/photo-probe': typeof ApiPublicPhotoProbeRoute
   '/title/$mediaType/$tmdbId': typeof AuthenticatedTitleMediaTypeTmdbIdRoute
   '/api/public/simkl/callback': typeof ApiPublicSimklCallbackRoute
 }
@@ -155,7 +148,6 @@ export interface FileRoutesByTo {
   '/watch/dice': typeof AuthenticatedWatchDiceRoute
   '/watch/gallery': typeof AuthenticatedWatchGalleryRoute
   '/work/$id': typeof AuthenticatedWorkIdRoute
-  '/api/public/photo-probe': typeof ApiPublicPhotoProbeRoute
   '/title/$mediaType/$tmdbId': typeof AuthenticatedTitleMediaTypeTmdbIdRoute
   '/api/public/simkl/callback': typeof ApiPublicSimklCallbackRoute
 }
@@ -176,7 +168,6 @@ export interface FileRoutesById {
   '/_authenticated/watch/dice': typeof AuthenticatedWatchDiceRoute
   '/_authenticated/watch/gallery': typeof AuthenticatedWatchGalleryRoute
   '/_authenticated/work/$id': typeof AuthenticatedWorkIdRoute
-  '/api/public/photo-probe': typeof ApiPublicPhotoProbeRoute
   '/_authenticated/title/$mediaType/$tmdbId': typeof AuthenticatedTitleMediaTypeTmdbIdRoute
   '/api/public/simkl/callback': typeof ApiPublicSimklCallbackRoute
 }
@@ -197,7 +188,6 @@ export interface FileRouteTypes {
     | '/watch/dice'
     | '/watch/gallery'
     | '/work/$id'
-    | '/api/public/photo-probe'
     | '/title/$mediaType/$tmdbId'
     | '/api/public/simkl/callback'
   fileRoutesByTo: FileRoutesByTo
@@ -216,7 +206,6 @@ export interface FileRouteTypes {
     | '/watch/dice'
     | '/watch/gallery'
     | '/work/$id'
-    | '/api/public/photo-probe'
     | '/title/$mediaType/$tmdbId'
     | '/api/public/simkl/callback'
   id:
@@ -236,7 +225,6 @@ export interface FileRouteTypes {
     | '/_authenticated/watch/dice'
     | '/_authenticated/watch/gallery'
     | '/_authenticated/work/$id'
-    | '/api/public/photo-probe'
     | '/_authenticated/title/$mediaType/$tmdbId'
     | '/api/public/simkl/callback'
   fileRoutesById: FileRoutesById
@@ -247,7 +235,6 @@ export interface RootRouteChildren {
   McpRoute: typeof McpRoute
   Char91DotwellKnownChar93OauthProtectedResourceRoute: typeof Char91DotwellKnownChar93OauthProtectedResourceRoute
   DotlovableOauthConsentRoute: typeof DotlovableOauthConsentRoute
-  ApiPublicPhotoProbeRoute: typeof ApiPublicPhotoProbeRoute
   ApiPublicSimklCallbackRoute: typeof ApiPublicSimklCallbackRoute
 }
 
@@ -358,13 +345,6 @@ declare module '@tanstack/react-router' {
       preLoaderRoute: typeof AuthenticatedWorkIdRouteImport
       parentRoute: typeof AuthenticatedRouteRoute
     }
-    '/api/public/photo-probe': {
-      id: '/api/public/photo-probe'
-      path: '/api/public/photo-probe'
-      fullPath: '/api/public/photo-probe'
-      preLoaderRoute: typeof ApiPublicPhotoProbeRouteImport
-      parentRoute: typeof rootRouteImport
-    }
     '/_authenticated/title/$mediaType/$tmdbId': {
       id: '/_authenticated/title/$mediaType/$tmdbId'
       path: '/title/$mediaType/$tmdbId'
@@ -421,7 +401,6 @@ const rootRouteChildren: RootRouteChildren = {
   Char91DotwellKnownChar93OauthProtectedResourceRoute:
     Char91DotwellKnownChar93OauthProtectedResourceRoute,
   DotlovableOauthConsentRoute: DotlovableOauthConsentRoute,
-  ApiPublicPhotoProbeRoute: ApiPublicPhotoProbeRoute,
   ApiPublicSimklCallbackRoute: ApiPublicSimklCallbackRoute,
 }
 export const routeTree = rootRouteImport
