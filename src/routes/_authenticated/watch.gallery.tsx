@@ -155,15 +155,15 @@ function GalleryPage() {
   const logoQuery = useQuery({ queryKey: ["gallery-logos", batch.join(",")], enabled: batch.length > 0, staleTime: 3600_000,
     queryFn: () => fetchLogos({ data: { ids: batch } }) });
   useEffect(() => { if (logoQuery.data) { const resolved=logoQuery.data; Object.entries(resolved).forEach(([id, logo]) => qc.setQueryData(["gallery-logo", id], logo)); setLogos((old) => ({ ...old, ...resolved })); qc.setQueriesData<LibraryWork[]>({queryKey:["library",space?.spaceId]},(old)=>old?.map((w)=>Object.prototype.hasOwnProperty.call(resolved,w.id) ? {...w,work_metadata_cache:[{...w.work_metadata_cache[0],seasons:w.work_metadata_cache[0]?.seasons ?? null,logoPath:resolved[w.id] ?? null,logoChecked:true,expires_at:new Date(Date.now()+7*864e5).toISOString()}]} : w)); } }, [logoQuery.data]);
-  const { kind, duration, genre, both: bothLike } = Route.useSearch();
+  const urlFilters = Route.useSearch();
+  const [draft,setDraft] = useState<typeof urlFilters | null>(null);
+  const { kind, duration, genre, both: bothLike } = draft ?? urlFilters;
   const nav = useNavigate({ from: "/watch/gallery" });
   const set = (patch: Partial<{ kind: "all" | "movie" | "tv"; duration: number; genre: string; both: boolean }>) => {
     const current = { kind, duration, genre, both: bothLike };
     if (Object.entries(patch).every(([k, v]) => current[k as keyof typeof current] === v)) return;
-    const overlayId = window.history.state?.__overlay;
-    void nav({ to: ".", search: (p) => ({ ...p, ...patch }), replace: true, viewTransition: false }).then(() => {
-      if (overlayId) window.history.replaceState({ ...window.history.state, __overlay: overlayId }, "");
-    });
+    if (sheet) { setDraft({...current,...patch}); return; }
+    void nav({to:".",search:(p)=>({...p,...patch}),replace:true,viewTransition:false});
   };
   const setKind = (k: "all" | "movie" | "tv") => set({ kind: k, genre: genre && !pool.some((w) => (k === "all" || w.media_type === k) && w.genres.includes(genre)) ? "" : genre });
   const setGenre = (g: string) => set({ genre: g });
@@ -171,8 +171,14 @@ function GalleryPage() {
   const [sheet, setSheet] = useState(false);
   const closeFilters = () => closeOverlaysThen(() => {
     setSheet(false);
+    setDraft(null);
     void nav({to:".",search:{kind,duration,genre,both:bothLike},replace:true,viewTransition:false});
   });
+  useEffect(() => {
+    if (sheet || !draft) return;
+    const timer=window.setTimeout(()=>{setDraft(null);void nav({to:".",search:draft,replace:true,viewTransition:false});},0);
+    return ()=>window.clearTimeout(timer);
+  },[sheet,draft,nav]);
   const pool = works.filter(isIndicated);
   const genres = useMemo(
     () => [...new Set(pool.filter((w) => kind === "all" || w.media_type === kind).flatMap((w) => w.genres))].sort((a, b) => a.localeCompare(b, "pt-BR")),
