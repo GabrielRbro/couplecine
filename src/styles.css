@@ -351,8 +351,18 @@ input, textarea, [contenteditable="true"] { -webkit-user-select: text; user-sele
 .scroll-top-control { bottom: calc(var(--nav-space) + 12px); right: max(20px, calc((100vw - 448px) / 2 + 20px)); }
 ::view-transition-old(root) { animation: none; opacity: 0; }
 ::view-transition-new(root) { animation: none; mix-blend-mode: normal; }
-/* Backdrop morphs strictly below the new page (scrim, title, meta, poster, controls) for every frame;
-   the old card snapshot is dropped so no pale rectangle sits in front of the scrim. */
-::view-transition-group(shared-backdrop) { z-index: 1; }
-::view-transition-old(shared-backdrop) { display: none; }
-::view-transition-new(shared-backdrop) { animation: none; opacity: 1; mix-blend-mode: normal; }
+/* Both art snapshots morph under the root scrim/foreground; poster rules remain untouched. */
+::view-transition-group(shared-backdrop) { z-index: 1; animation-duration: 320ms; animation-timing-function: var(--ease-out); }
+::view-transition-image-pair(shared-backdrop) { isolation: isolate; }
+::view-transition-old(shared-backdrop) { display: block; animation: vt-out 320ms var(--ease-out) both; mix-blend-mode: normal; }
+::view-transition-new(shared-backdrop) { animation: vt-in 320ms var(--ease-out) both; mix-blend-mode: normal; }
+@media (prefers-reduced-motion: reduce) {
+  ::view-transition-group(shared-backdrop), ::view-transition-old(shared-backdrop), ::view-transition-new(shared-backdrop) { animation: none !important; }
+  ::view-transition-old(shared-backdrop) { display: none; }
+}
+
+/* During a backdrop handoff, extract the destination scrim above the moving art, not its text. */
+html.shared-backdrop-active::view-transition-group(root) { z-index: 0; }
+::view-transition-group(detail-scrim) { z-index: 3; animation: none; }
+::view-transition-old(detail-scrim) { display: none; }
+::view-transition-new(detail-scrim) { animation: none; mix-blend-mode: normal; }

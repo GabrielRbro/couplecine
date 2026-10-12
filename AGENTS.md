@@ -16,7 +16,7 @@
 - Descobrir dismissals live in `discover_dismissals` (per user, RLS own) and never create a 👎 interest — dismissing only hides from that user's feed.
 - Authenticated app chrome lives in the `_authenticated` layout so the BottomNav persists across route changes; route pages render only their content shell.
 - Library grids read a lightweight summary (`libraryQueryOptions`) with episode history pre-aggregated by the `work_watch_summary` view; raw watch_events load only on the work page — keeps list routes fast.
-- Page transitions use the router's View Transitions (`defaultViewTransition`) with `poster-<id>`/`backdrop-<id>` names for shared elements — degrades to instant swap where unsupported.
+- Shared art uses router View Transitions; unsupported browsers swap instantly.
 - Gemini is called only from `gemini.server.ts` via `ai.functions.ts`/catalog rerank, cached and rate-guarded in `ai_cache`; TMDB validates every AI suggestion and is the fallback.
 - Demo seed rows are tracked in `demo_batch_items` and removed only through `demo_cleanup(batch)` — never by title/date.
 - The `_authenticated` gate reads the local session (`getSession`); RLS/JWT on every query is the real security boundary.
@@ -36,4 +36,7 @@
 - Search relevance combines bounded title matching with TMDB recognition signals; AI batches exclude previous validated identities and use query/type/batch cache keys to avoid repeat sets.
 - Import: one `source_posts` row per space+post (img_index is a session reference; Instagram shortcode reuses legacy /p/ rows), linked N:N to works via `source_post_works` (`via_import` marks removable links); personal sessions/candidates written server-side; confirm/undo via `import_*` RPCs with per (work,user) provenance holds in `import_work_holds` so undo works in any order and never overwrites edits made outside the import — provenance-safe, idempotent, no SSRF.
 - Simkl is read-only per user (AUTH V2 + PKCE); tokens/OAuth states live in `private` behind service-role definer functions, `integration_accounts`/`external_watch_items` are user-read-only via RLS and written only server-side, and external history never writes watch_events/prior_watch_status — keeps credentials off the client and evidence separate from couple data.
-- Nuvio TV is exposed only as a copyable canonical `nuvio://tmdb/<type>/<id>` link — remote send/playback needs a paired companion that is unproven.
+- TV stays a disabled placeholder; pairing is unproven.
+
+- Import capacity uses an authenticated atomic RPC with per-user/space lock and exact-oldest approval; archive saved candidates to preserve provenance.
+- Review reuses title-preview cache; explicit finish skips undecided items transactionally.

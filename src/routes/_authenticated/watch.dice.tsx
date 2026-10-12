@@ -74,7 +74,7 @@ function DicePage() {
   const pool = works.filter((w) => {
     if (declined.has(w.id)) return false;
     if (kind !== "all" && w.media_type !== kind) return false;
-    if (!isIndicated(w)) return false;
+    if (history !== "rewatch" && !isIndicated(w)) return false;
     const watchedTogether = isWatched(w);
     const watchedBefore = priorWatch.some((status) => status.work_id === w.id && status.watched);
     if (
