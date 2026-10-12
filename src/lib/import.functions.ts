@@ -2,7 +2,7 @@ import { createServerFn } from "@tanstack/react-start";
 import { z } from "zod";
 import { requireSupabaseAuth } from "@/integrations/supabase/auth-middleware";
 import { findImdb, findTitle, lookupTmdb, type TmdbSearchItem } from "./tmdb.server";
-import { fetchCaption, needsCaptionFetch, VIDEO_PROBE_STATUS } from "./social.server";
+import { fetchCaption, fetchTikTokPhotoImages, needsCaptionFetch, VIDEO_PROBE_STATUS } from "./social.server";
 import { explicitTitle } from "./explicit-title";
 import { extractSocial, sourceUrl } from "./social-url";
 import { runImportAnalysis } from "./ai.functions";
@@ -140,8 +140,7 @@ export const fetchSessionCaptions = createServerFn({ method: "POST" })
     return { fetched };
   });
 
-/** Share Target: capture and recognize without a second tap. This is deliberately bounded to
- * three sources while the authenticated media worker is still being evaluated. */
+/** Share Target: capture and recognize without a second tap. Bounded to three sources. */
 export const autoAnalyzeSession = createServerFn({ method: "POST" })
   .middleware([requireSupabaseAuth])
   .inputValidator((d) => z.object({ sessionId: z.string().uuid(), retry: z.boolean().optional() }).parse(d))
@@ -173,19 +172,43 @@ export const autoAnalyzeSession = createServerFn({ method: "POST" })
       for (const id of s.source_post_ids.slice(0, 3)) {
         const p = byId.get(id);
         if (!p) continue;
+        const ref = extractSocial(p.source_url, 1)[0];
         let caption = p.caption;
+        let canonical = p.source_url;
         if (needsCaptionFetch(p)) {
-          const ref = extractSocial(p.source_url, 1)[0];
           const result = ref ? await fetchCaption(ref).catch(() => null) : null;
+          canonical = result?.canonical ?? canonical;
           const patch = captionPatch(p, result);
           if (patch) {
             caption = patch.caption;
             const { error: updateError } = await db.from("source_posts").update(patch).eq("id", id);
             if (updateError) throw new Error("Não foi possível guardar a legenda.");
           }
-          if (result?.status === "photo_unavailable") photoUnavailable = true;
         }
-        if (p.caption_status === "photo_unavailable") photoUnavailable = true;
+        const photoRef = extractSocial(canonical, 1)[0];
+        if ((photoRef?.platform === "tiktok" && photoRef.kind === "photo") || ref?.platform === "tiktok-short") {
+          const capture = await fetchTikTokPhotoImages(photoRef?.platform === "tiktok" ? photoRef : ref!).catch(() => null);
+          if (capture?.images.length) {
+            caption = caption || capture.caption;
+            if (caption && !p.caption) {
+              const { error: updateError } = await db.from("source_posts").update({ caption, caption_status: "ok", caption_fetched_at: new Date().toISOString() }).eq("id", id);
+              if (updateError) throw new Error("Não foi possível guardar a descrição do carrossel.");
+            }
+            // A single carousel page can name several works. Small batches avoid the
+            // model's per-response title limit silently dropping later pages.
+            for (let page = 0; page < capture.images.length; page += 3) {
+              const analysis = await runImportAnalysis({ supabase: context.supabase, userId: context.userId, spaceId: s.space_id,
+                ...(caption ? { text: `${caption}\n\nPáginas ${page + 1} a ${Math.min(page + 3, capture.images.length)} de ${capture.images.length}. Extraia todos os títulos visíveis nestas páginas.` } : {}),
+                images: capture.images.slice(page, page + 3) });
+              if (!analysis.ok) throw new Error(analysis.reason);
+              if (analysis.items.length) await addCandidates(s.id, s.space_id, s.created_by, analysis.items, id);
+              found += analysis.items.length;
+            }
+            sawCaption = true;
+            continue;
+          }
+          if (photoRef?.platform === "tiktok" && photoRef.kind === "photo") photoUnavailable = true;
+        }
         if (!caption) continue;
         sawCaption = true;
         const items = await recognize(caption);
@@ -200,10 +223,10 @@ export const autoAnalyzeSession = createServerFn({ method: "POST" })
       }
       if (!found && s.source_post_ids.length && !freeText && !sawCaption) {
         await refreshStatus(s.id);
-        return { ok: false as const, reason: photoUnavailable ? "Este carrossel não liberou as imagens para leitura pelo link. Selecione as páginas com filmes de uma vez." : "Este post não trouxe descrição ou legenda pública. Confira o link recebido ou envie uma captura do vídeo." };
+        return { ok: false as const, reason: photoUnavailable ? "Não consegui ler todas as fotos deste carrossel automaticamente. Tente novamente em alguns minutos." : "Este post não trouxe descrição ou legenda pública. Confira o link recebido ou envie uma captura do vídeo." };
       }
       await refreshStatus(s.id);
-      if (!found) return { ok: false as const, reason: "Não consegui identificar uma obra com segurança. Tente novamente ou envie uma captura." };
+      if (!found) return { ok: false as const, reason: photoUnavailable ? "Não consegui ler todas as fotos deste carrossel automaticamente. Tente novamente em alguns minutos." : "Não consegui identificar uma obra com segurança. Tente novamente ou envie uma captura." };
       await setStatus(s.id, { ai_done: true,
         ...(s.source_post_ids.length > 3 ? { note: "A análise automática verificou os três primeiros links deste envio." } : {}),
       });

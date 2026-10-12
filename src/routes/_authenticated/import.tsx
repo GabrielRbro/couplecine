@@ -296,7 +296,7 @@ function SessionView({ id }: { id: string }) {
   const { session: s, sources, cands, lib } = q.data;
 
   if (s.origin === "share" && !s.ai_done && !autoError)
-    return <main role="status" className="flex min-h-[60dvh] items-center justify-center gap-2 px-6 text-center text-sm text-muted-foreground"><LoaderCircle className="animate-spin" />Analisando o link e procurando filmes e séries…</main>;
+    return <main role="status" className="flex min-h-[60dvh] items-center justify-center gap-2 px-6 text-center text-sm text-muted-foreground"><LoaderCircle className="animate-spin" />Lendo o link, as fotos do carrossel e os títulos…</main>;
   if (s.origin === "share" && !cands.length && !manualHelp)
     return <main className="mx-auto max-w-md px-4 pt-16 text-center text-sm text-muted-foreground">
       <p>{autoError ?? "Não consegui identificar uma obra com segurança neste link."}</p>
@@ -312,7 +312,7 @@ function SessionView({ id }: { id: string }) {
         } catch (e) { setAutoError(e instanceof Error ? e.message : "Não foi possível tentar novamente."); }
         finally { setBusy(null); void refresh(); }
       }}>{busy === "retry" ? <LoaderCircle className="animate-spin" /> : <Search />}Tentar novamente</Button>
-      <Button variant="secondary" className="mt-5 min-h-11" onClick={() => setManualHelp(true)}>{sources.some((p) => p.caption_status === "photo_unavailable") ? "Selecionar fotos do carrossel" : "Enviar captura ou texto"}</Button>
+      <Button variant="secondary" className="mt-5 min-h-11" onClick={() => setManualHelp(true)}>Enviar captura ou texto</Button>
       <Button asChild variant="ghost" className="mt-5 min-h-11"><Link to="/import" search={{}}>Voltar</Link></Button>
     </main>;
 
@@ -343,13 +343,13 @@ function SessionView({ id }: { id: string }) {
             {idx ? <p className="mt-1 text-xs text-primary">Imagem {idx} do carrossel. A imagem não é lida: envie a captura dessa imagem.</p> : null}
             {!hasCands && <button type="button" aria-pressed={skipped.has(p.id)} disabled={!!busy} onClick={() => run("skip" + p.id, async () => { const { error } = await supabase.rpc("import_skip_source", { _session: id, _source: p.id, _skip: !skipped.has(p.id) }); if (error) throw new Error("Não foi possível salvar."); })} className={`mt-2 min-h-11 text-xs underline-offset-2 hover:underline ${skipped.has(p.id) ? "text-primary" : "text-muted-foreground"}`}>{skipped.has(p.id) ? "Fonte ignorada · desfazer" : "Ignorar esta fonte (sem obra identificável)"}</button>}
             {p.caption ? <><p className="mt-2 text-[11px] text-muted-foreground">Texto e legenda automática do post (a transcrição pode errar nomes)</p><p className="mt-1 max-h-40 overflow-y-auto whitespace-pre-wrap rounded-xl bg-background/60 p-2 text-sm">{p.caption}</p></>
-              : p.caption_status ? <p role="status" className="mt-2 text-xs text-muted-foreground">{p.caption_status === "photo_unavailable" ? "As fotos deste carrossel não vieram pelo link. Selecione até 10 páginas com filmes de uma vez." : p.caption_status === "blocked" ? "A rede bloqueou a leitura pública. Envie uma captura ou cole a legenda." : "Legenda indisponível. Envie uma captura ou cole a legenda."}</p> : null}
+              : p.caption_status ? <p role="status" className="mt-2 text-xs text-muted-foreground">{p.caption_status === "photo_unavailable" ? "As fotos não foram liberadas nesta tentativa. Tente analisar o link novamente." : p.caption_status === "blocked" ? "A rede bloqueou a leitura pública. Envie uma captura ou cole a legenda." : "Legenda indisponível. Envie uma captura ou cole a legenda."}</p> : null}
             {p.caption && <Button variant="secondary" className="mt-2 min-h-11 w-full" disabled={!!busy} onClick={() => run(p.id, () => analyzeFn({ data: { sessionId: id, sourcePostId: p.id } }))}>{busy === p.id ? <LoaderCircle className="animate-spin" /> : <Sparkles />}Analisar legenda com IA</Button>}
           </div>
         );
       })}
       {needCaption && <Button variant="outline" className="mt-2 min-h-12 w-full" disabled={!!busy} onClick={() => run("cap", () => captionsFn({ data: { sessionId: id } }))}>{busy === "cap" ? <LoaderCircle className="animate-spin" /> : <Search />}Buscar legenda do post</Button>}
-      {sources.length > 0 && <p className="mt-1 text-[11px] text-muted-foreground">O link fornece a descrição e a fala. Se os nomes aparecem escritos no vídeo, envie uma captura para conferi-los.</p>}
+      {sources.length > 0 && <p className="mt-1 text-[11px] text-muted-foreground">Carrosséis do TikTok são lidos automaticamente pelo link. Capturas continuam disponíveis quando o post não libera as imagens.</p>}
 
       {freeText && (
         <div className="mt-3 rounded-2xl border border-border bg-card p-3">

@@ -1,5 +1,5 @@
 import { afterEach, describe, expect, it, vi } from "vitest";
-import { fetchCaption, needsCaptionFetch, parseSocial, VIDEO_PROBE_STATUS } from "./social.server";
+import { fetchCaption, fetchTikTokPhotoImages, needsCaptionFetch, parseSocial, VIDEO_PROBE_STATUS } from "./social.server";
 
 afterEach(() => vi.unstubAllGlobals());
 
@@ -16,6 +16,40 @@ it("rechecks an older ambiguous TikTok description once, preserving the retry co
 });
 
 describe("TikTok public caption fallback", () => {
+  it("downloads every photo in order from a public carousel without user screenshots", async () => {
+    const full = "https://www.tiktok.com/@vtindica_/photo/7686999788637736213";
+    const first = "https://p16-common-sign.tiktokcdn-us.com/tos-alisg-i-photomode-sg/a~tplv-photomode-image.jpeg?signature=one";
+    const second = "https://p19-common-sign.tiktokcdn-us.com/tos-alisg-i-photomode-sg/b~tplv-photomode-image.jpeg?signature=two";
+    const fetch = vi.fn(async (input: string, options?: RequestInit) => {
+      expect(options?.redirect).toBe("manual");
+      if (input.startsWith("https://tikwm.com/api/?")) return Response.json({ code: 0, data: { id: "7686999788637736213", title: "Filmes essenciais", images: [first, second] } });
+      if (input === first || input === second) return new Response(new Uint8Array([0xff, 0xd8, input === first ? 1 : 2]), { headers: { "content-type": "image/jpeg" } });
+      throw new Error("Unexpected URL");
+    });
+    vi.stubGlobal("fetch", fetch);
+    const result = await fetchTikTokPhotoImages(parseSocial(full)!);
+    expect(result).toMatchObject({ caption: "Filmes essenciais", images: [{ mimeType: "image/jpeg" }, { mimeType: "image/jpeg" }] });
+    expect(result?.images.map((image) => Array.from(atob(image.base64)).at(-1)?.charCodeAt(0))).toEqual([1, 2]);
+    expect(fetch).toHaveBeenCalledTimes(3);
+    expect(decodeURIComponent(fetch.mock.calls[0]![0])).toContain(full);
+  });
+
+  it("rejects media hosts outside TikTok's photo CDN and incomplete carousels", async () => {
+    const full = "https://www.tiktok.com/@vtindica_/photo/7686999788637736213";
+    const safe = "https://p16-common-sign.tiktokcdn-us.com/tos-alisg-i-photomode-sg/a~tplv-photomode-image.jpeg";
+    const evil = "https://p16-common-sign.tiktokcdn-us.com.evil.org/private";
+    const fetch = vi.fn(async (input: string) => input.startsWith("https://tikwm.com/api/?")
+      ? Response.json({ code: 0, data: { id: "7686999788637736213", images: [safe, evil] } })
+      : new Response(new Uint8Array([0xff, 0xd8, 1]), { headers: { "content-type": "image/jpeg" } }));
+    vi.stubGlobal("fetch", fetch);
+    expect(await fetchTikTokPhotoImages(parseSocial(full)!)).toBeNull();
+    expect(fetch).toHaveBeenCalledTimes(1);
+    fetch.mockImplementation(async (input: string) => input.startsWith("https://tikwm.com/api/?")
+      ? Response.json({ code: 0, data: { id: "7686999788637736213", images: [safe, safe] } })
+      : new Response("blocked", { status: 403 }));
+    expect(await fetchTikTokPhotoImages(parseSocial(full)!)).toBeNull();
+  });
+
   it("expands a short link and reads the post when oEmbed is rate-limited", async () => {
     const full = "https://www.tiktok.com/@cinema_em_questao/video/7673536585962523922";
     const item = { id: "7673536585962523922", desc: "Zodíaco (2007) #filmes #cinema", author: { uniqueId: "cinema_em_questao" } };
