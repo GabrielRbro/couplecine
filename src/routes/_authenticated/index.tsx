@@ -2,7 +2,7 @@ import { createFileRoute, Link } from "@tanstack/react-router";
 import { useRef, useState } from "react";
 import { markShared } from "@/lib/shared-transition";
 import { UnratedPile } from "@/components/app/UnratedPile";
-import { ArrowRight, Heart, Plus, Settings, Star, Upload } from "lucide-react";
+import { ArrowRight, Heart, Plus, Settings, Star } from "lucide-react";
 import { useQuery } from "@tanstack/react-query";
 import { supabase } from "@/integrations/supabase/client";
 import { HomeSkeleton } from "@/components/app/ui";
@@ -48,15 +48,26 @@ function ContextList({ items, empty }: { items: LibraryWork[]; empty: string }) 
             key={w.id}
             to="/work/$id"
             params={{ id: w.id }}
-            onClick={(e) => markShared(e.currentTarget.querySelector("[data-context-poster]"), w.id, "poster")}
+            onClick={(e) =>
+              markShared(e.currentTarget.querySelector("[data-context-poster]"), w.id, "poster")
+            }
             className="pressable relative flex h-20 items-center gap-3 overflow-hidden rounded-2xl bg-card pr-3"
           >
             {art && (
-              <img src={art} alt="" loading="lazy" className="absolute inset-0 h-full w-full object-cover opacity-35" />
+              <img
+                src={art}
+                alt=""
+                loading="lazy"
+                className="absolute inset-0 h-full w-full object-cover opacity-35"
+              />
             )}
             <div className="absolute inset-0 bg-gradient-to-r from-background/90 via-background/70 to-background/30" />
             <div data-context-poster className="relative h-full w-14 shrink-0">
-              <Poster path={w.poster_path} title={w.title} className="h-full rounded-none rounded-l-2xl" />
+              <Poster
+                path={w.poster_path}
+                title={w.title}
+                className="h-full rounded-none rounded-l-2xl"
+              />
             </div>
             <div className="relative min-w-0 flex-1">
               <p className="line-clamp-1 font-display text-sm font-semibold">{w.title}</p>
@@ -105,7 +116,9 @@ function ContinueCard({
       </div>
       <div className="absolute inset-0 bg-gradient-to-t from-background via-background/40 to-transparent" />
       <div className={`absolute inset-x-0 bottom-0 ${hero ? "p-4" : "p-3"}`}>
-        <p className={`line-clamp-2 font-display font-semibold leading-tight ${hero ? "text-xl" : "text-sm"}`}>
+        <p
+          className={`line-clamp-2 font-display font-semibold leading-tight ${hero ? "text-xl" : "text-sm"}`}
+        >
           {w.title}
         </p>
         <p className="mt-1 text-[11px] text-foreground/75">
@@ -188,7 +201,7 @@ function Home() {
         </div>
       </header>
 
-      <section className="mt-5 grid grid-cols-3 gap-2" aria-label="Atalhos">
+      <section className="mt-5 grid grid-cols-2 gap-2" aria-label="Atalhos">
         {unrated[0] ? (
           <button onClick={() => setPile(true)} className={`${quick} text-left`}>
             <Star className="h-5 w-5 text-primary" />
@@ -210,11 +223,6 @@ function Home() {
               ? `${lastMatch.data.result_work_ids?.length ?? 0} em comum`
               : "Nenhum ainda"}
           </span>
-        </Link>
-        <Link to="/import" className={quick}>
-          <Upload className="h-5 w-5 text-primary" />
-          <span className="text-xs font-semibold">Importações</span>
-          <span className="text-[11px] text-muted-foreground">Link, texto ou captura</span>
         </Link>
       </section>
 
@@ -239,7 +247,9 @@ function Home() {
               <ContinueCard
                 key={w.id}
                 work={w}
-                layout={continuing.length === 1 ? "hero" : continuing.length === 2 ? "half" : "strip"}
+                layout={
+                  continuing.length === 1 ? "hero" : continuing.length === 2 ? "half" : "strip"
+                }
                 className={continuing.length >= 3 ? "w-[37%] shrink-0 snap-start" : ""}
               />
             ))}
