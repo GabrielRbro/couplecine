@@ -354,8 +354,8 @@ input, textarea, [contenteditable="true"] { -webkit-user-select: text; user-sele
 /* Both art snapshots morph under the root scrim/foreground; poster rules remain untouched. */
 ::view-transition-group(shared-backdrop) { z-index: 1; animation-duration: 320ms; animation-timing-function: var(--ease-out); }
 ::view-transition-image-pair(shared-backdrop) { isolation: isolate; }
-::view-transition-old(shared-backdrop) { display: block; animation: vt-out 320ms var(--ease-out) both; mix-blend-mode: normal; }
-::view-transition-new(shared-backdrop) { animation: vt-in 320ms var(--ease-out) both; mix-blend-mode: normal; }
+::view-transition-old(shared-backdrop) { display: block; animation: none; opacity: 0; mix-blend-mode: normal; }
+::view-transition-new(shared-backdrop) { animation: none; opacity: 1; mix-blend-mode: normal; }
 @media (prefers-reduced-motion: reduce) {
   ::view-transition-group(shared-backdrop), ::view-transition-old(shared-backdrop), ::view-transition-new(shared-backdrop) { animation: none !important; }
   ::view-transition-old(shared-backdrop) { display: none; }
