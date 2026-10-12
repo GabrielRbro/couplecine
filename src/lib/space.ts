@@ -68,6 +68,7 @@ export type WatchSummary = {
  * Episode history comes pre-aggregated from the work_watch_summary view, never as raw events. */
 export type LibraryWork = {
   id: string;
+  tmdb_id: number;
   title: string;
   original_title: string | null;
   media_type: "movie" | "tv";

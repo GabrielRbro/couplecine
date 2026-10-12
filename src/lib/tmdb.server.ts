@@ -94,7 +94,14 @@ export async function searchMulti(query: string, page = 1): Promise<TmdbSearchIt
 }
 
 /** Bump when the details strategy changes; older cached payloads are refetched. */
-export const DETAILS_CACHE_VERSION = 3;
+export const DETAILS_CACHE_VERSION = 4;
+
+export type TmdbUniversePart = {
+  tmdbId: number;
+  title: string;
+  posterPath: string | null;
+  year: number | null;
+};
 
 export type TmdbDetails = {
   v?: number;
@@ -121,6 +128,7 @@ export type TmdbDetails = {
     episodeCount: number;
     posterPath?: string | null;
   }[];
+  universe: { name: string; parts: TmdbUniversePart[] } | null;
 };
 
 export async function fetchDetails(
@@ -154,6 +162,13 @@ export async function fetchDetails(
   const createdBy = Array.isArray(data["created_by"]) ? (data["created_by"] as Json[]) : [];
   const genres = Array.isArray(data["genres"]) ? (data["genres"] as Json[]) : [];
   const seasons = Array.isArray(data["seasons"]) ? (data["seasons"] as Json[]) : [];
+  const collection = data["belongs_to_collection"] as Json | null;
+  const collectionId = mediaType === "movie" && collection ? Number(collection["id"]) : 0;
+  // TMDB only exposes a movie's collection id on the title. Fetching it here
+  // gives the detail page the canonical order of a franchise, not a guess based
+  // on title keywords.
+  const collectionData = collectionId > 0 ? await call(`/collection/${collectionId}`).catch(() => null) : null;
+  const collectionParts = collectionData && Array.isArray(collectionData["parts"]) ? collectionData["parts"] as Json[] : [];
 
   const director = crew.find((member) => member["job"] === "Director");
   const creator = createdBy[0];
@@ -201,6 +216,20 @@ export async function fetchDetails(
         episodeCount: Number(season["episode_count"] ?? 0),
         posterPath: str(season["poster_path"]),
       })),
+    universe: collection && collectionParts.length > 1
+      ? {
+          name: String(collection["name"] ?? collectionData?.["name"] ?? "Universo"),
+          parts: collectionParts
+            .map((part) => ({
+              tmdbId: Number(part["id"]),
+              title: String(part["title"] ?? "Sem título"),
+              posterPath: str(part["poster_path"]),
+              year: year(part["release_date"]),
+            }))
+            .filter((part) => Number.isInteger(part.tmdbId) && part.tmdbId > 0)
+            .sort((a, b) => (a.year ?? 9_999) - (b.year ?? 9_999) || a.tmdbId - b.tmdbId),
+        }
+      : null,
   };
 }
 

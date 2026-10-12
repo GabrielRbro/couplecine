@@ -57,11 +57,29 @@ export const Route = createFileRoute("/_authenticated/import")({
     ...(typeof s["session"] === "string" && /^[0-9a-f-]{36}$/.test(s["session"]) ? { session: s["session"] } : {}),
   }),
   component: () => (
-    <AppShell>
+    <AppShell fullscreen>
       <ImportPage />
     </AppShell>
   ),
 });
+
+function ImportLoading({ message }: { message: string }) {
+  return (
+    <main className="mx-auto flex min-h-[100dvh] max-w-md flex-col items-center justify-center overflow-hidden px-7 pb-[env(safe-area-inset-bottom)] text-center">
+      <div aria-hidden className="relative mb-8 h-32 w-44">
+        <div className="ai-film-frame ai-film-1 absolute inset-x-8 top-2 h-24 rounded-2xl border border-primary/25 bg-card/80" />
+        <div className="ai-film-frame ai-film-2 absolute inset-x-4 top-5 h-24 rounded-2xl border border-primary/40 bg-secondary/90" />
+        <div className="ai-film-frame ai-film-3 absolute inset-x-0 top-8 flex h-24 items-center justify-center rounded-2xl border border-primary/50 bg-card shadow-xl">
+          <Sparkles className="h-7 w-7 text-primary" />
+        </div>
+      </div>
+      <p className="text-[11px] font-semibold uppercase tracking-[0.24em] text-primary">AppCinema</p>
+      <h1 className="mt-3 text-2xl font-semibold">Organizando as obras</h1>
+      <p role="status" className="mt-3 max-w-64 text-sm leading-relaxed text-muted-foreground">{message}</p>
+      <LoaderCircle aria-hidden className="mt-6 h-5 w-5 animate-spin text-primary" />
+    </main>
+  );
+}
 
 function readImage(file: File | undefined, done: (img: Img) => void) {
   if (!file) return;
@@ -183,7 +201,7 @@ function EntryView() {
     try { const result = await start(input); if ("limit" in result) { setReplacement({input,oldestId:result.oldestId,oldestTitle:result.oldestTitle}); setBusy(false); } } catch { toast.error("Não foi possível iniciar a importação."); setBusy(false); }
   }
 
-  if (shared && !shareFailed) return <><main className="flex min-h-[60dvh] items-center justify-center gap-2 text-sm text-muted-foreground"><LoaderCircle className="animate-spin" />Guardando o compartilhamento…</main>{replacementSheet}</>;
+  if (shared && !shareFailed) return <>{replacement ? replacementSheet : <ImportLoading message="Recebendo o post para começar a análise…" />}</>;
 
   // Keep /import exclusively as a Web Share Target. The old dashboard for
   // manual imports, pending links and saved sessions is intentionally hidden.
@@ -262,6 +280,7 @@ function SessionView({ id }: { id: string }) {
   const [busy, setBusy] = useState<string | null>(null);
   const [notice, setNotice] = useState<string | null>(null);
   const [reviewing, setReviewing] = useState(false);
+  const [mediaPrepared, setMediaPrepared] = useState(false);
   const fileRef = useRef<HTMLInputElement>(null);
 
   const q = useQuery({
@@ -282,6 +301,30 @@ function SessionView({ id }: { id: string }) {
       return { session: s, sources: (sources ?? []) as Source[], cands: list, lib };
     },
   });
+  // Fetch both image sizes as soon as AI candidates reach the session. The
+  // review card then reads them from the browser cache instead of waiting for
+  // the first time the user lands on that work.
+  useEffect(() => {
+    const candidates = q.data?.cands ?? [];
+    if (!candidates.length) return;
+    let active = true;
+    setMediaPrepared(false);
+    const images: HTMLImageElement[] = [];
+    for (const candidate of candidates) {
+      for (const src of [tmdbImage(candidate.poster_path, "w342"), tmdbImage(candidate.backdrop_path ?? candidate.poster_path, "w780")]) {
+        if (!src) continue;
+        const image = new Image();
+        image.decoding = "async";
+        image.src = src;
+        images.push(image);
+      }
+    }
+    const timeout = window.setTimeout(() => { if (active) setMediaPrepared(true); }, 2_500);
+    void Promise.all(images.map((image) => image.decode().catch(() => undefined))).then(() => {
+      if (active) setMediaPrepared(true);
+    });
+    return () => { active = false; window.clearTimeout(timeout); };
+  }, [q.data?.cands]);
   const refresh = () => qc.invalidateQueries({ queryKey: ["import-session", id] });
 
   async function runAutomatic(retry = false) {
@@ -321,8 +364,8 @@ function SessionView({ id }: { id: string }) {
   }, [q.data?.session?.id]);
 
   useEffect(() => {
-    if (q.data?.session.origin === "share" && (q.data.session.ai_done || autoError) && q.data.cands.length) setReviewing(true);
-  }, [q.data?.session.ai_done, q.data?.cands.length, q.data?.session.origin, autoError]);
+    if (q.data?.session.origin === "share" && (q.data.session.ai_done || autoError) && q.data.cands.length && mediaPrepared) setReviewing(true);
+  }, [q.data?.session.ai_done, q.data?.cands.length, q.data?.session.origin, autoError, mediaPrepared]);
 
   async function run(label: string, fn: () => Promise<{ ok?: boolean; reason?: string; found?: number } | unknown>) {
     setBusy(label);
@@ -339,12 +382,12 @@ function SessionView({ id }: { id: string }) {
     }
   }
 
-  if (q.isLoading) return <main className="flex min-h-[60dvh] items-center justify-center"><LoaderCircle className="animate-spin text-muted-foreground" /></main>;
+  if (q.isLoading) return <ImportLoading message="Preparando a revisão do post…" />;
   if (!q.data) return <main className="mx-auto max-w-md px-4 pt-10 text-center text-sm text-muted-foreground">Sessão não encontrada.<Button asChild variant="ghost" className="mt-4 min-h-11 w-full"><Link to="/import" search={{}}>Voltar</Link></Button></main>;
   const { session: s, sources, cands, lib } = q.data;
 
   if (s.origin === "share" && !s.ai_done && !autoError)
-    return <main role="status" className="flex min-h-[60dvh] items-center justify-center gap-2 px-6 text-center text-sm text-muted-foreground"><LoaderCircle className="animate-spin" />Lendo o link, as fotos do carrossel e os títulos…</main>;
+    return <ImportLoading message="Lendo o link, as fotos do carrossel e os títulos…" />;
   if (s.origin === "share" && !cands.length && !manualHelp)
     return <main className="mx-auto max-w-md px-4 pt-16 text-center text-sm text-muted-foreground">
       <p>{autoError ?? "Não consegui identificar uma obra com segurança neste link."}</p>
@@ -364,7 +407,10 @@ function SessionView({ id }: { id: string }) {
       <Button asChild variant="ghost" className="mt-5 min-h-11"><Link to="/import" search={{}}>Voltar</Link></Button>
     </main>;
 
-  if (reviewing && cands.length) return <ReviewStack cands={cands} lib={lib} spaceId={s.space_id} sessionId={id} sources={sources} onChanged={refresh} onBack={() => setReviewing(false)} onDone={async () => { const { data, error } = await supabase.rpc("import_complete", { _session: id }); void refresh(); if (error) { toast.error("Não foi possível concluir. Tente de novo."); return; } if (data === "completed") { toast.success("Sessão concluída"); void qc.invalidateQueries({ queryKey: ["library", s.space_id] }); void qc.invalidateQueries({ queryKey: ["import-sessions"] }); void navigate({ search: {}, replace: true, viewTransition: false }); } else { toast(data === "sources_open" ? "Há links sem obra identificada. Analise ou marque “Ignorar esta fonte”." : data === "empty" ? "Nenhuma obra decidida ainda." : "Ainda há obras pendentes ou com erro."); setReviewing(false); } }} />;
+  if (s.origin === "share" && cands.length && !mediaPrepared)
+    return <ImportLoading message="Preparando as capas e os cenários para a revisão…" />;
+
+  if (reviewing && cands.length) return <ReviewStack cands={cands} lib={lib} spaceId={s.space_id} sessionId={id} sources={sources} onChanged={refresh} onBack={() => setReviewing(false)} onDone={async () => { const { data, error } = await supabase.rpc("import_complete", { _session: id }); void refresh(); if (error) { toast.error("Não foi possível concluir. Tente de novo."); return; } if (data === "completed") { toast.success("Sessão concluída"); void qc.invalidateQueries({ queryKey: ["library", s.space_id] }); void qc.invalidateQueries({ queryKey: ["import-sessions"] }); void navigate({ to: "/", replace: true, viewTransition: true }); } else { toast(data === "sources_open" ? "Há links sem obra identificada. Analise ou marque “Ignorar esta fonte”." : data === "empty" ? "Nenhuma obra decidida ainda." : "Ainda há obras pendentes ou com erro."); setReviewing(false); } }} />;
 
   const freeText = [s.shared_title, s.shared_text].filter(Boolean).join("\n").replace(/https?:\/\/\S+/g, " ").replace(/\s+/g, " ").trim();
   const left = cands.filter((c) => c.status === "pending" || c.status === "error").length;
@@ -443,7 +489,7 @@ function SessionView({ id }: { id: string }) {
   );
 }
 
-function ReviewStack({ cands, lib, spaceId, sessionId, sources, onChanged, onBack, onDone }: { cands: Cand[]; lib: Map<string, { workId: string; mine: boolean }>; spaceId: string; sessionId: string; sources: Source[]; onChanged: () => Promise<unknown>; onBack: () => void; onDone: () => void }) {
+function ReviewStack({ cands, lib, spaceId, sessionId, sources, onChanged, onBack, onDone }: { cands: Cand[]; lib: Map<string, { workId: string; mine: boolean }>; spaceId: string; sessionId: string; sources: Source[]; onChanged: () => Promise<unknown>; onBack: () => void; onDone: () => void | Promise<void> }) {
   const reduce = useReducedMotion();
   const confirmFn = useServerFn(confirmCandidate);
   const correctFn = useServerFn(correctCandidate);
@@ -460,6 +506,8 @@ function ReviewStack({ cands, lib, spaceId, sessionId, sources, onChanged, onBac
   const [options, setOptions] = useState<{ mediaType: "movie" | "tv"; tmdbId: number; title: string; year: number | null; posterPath: string | null }[]>([]);
   const [dir, setDir] = useState(1);
   const [working, setWorking] = useState<string | null>(null);
+  const [seenBusy, setSeenBusy] = useState<string | null>(null);
+  const [seenOverrides, setSeenOverrides] = useState<Record<string, boolean>>({});
   const row = cands[index];
   if (row) lastCard.current=index;
   const metadata=useQuery({queryKey:["title-preview",row?.media_type,row?.tmdb_id,spaceId],enabled:!!row,staleTime:7*864e5,queryFn:()=>{if(!row)throw new Error("Sem obra");return previewFn({data:{mediaType:row.media_type,tmdbId:row.tmdb_id,spaceId}});}});
@@ -474,6 +522,23 @@ function ReviewStack({ cands, lib, spaceId, sessionId, sources, onChanged, onBac
     try { await fn(); if (advance) nextOpen(index); } catch (e) { toast.error(e instanceof Error ? e.message : "Falhou. Tente de novo."); } finally { setWorking(null); await onChanged(); }
   }
   const rpc = async (name: "import_undo" | "import_set_reaction" | "import_set_seen", args: Record<string, unknown>) => { const { error } = await supabase.rpc(name, args as never); if (error) throw new Error("Não foi possível salvar. Tente de novo."); };
+  const seen = row ? (seenOverrides[row.id] ?? row.seen) : false;
+  async function toggleSeen() {
+    if (!row || seenBusy === row.id) return;
+    const previous = seen;
+    const next = !previous;
+    setSeenOverrides((current) => ({ ...current, [row.id]: next }));
+    setSeenBusy(row.id);
+    try {
+      await rpc("import_set_seen", { _candidate: row.id, _seen: next });
+      void onChanged();
+    } catch (error) {
+      setSeenOverrides((current) => ({ ...current, [row.id]: previous }));
+      toast.error(error instanceof Error ? error.message : "Não foi possível salvar.");
+    } finally {
+      setSeenBusy(null);
+    }
+  }
 
   const label = (c: Cand) => c.status === "saved" ? (c.effects?.indication === "renewed" ? "Você já tinha indicado · indicação renovada" : "Indicada por você") : c.status === "skipped" ? "Pulada" : c.status === "error" ? c.note ?? "Erro" : parseChoiceNote(c.note) ? "Escolha qual filme é o certo" : "";
   const summary = { saved: cands.filter((c) => c.status === "saved").length, skipped: cands.filter((c) => c.status === "skipped").length, open: cands.filter((c) => c.status === "pending" || c.status === "error").length };
@@ -548,7 +613,7 @@ function ReviewStack({ cands, lib, spaceId, sessionId, sources, onChanged, onBac
           ))}
         </div>
 
-        <button type="button" aria-pressed={row.seen} disabled={busy} onClick={() => act(row, () => rpc("import_set_seen", { _candidate: row.id, _seen: !row.seen }))} className={`pressable mt-5 flex min-h-14 w-full items-center justify-center gap-2 rounded-xl border px-4 text-sm ${row.seen ? "border-primary bg-primary/15 text-primary" : "border-border text-muted-foreground"}`}><Check className="h-4 w-4" />Já assisti antes</button>
+        <button type="button" aria-pressed={seen} disabled={busy || seenBusy === row.id} onClick={toggleSeen} className={`pressable mt-5 flex min-h-14 w-full items-center justify-center gap-2 rounded-xl border px-4 text-sm ${seen ? "border-primary bg-primary/15 text-primary" : "border-border text-muted-foreground"}`}><Check className="h-4 w-4" />Já assisti antes</button>
 
         <div className="mt-4 flex items-center justify-between">
           <Button variant="ghost" className="min-h-11" disabled={index === 0} onClick={() => go(index - 1)}><ChevronLeft />Anterior</Button>
