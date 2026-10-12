@@ -7,10 +7,7 @@ export function ScrollToTop() {
   const [visible, setVisible] = useState(false);
   const reduce = useReducedMotion();
   useEffect(() => {
-    const update = () =>
-      setVisible(
-        window.scrollY > 560 && window.innerHeight + window.scrollY < document.documentElement.scrollHeight - 120,
-      );
+    const update = () => setVisible(window.scrollY > 560);
     update();
     window.addEventListener("scroll", update, { passive: true });
     return () => window.removeEventListener("scroll", update);

@@ -14,8 +14,11 @@ export function markShared(el: HTMLElement | null, id: string, kind: Kind) {
   if (!image) return;
   const started = Date.now();
   pending = { id, kind, at: started };
+  // A landscape card crop and a full-width hero have incompatible geometry.
+  // Let the destination hero animate in its own frame instead of stretching this
+  // source bitmap through the View Transition snapshot.
   if (kind === "backdrop") document.documentElement.classList.add("shared-backdrop-active");
-  image.style.viewTransitionName = `shared-${kind}`;
+  else image.style.viewTransitionName = `shared-${kind}`;
   const cleanup = () => { image.style.viewTransitionName = ""; if (pending?.at === started) clearShared(); };
   // activeViewTransition is supported by modern Chromium; other engines expose pseudo animations.
   const watch = () => {
@@ -30,9 +33,24 @@ export function markShared(el: HTMLElement | null, id: string, kind: Kind) {
 
 /** Destination hero: returns a style only if this exact work/kind was just tapped. */
 export function sharedStyle(id: string, kind: Kind): { viewTransitionName?: string } {
-  if (pending && pending.id === id && pending.kind === kind)
+  if (kind !== "backdrop" && pending && pending.id === id && pending.kind === kind)
     return { viewTransitionName: `shared-${kind}` };
   return {};
+}
+
+/** Whether this detail page was opened from a landscape backdrop card. */
+export function useBackdropHandoff(id: string) {
+  const [active, setActive] = useState(() => Boolean(pending && pending.id === id && pending.kind === "backdrop"));
+  useEffect(() => {
+    if (!active) return;
+    let frame = 0;
+    const watch = () => {
+      if (!pending) setActive(false); else frame = requestAnimationFrame(watch);
+    };
+    frame = requestAnimationFrame(watch);
+    return () => cancelAnimationFrame(frame);
+  }, [active]);
+  return active;
 }
 
 export function clearShared() {

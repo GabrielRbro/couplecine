@@ -17,7 +17,7 @@ export const Route = createFileRoute("/_authenticated")({
 });
 
 // Fullscreen experiences render without the BottomNav.
-const NO_NAV = new Set(["/onboarding", "/match"]);
+const NO_NAV = new Set(["/onboarding", "/match", "/import"]);
 
 function AuthenticatedLayout() {
   const path = useRouterState({ select: (state) => state.location.pathname });

@@ -333,16 +333,22 @@ export async function findTitle(guess: {
   const normalize = (title: string) => title.normalize("NFD").replace(/\p{Diacritic}/gu, "").toLowerCase().replace(/[^\p{L}\p{N}]+/gu, " ").trim();
   const query = normalize(guess.title);
   const queryWords = query.split(" ").filter((word) => word.length >= 4);
+  const isSingleWordQuery = query.split(" ").length === 1;
   const score = (item: TmdbSearchItem) => {
     const title = Math.max(...[item.title, item.originalTitle ?? ""].map((text) => {
       const t = normalize(text);
       if (t === query) return 100;
+      // A one-word query is easily pulled toward unrelated subtitles, regional
+      // releases and namesakes. In that case only the literal catalog title is
+      // evidence; a partial word overlap is not enough to auto-import it.
+      if (isSingleWordQuery) return 0;
       const a = new Set(query.split(" ")), b = new Set(t.split(" "));
       return 70 * [...a].filter((word) => b.has(word)).length / new Set([...a, ...b]).size;
     }));
     return title + (guess.year && item.year ? Math.max(0, 12 - Math.abs(item.year - guess.year) * 4) : 0);
   };
-  const best = items.filter(item => !guess.year || item.year === guess.year).sort((a,b) => score(b)-score(a))[0];
+  const plausibleEra = (item: TmdbSearchItem) => !item.year || item.year >= 1950 || Boolean(guess.year && guess.year < 1950);
+  const best = items.filter(item => (!guess.year || item.year === guess.year) && plausibleEra(item)).sort((a,b) => score(b)-score(a))[0];
   const sharesMeaningfulWord = best && [best.title, best.originalTitle ?? ""].map(normalize).some((title) => queryWords.some((word) => title.split(" ").includes(word)));
   return best && score(best) >= 58 && (queryWords.length === 0 || sharesMeaningfulWord) ? best : null;
 }
@@ -397,7 +403,9 @@ export async function findImportTitleWithChoices(guess: ImportTitleGuess): Promi
   const heard = spoken ? normalizedTitle(spoken) : null;
   const original = guess.originalTitle ? normalizedTitle(guess.originalTitle) : null;
   const distinctOriginal = original && original !== normalizedTitle(guess.title);
+  const plausibleEra = (item: TmdbSearchItem) => !item.year || item.year >= 1950 || Boolean(guess.year && guess.year < 1950);
   let candidates = [...byId.values()].filter((item) => {
+    if (!plausibleEra(item)) return false;
     const names = [item.title, item.originalTitle ?? ""].map(normalizedTitle);
     if (!canonical.some((alias) => names.includes(alias))) return false;
     if (!heard) return true;
