@@ -129,6 +129,94 @@ async function tiktokPageCaption(ref: Extract<SocialRef, { platform: "tiktok" }>
   } catch { return null; }
 }
 
+type PhotoImage = { mimeType: "image/jpeg" | "image/png" | "image/webp"; base64: string };
+
+/** TikTok's public page does not consistently expose photo-mode slides to a server fetch.
+ * Resolve only a canonical public photo post through TikWM's public media endpoint, then
+ * download the signed TikTok CDN images. URLs from that response are never fetched unchecked. */
+export async function fetchTikTokPhotoImages(ref: SocialRef): Promise<{ caption: string | null; images: PhotoImage[] } | null> {
+  const full = ref.platform === "tiktok-short" ? await expandShort(ref.canonical).catch(() => null) : ref;
+  if (full?.platform !== "tiktok" || full.kind !== "photo") return null;
+  const ctrl = new AbortController();
+  const timer = setTimeout(() => ctrl.abort(), 8000);
+  let data: { id?: unknown; title?: unknown; images?: unknown };
+  try {
+    const res = await fetch(`https://tikwm.com/api/?url=${encodeURIComponent(full.canonical)}`, {
+      redirect: "manual", signal: ctrl.signal, headers: { Accept: "application/json", "User-Agent": "Mozilla/5.0" },
+    });
+    if (!res.ok || res.status >= 300 || Number(res.headers.get("content-length")) > 100_000) return null;
+    const body = await readLimited(res, 100_000);
+    const json = JSON.parse(new TextDecoder().decode(body)) as { code?: unknown; data?: typeof data };
+    if (json.code !== 0 || String(json.data?.id) !== full.id || !Array.isArray(json.data?.images)) return null;
+    data = json.data!;
+  } catch { return null; }
+  finally { clearTimeout(timer); }
+
+  const urls = data.images as unknown[];
+  if (!urls.length || urls.length > 10 || urls.some((u) => typeof u !== "string" || !photoCdnUrl(u))) return null;
+  const images: PhotoImage[] = [];
+  let totalBase64 = 0;
+  // Three requests at a time preserve slide order and bound worker memory.
+  for (let i = 0; i < urls.length; i += 3) {
+    const batch = await Promise.all((urls as string[]).slice(i, i + 3).map((url) => fetchPhotoImage(url).catch(() => null)));
+    if (batch.some((image) => !image)) return null; // A partial carousel can silently omit films.
+    for (const image of batch as PhotoImage[]) {
+      totalBase64 += image.base64.length;
+      if (totalBase64 > 9_000_000) return null;
+      images.push(image);
+    }
+  }
+  return { caption: typeof data.title === "string" ? data.title.trim().slice(0, 2000) || null : null, images };
+}
+
+function photoCdnUrl(raw: string) {
+  try {
+    const u = new URL(raw);
+    return u.protocol === "https:" && !u.username && !u.password && !u.port &&
+      /^p\d+-common-sign\.tiktokcdn(?:-us|-eu)?\.com$/.test(u.hostname) &&
+      /^\/tos-[\w-]+\/[^/]+~tplv-photomode-image\.(?:jpe?g|png|webp)$/.test(u.pathname);
+  } catch { return false; }
+}
+
+async function readLimited(res: Response, limit: number) {
+  const reader = res.body?.getReader();
+  if (!reader) throw new Error("empty_body");
+  const chunks: Uint8Array[] = [];
+  let size = 0;
+  while (true) {
+    const { done, value } = await reader.read();
+    if (done) break;
+    size += value.byteLength;
+    if (size > limit) { await reader.cancel(); throw new Error("body_too_large"); }
+    chunks.push(value);
+  }
+  const bytes = new Uint8Array(size);
+  let offset = 0;
+  for (const chunk of chunks) { bytes.set(chunk, offset); offset += chunk.byteLength; }
+  return bytes;
+}
+
+async function fetchPhotoImage(url: string): Promise<PhotoImage | null> {
+  if (!photoCdnUrl(url)) return null;
+  const ctrl = new AbortController();
+  const timer = setTimeout(() => ctrl.abort(), 8000);
+  try {
+    const res = await fetch(url, { redirect: "manual", signal: ctrl.signal, headers: { Accept: "image/jpeg,image/png,image/webp", "User-Agent": "Mozilla/5.0" } });
+    if (!res.ok || res.status >= 300 || Number(res.headers.get("content-length")) > 2_000_000) return null;
+    const mimeType = res.headers.get("content-type")?.split(";")[0]?.trim();
+    if (mimeType !== "image/jpeg" && mimeType !== "image/png" && mimeType !== "image/webp") return null;
+    const bytes = await readLimited(res, 2_000_000);
+    const valid = mimeType === "image/jpeg" ? bytes[0] === 0xff && bytes[1] === 0xd8 :
+      mimeType === "image/png" ? bytes[0] === 0x89 && bytes[1] === 0x50 && bytes[2] === 0x4e && bytes[3] === 0x47 :
+        bytes[0] === 0x52 && bytes[1] === 0x49 && bytes[2] === 0x46 && bytes[3] === 0x46;
+    if (!valid) return null;
+    let base64 = "";
+    // Keep the conversion bounded so large image buffers don't exceed argument limits.
+    for (let i = 0; i < bytes.length; i += 8192) base64 += String.fromCharCode(...bytes.subarray(i, i + 8192));
+    return { mimeType, base64: btoa(base64) };
+  } finally { clearTimeout(timer); }
+}
+
 export async function fetchCaption(ref: SocialRef): Promise<CaptionResult> {
   if (ref.platform === "tiktok-short") {
     const full = await expandShort(ref.canonical).catch(() => null);
@@ -153,7 +241,7 @@ export async function fetchCaption(ref: SocialRef): Promise<CaptionResult> {
     const caption = embedCaption || page?.caption || "";
     const evidence = [caption, ...(page?.speech ? [`Legendas automáticas do vídeo:\n${page.speech}`] : [])].filter(Boolean).join("\n\n").slice(0, 4000);
     if (evidence) return { platform: "tiktok", canonical: ref.canonical, author: embedAuthor ?? page?.author ?? null, caption: evidence, status: "ok", message: null, videoProbed: !!page?.speech };
-    return { platform: "tiktok", canonical: ref.canonical, author: null, caption: null, status: ref.kind === "photo" ? "photo_unavailable" : res?.status === 429 ? "blocked" : "unavailable", message: ref.kind === "photo" ? "O TikTok não forneceu as imagens deste carrossel. Selecione as páginas com filmes de uma vez." : "O TikTok não forneceu a legenda deste post. Envie uma captura ou cole a legenda." };
+    return { platform: "tiktok", canonical: ref.canonical, author: null, caption: null, status: ref.kind === "photo" ? "photo_unavailable" : res?.status === 429 ? "blocked" : "unavailable", message: ref.kind === "photo" ? "A descrição deste carrossel não veio pelo TikTok. Vou tentar ler as fotos automaticamente." : "O TikTok não forneceu a legenda deste post. Envie uma captura ou cole a legenda." };
   }
   return { ...(await instagram(ref)), imgIndex: ref.imgIndex };
 }
