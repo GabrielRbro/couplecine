@@ -2,6 +2,7 @@ import { Link, createFileRoute } from "@tanstack/react-router";
 import { useMemo, useRef, useState, useEffect } from "react";
 import { z } from "zod";
 import { useNavigate } from "@tanstack/react-router";
+import { closeOverlaysThen } from "@/lib/overlay";
 import { markShared } from "@/lib/shared-transition";
 import { useQuery, useQueryClient } from "@tanstack/react-query";
 import { useServerFn } from "@tanstack/react-start";
@@ -159,12 +160,19 @@ function GalleryPage() {
   const set = (patch: Partial<{ kind: "all" | "movie" | "tv"; duration: number; genre: string; both: boolean }>) => {
     const current = { kind, duration, genre, both: bothLike };
     if (Object.entries(patch).every(([k, v]) => current[k as keyof typeof current] === v)) return;
-    nav({ to: ".", search: (p) => ({ ...p, ...patch }), replace: true, viewTransition: false });
+    const overlayId = window.history.state?.__overlay;
+    void nav({ to: ".", search: (p) => ({ ...p, ...patch }), replace: true, viewTransition: false }).then(() => {
+      if (overlayId) window.history.replaceState({ ...window.history.state, __overlay: overlayId }, "");
+    });
   };
   const setKind = (k: "all" | "movie" | "tv") => set({ kind: k, genre: genre && !pool.some((w) => (k === "all" || w.media_type === k) && w.genres.includes(genre)) ? "" : genre });
   const setGenre = (g: string) => set({ genre: g });
   const setBothLike = (f: (v: boolean) => boolean) => set({ both: f(bothLike) });
   const [sheet, setSheet] = useState(false);
+  const closeFilters = () => closeOverlaysThen(() => {
+    setSheet(false);
+    void nav({to:".",search:{kind,duration,genre,both:bothLike},replace:true,viewTransition:false});
+  });
   const pool = works.filter(isIndicated);
   const genres = useMemo(
     () => [...new Set(pool.filter((w) => kind === "all" || w.media_type === kind).flatMap((w) => w.genres))].sort((a, b) => a.localeCompare(b, "pt-BR")),
@@ -230,7 +238,7 @@ function GalleryPage() {
           </Link>
         </div>
       )}
-      <AnimatedSheet open={sheet} onClose={() => setSheet(false)} labelledBy="gal-filters" panelClassName="max-h-[85dvh] overflow-y-auto pb-[max(env(safe-area-inset-bottom),20px)]">
+      <AnimatedSheet open={sheet} onClose={closeFilters} labelledBy="gal-filters" panelClassName="max-h-[85dvh] overflow-y-auto pb-[max(env(safe-area-inset-bottom),20px)]">
         <h2 id="gal-filters" className="text-base font-semibold">
           Filtros
         </h2>
@@ -240,7 +248,7 @@ function GalleryPage() {
         <div className="mt-2 flex max-h-48 flex-wrap gap-2 overflow-y-auto">{["", ...genres].map((g) => <Button key={g} variant={genre === g ? "secondary" : "outline"} className="min-h-11 text-xs" onClick={() => setGenre(g)}>{g || "Todos os gêneros"}</Button>)}</div>
         {kind === "movie" && <section className="mt-4" aria-label="Duração"><h3 className="text-xs text-muted-foreground">Duração máxima</h3><p className="mt-3 text-center font-display text-3xl font-semibold text-primary">{duration ? formatRuntime(duration) : "Sem limite"}</p><TouchSlider label="Duração máxima em minutos" min={40} max={240} step={10} value={duration || 240} valueText={formatRuntime(duration) ?? "Sem limite"} onChange={(value)=>set({duration:value})} /><Button variant="ghost" className="min-h-11 w-full text-xs" onClick={()=>set({duration:0})}>Sem limite</Button></section>}
         <div className="mt-4"><TogglePill on={bothLike} onClick={() => setBothLike((v) => !v)}>Os dois curtiram</TogglePill></div>
-        <div className="mt-5 grid grid-cols-[auto_1fr] gap-3"><Button variant="outline" className="min-h-12" onClick={()=>set({genre:"",duration:0,both:false})}>Limpar</Button><Button className="min-h-12" onClick={()=>setSheet(false)}>Ver {list.length} {list.length === 1 ? "obra" : "obras"}</Button></div>
+        <div className="mt-5 grid grid-cols-[auto_1fr] gap-3"><Button variant="outline" className="min-h-12" onClick={()=>set({genre:"",duration:0,both:false})}>Limpar</Button><Button className="min-h-12" onClick={closeFilters}>Ver {list.length} {list.length === 1 ? "obra" : "obras"}</Button></div>
       </AnimatedSheet>
     </div>
   );
