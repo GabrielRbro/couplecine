@@ -15,6 +15,7 @@ import { analyzeSession, autoAnalyzeSession, confirmCandidate, correctCandidate,
 import { parseChoiceNote } from "@/lib/import-choices";
 import { carouselIndexes, parseSocial } from "@/lib/social-url";
 import { shareFallbackText } from "@/lib/share-fallback";
+import { captureTikTokPhotos } from "@/lib/tiktok-photo";
 import { tmdbImage } from "@/lib/format";
 import { useSpace } from "@/lib/space";
 
@@ -259,11 +260,34 @@ function SessionView({ id }: { id: string }) {
   });
   const refresh = () => qc.invalidateQueries({ queryKey: ["import-session", id] });
 
+  async function runAutomatic(retry = false) {
+    const source = q.data?.sources.length === 1 ? q.data.sources[0] : null;
+    const ref = source ? parseSocial(source.source_url) : null;
+    if (source && ref && (ref.platform === "tiktok-short" || (ref.platform === "tiktok" && ref.kind === "photo"))) {
+      const capture = await captureTikTokPhotos(ref).catch(() => null);
+      if (capture) {
+        let found = 0;
+        for (let page = 0; page < capture.images.length; page += 3) {
+          const result = await analyzeFn({ data: {
+            sessionId: id, sourcePostId: source.id,
+            text: `${capture.caption ?? ""}\n\nPáginas ${page + 1} a ${Math.min(page + 3, capture.images.length)} de ${capture.images.length}. Extraia todos os títulos visíveis nestas páginas.`,
+            images: capture.images.slice(page, page + 3),
+            complete: page + 3 >= capture.images.length,
+          } });
+          if (!result.ok) return result;
+          found += result.found;
+        }
+        return found ? { ok: true as const, found } : { ok: false as const, reason: "As fotos foram lidas, mas não consegui identificar filmes com segurança." };
+      }
+    }
+    return autoFn({ data: { sessionId: id, ...(retry ? { retry: true } : {}) } });
+  }
+
   useEffect(() => {
     const s = q.data?.session;
     if (!s || s.origin !== "share" || s.ai_done || s.status === "completed" || autoStarted.current) return;
     autoStarted.current = true;
-    void autoFn({ data: { sessionId: id } }).then((result) => {
+    void runAutomatic().then((result) => {
       if (!result.ok) setAutoError(result.reason);
     }).catch((error) => {
       setAutoError(error instanceof Error ? error.message : "Não foi possível analisar o link.");
@@ -307,7 +331,7 @@ function SessionView({ id }: { id: string }) {
       <Button variant="outline" className="mt-5 min-h-11" disabled={!!busy} onClick={async () => {
         setBusy("retry"); setAutoError(null);
         try {
-          const result = await autoFn({ data: { sessionId: id, retry: true } });
+          const result = await runAutomatic(true);
           if (!result.ok) setAutoError(result.reason);
         } catch (e) { setAutoError(e instanceof Error ? e.message : "Não foi possível tentar novamente."); }
         finally { setBusy(null); void refresh(); }

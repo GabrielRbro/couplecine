@@ -240,7 +240,7 @@ export const autoAnalyzeSession = createServerFn({ method: "POST" })
 /** Explicit tap: Gemini on one source caption (candidates attributed to that source) or on the session text/capture. */
 export const analyzeSession = createServerFn({ method: "POST" })
   .middleware([requireSupabaseAuth])
-  .inputValidator((d) => z.object({ sessionId: z.string().uuid(), sourcePostId: z.string().uuid().optional(), text: z.string().max(4000).optional(), image: z.object({ mimeType: z.enum(["image/png", "image/jpeg", "image/webp"]), base64: z.string().max(6_000_000) }).optional() }).parse(d))
+  .inputValidator((d) => z.object({ sessionId: z.string().uuid(), sourcePostId: z.string().uuid().optional(), text: z.string().max(4000).optional(), image: z.object({ mimeType: z.enum(["image/png", "image/jpeg", "image/webp"]), base64: z.string().max(6_000_000) }).optional(), images: z.array(z.object({ mimeType: z.enum(["image/png", "image/jpeg", "image/webp"]), base64: z.string().max(2_700_000) })).min(1).max(3).optional(), complete: z.boolean().optional() }).parse(d))
   .handler(async ({ data, context }) => {
     const s = await ownSession(context.supabase, data.sessionId);
     let text = data.text;
@@ -248,15 +248,15 @@ export const analyzeSession = createServerFn({ method: "POST" })
     if (data.sourcePostId) {
       if (!s.source_post_ids.includes(data.sourcePostId)) throw new Error("Fonte fora desta sessão.");
       const { data: p } = await context.supabase.from("source_posts").select("caption").eq("id", data.sourcePostId).maybeSingle();
-      if (!p?.caption) return { ok: false as const, reason: "Esta fonte não tem legenda. Envie uma captura." };
-      text = p.caption;
+      if (!p?.caption && !data.text && !data.image && !data.images?.length) return { ok: false as const, reason: "Esta fonte não tem legenda. Envie uma captura." };
+      text = data.text ?? p?.caption ?? undefined;
       source = data.sourcePostId;
     } else if (s.source_post_ids.length === 1) source = s.source_post_ids[0]!; // single source: capture/text belongs to it
-    if (!text && !data.image) return { ok: false as const, reason: "Envie texto ou captura." };
-    const r = await runImportAnalysis({ supabase: context.supabase, userId: context.userId, spaceId: s.space_id, ...(text ? { text } : {}), ...(data.image ? { image: data.image } : {}) });
+    if (!text && !data.image && !data.images?.length) return { ok: false as const, reason: "Envie texto ou captura." };
+    const r = await runImportAnalysis({ supabase: context.supabase, userId: context.userId, spaceId: s.space_id, ...(text ? { text } : {}), ...(data.image ? { image: data.image } : {}), ...(data.images ? { images: data.images } : {}) });
     if (!r.ok) { await refreshStatus(s.id, "interrupted"); return { ok: false as const, reason: r.reason }; }
     if (r.items.length) await addCandidates(s.id, s.space_id, s.created_by, r.items, source);
-    await setStatus(s.id, { ai_done: true });
+    if (data.complete !== false) await setStatus(s.id, { ai_done: true });
     await refreshStatus(s.id);
     return { ok: true as const, found: r.items.length };
   });
