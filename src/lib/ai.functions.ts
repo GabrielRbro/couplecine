@@ -2,7 +2,7 @@ import { createServerFn } from "@tanstack/react-start";
 import { z } from "zod";
 import { requireSupabaseAuth } from "@/integrations/supabase/auth-middleware";
 import { AiUnavailable, GEMINI_SECRET, geminiConfig, geminiJson, testGemini, type AiTitleGuess } from "./gemini.server";
-import { findTitle, lookupTmdb, type TmdbSearchItem } from "./tmdb.server";
+import { findImportTitle, findTitle, lookupTmdb, type TmdbSearchItem } from "./tmdb.server";
 
 const AI_MESSAGE: Record<string, string> = {
   not_configured: "Pesquisa inteligente não configurada. Adicione a chave do Gemini em Configurações.",
@@ -78,9 +78,10 @@ async function validate(
   guesses: AiTitleGuess[],
   spaceId: string,
   supabase: Parameters<typeof geminiJson>[0]["supabase"],
+  match: (guess: AiTitleGuess) => Promise<TmdbSearchItem | null> = findTitle,
 ) {
   const found: (TmdbSearchItem | null)[] = [];
-  for (let i = 0; i < Math.min(12, guesses.length); i += 4) found.push(...await Promise.all(guesses.slice(i, i + 4).map((g) => findTitle(g).catch(() => null))));
+  for (let i = 0; i < Math.min(12, guesses.length); i += 4) found.push(...await Promise.all(guesses.slice(i, i + 4).map((g) => match(g).catch(() => null))));
   const { data: existing } = await supabase
     .from("works")
     .select("id, media_type, tmdb_id")
@@ -161,6 +162,28 @@ async function sha256Hex(bytes: Uint8Array<ArrayBuffer>) {
   return [...new Uint8Array(await crypto.subtle.digest("SHA-256", bytes))].map((b) => b.toString(16).padStart(2, "0")).join("");
 }
 
+type ImportGuess = AiTitleGuess & { mentionedTitle?: string | null; originalTitle?: string | null };
+
+function groundedImportGuesses(items: ImportGuess[], text?: string): ImportGuess[] {
+  const normalize = (value: string) => ` ${value.normalize("NFD").replace(/\p{Diacritic}/gu, "").toLowerCase().replace(/[^\p{L}\p{N}]+/gu, " ").trim()} `;
+  const source = text ? normalize(text) : null;
+  return items.slice(0, 10).filter((item) => {
+    if (typeof item.title !== "string" || !item.title.trim()) return false;
+    if (item.mediaType != null && item.mediaType !== "movie" && item.mediaType !== "tv") return false;
+    if (!source) return true;
+    if (typeof item.mentionedTitle === "string" && item.mentionedTitle.trim()) return source.includes(normalize(item.mentionedTitle));
+    // A named film at the end of a transcript cannot be replaced by a plot-based guess.
+    return !/\b(?:se chama|chamado|chamada|quatro filmes|cinco filmes|top cinco)\b/i.test(source);
+  });
+}
+
+function mentionedListSize(text?: string) {
+  const count = text?.normalize("NFD").replace(/\p{Diacritic}/gu, "").toLowerCase()
+    .match(/\b(?:top\s+)?(dois|tres|quatro|cinco|seis|sete|oito|nove|dez|[2-9]|10)\s+(?:filmes|series)\b/);
+  const words: Record<string, number> = { dois: 2, tres: 3, quatro: 4, cinco: 5, seis: 6, sete: 7, oito: 8, nove: 9, dez: 10 };
+  return count ? (words[count[1]!] ?? Number(count[1])) : null;
+}
+
 /** Server-side import analysis (explicit action only). Cache key = strategy version + content type + SHA-256 of the full text/image bytes. */
 export async function runImportAnalysis(opts: { supabase: Parameters<typeof geminiJson>[0]["supabase"]; userId: string; spaceId: string; text?: string; image?: { mimeType: "image/png" | "image/jpeg" | "image/webp"; base64: string } }) {
   try {
@@ -170,16 +193,42 @@ export async function runImportAnalysis(opts: { supabase: Parameters<typeof gemi
       ...(opts.text ? [{ text: opts.text }] : []),
       ...(opts.image ? [{ inline_data: { mime_type: opts.image.mimeType, data: opts.image.base64 } }] : []),
     ];
-    const res = await geminiJson<{ items?: AiTitleGuess[] }>({
+    const res = await geminiJson<{ items?: ImportGuess[] }>({
       supabase: opts.supabase,
       userId: opts.userId,
       feature: "import",
-      system: `Identifique filmes e séries a partir da evidência recebida (descrição, fala legendada ou imagem). Inclua títulos citados e também uma obra sem nome explícito somente se detalhes específicos de enredo, personagens, elenco ou direção permitirem identificá-la com alta confiança. Se várias obras forem plausíveis, omita a inferência. Preserve todas as obras distintas de listas, até o limite. Não invente títulos ou anos. ${GUESS_SCHEMA_HINT}`,
+      system: `Identifique filmes e séries a partir da descrição, fala legendada ou imagem (pt-BR). Leia TODA a evidência, inclusive o fim. Para listas, extraia cada título citado na ordem em que aparece: se a fala disser "quatro filmes" ou "top cinco", procure os quatro ou cinco nomes, sem saltar nenhum. Não inclua outra obra para preencher a quantidade. Quando houver nome falado, "mentionedTitle" deve reproduzir SOMENTE as palavras exatas desse nome na evidência, inclusive erros da transcrição automática (ex.: "underton"); "title" deve ser o título real da obra e "originalTitle" o título original real quando tiver certeza. Não substitua um filme nomeado por outro que se encaixe na descrição. Se um filme não for nomeado, use mentionedTitle:null e identifique-o só quando o enredo/elenco/direção permitirem alta confiança sem conflito com nenhum nome falado. Ano: null quando não souber; não presuma ano de lançamento pela data do vídeo. Responda só JSON {"items":[{"title":string,"originalTitle":string|null,"mentionedTitle":string|null,"year":number|null,"mediaType":"movie"|"tv"|null}]}. Máximo 10 obras distintas.`,
       parts,
       cacheTtlHours: 24 * 14,
-      cacheSeed: `import-v3:${opts.text ? "t" : ""}${opts.image ? `i:${opts.image.mimeType}` : ""}:${textHash}:${imageHash}`,
+      cacheSeed: `import-v4:${opts.text ? "t" : ""}${opts.image ? `i:${opts.image.mimeType}` : ""}:${textHash}:${imageHash}`,
     });
-    return { ok: true as const, items: await validate(res.items ?? [], opts.spaceId, opts.supabase) };
+    const match = (guess: AiTitleGuess) => findImportTitle(guess as ImportGuess);
+    const guesses = groundedImportGuesses(Array.isArray(res.items) ? res.items : [], opts.text);
+    let items = await validate(guesses, opts.spaceId, opts.supabase, match);
+    const expected = mentionedListSize(opts.text);
+    if (expected && items.length < expected) {
+      // One bounded recovery pass: ask only for names still missing from an explicit list.
+      try {
+        const recovery = await geminiJson<{ items?: ImportGuess[] }>({
+          supabase: opts.supabase,
+          userId: opts.userId,
+          feature: "import",
+          system: `Extraia SOMENTE os títulos que faltam desta lista de ${expected} filmes/séries. Leia a fala inteira, inclusive os primeiros e os últimos títulos. Não repita os títulos já identificados; se não conseguir verificar o nome falado, retorne menos itens. Responda apenas JSON {"items":[{"title":string,"originalTitle":string|null,"mentionedTitle":string|null,"year":number|null,"mediaType":"movie"|"tv"|null}]}. mentionedTitle deve ser a expressão exata do nome na legenda; ano null se não for certo. Nunca substitua um nome mencionado por filme de enredo parecido.`,
+          parts: [{ text: `${opts.text ?? ""}\n\nTítulos já identificados no catálogo: ${items.map((item) => `${item.title} / ${item.originalTitle ?? ""}`).join("; ")}` }],
+          cacheTtlHours: 24 * 14,
+          cacheSeed: `import-v4-recovery:${textHash}:${imageHash}:${items.map((item) => item.tmdbId).join(",")}`,
+        });
+        const additional = groundedImportGuesses(Array.isArray(recovery.items) ? recovery.items : [], opts.text);
+        if (additional.length) {
+          const more = await validate(additional, opts.spaceId, opts.supabase, match);
+          const seen = new Set(items.map((item) => `${item.mediaType}:${item.tmdbId}`));
+          items = [...items, ...more.filter((item) => !seen.has(`${item.mediaType}:${item.tmdbId}`))].slice(0, 10);
+        }
+      } catch (error) {
+        console.warn("Import list recovery unavailable:", error instanceof Error ? error.name : "error");
+      }
+    }
+    return { ok: true as const, items };
   } catch (e) {
     if (e instanceof AiUnavailable) return { ok: false as const, reason: AI_MESSAGE[e.message] ?? AI_MESSAGE["failed"]!, items: [] };
     throw e;

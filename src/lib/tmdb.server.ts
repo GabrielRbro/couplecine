@@ -316,6 +316,69 @@ export async function findTitle(guess: {
   return best && score(best) >= 45 ? best : null;
 }
 
+function normalizedTitle(value: string) {
+  return value.normalize("NFD").replace(/\p{Diacritic}/gu, "").toLowerCase().replace(/[^\p{L}\p{N}]+/gu, " ").trim();
+}
+
+function transcriptionClose(a: string, b: string) {
+  if (a === b) return true;
+  // A one-character subtitle transcription error, e.g. "underton" → "Undertone".
+  if (Math.min(a.length, b.length) < 6 || Math.abs(a.length - b.length) > 1) return false;
+  let i = 0, j = 0, edits = 0;
+  while (i < a.length && j < b.length) {
+    if (a[i] === b[j]) { i++; j++; continue; }
+    if (++edits > 1) return false;
+    if (a.length >= b.length) i++;
+    if (a.length <= b.length) j++;
+  }
+  return edits + (a.length - i) + (b.length - j) <= 1;
+}
+
+/** Import matching: corroborate the title heard in a transcript against TMDB's
+ * translated/alternative-title search and an independent canonical-title query.
+ * Guessed years rank ties but never discard a title (release years often differ). */
+export async function findImportTitle(guess: {
+  title: string;
+  originalTitle?: string | null;
+  mentionedTitle?: string | null;
+  year?: number | null;
+  mediaType?: "movie" | "tv" | null;
+}): Promise<TmdbSearchItem | null> {
+  const spoken = guess.mentionedTitle?.trim();
+  const aliases = [...new Set([guess.title, guess.originalTitle].filter((x): x is string => typeof x === "string" && !!x.trim()).map((x) => x.trim()))];
+  if (!aliases.length) return null;
+  const path = guess.mediaType ? `/search/${guess.mediaType}` : "/search/multi";
+  const search = async (query: string) => {
+    const data = await call(path, { query: query.slice(0, 100), include_adult: "false", page: "1" });
+    return (Array.isArray(data["results"]) ? data["results"] as Json[] : [])
+      .map((r) => mapListItem(r, guess.mediaType ?? undefined)).filter((x): x is TmdbSearchItem => !!x);
+  };
+  const queries = [...new Set([spoken, ...aliases].filter((x): x is string => !!x).map((x) => x.trim()))].slice(0, 3);
+  const lists = await Promise.all(queries.map((q) => search(q).catch(() => [])));
+  const spokenIds = new Set(spoken ? lists[0]!.map((i) => `${i.mediaType}:${i.tmdbId}`) : []);
+  const byId = new Map<string, TmdbSearchItem>();
+  for (const list of lists) for (const item of list) byId.set(`${item.mediaType}:${item.tmdbId}`, item);
+  const canonical = aliases.map(normalizedTitle);
+  const heard = spoken ? normalizedTitle(spoken) : null;
+  const candidates = [...byId.values()].filter((item) => {
+    const names = [item.title, item.originalTitle ?? ""].map(normalizedTitle);
+    if (!canonical.some((alias) => names.includes(alias))) return false;
+    if (!heard) return true;
+    return spokenIds.has(`${item.mediaType}:${item.tmdbId}`) || names.some((name) => transcriptionClose(heard, name));
+  });
+  candidates.sort((a, b) => {
+    const rank = (item: TmdbSearchItem) => {
+      const names = [item.title, item.originalTitle ?? ""].map(normalizedTitle);
+      return (heard && names.includes(heard) ? 100 : 0) +
+        (canonical.some((x) => names.includes(x)) ? 50 : 0) +
+        (guess.year && item.year && Math.abs(item.year - guess.year) <= 1 ? 10 : 0) +
+        Math.min(9, Math.log10(1 + (item.voteCount ?? 0)));
+    };
+    return rank(b) - rank(a);
+  });
+  return candidates[0] ?? null;
+}
+
 function chooseLogo(images: Json | undefined): string | null {
   const logos = Array.isArray(images?.["logos"]) ? images["logos"] as Json[] : [];
   const rank = (lang: unknown) => lang === "pt" || lang === "pt-BR" ? 0 : lang === "en" ? 1 : lang == null ? 2 : 9;

@@ -418,7 +418,8 @@ function ReviewStack({ cands, lib, spaceId, sources, onChanged, onBack, onDone }
               <div className="art-edge relative overflow-hidden rounded-xl"><Poster eager path={row.poster_path} title={row.title} /></div>
             </div>
             <h2 className="mt-4 text-xl font-semibold">{row.title}</h2>
-            <p className="mt-1 text-xs text-muted-foreground">{[row.year, row.media_type === "tv" ? "Série" : "Filme", row.original_title && row.original_title !== row.title ? row.original_title : null].filter(Boolean).join(" · ")}</p>
+            {row.original_title && row.original_title !== row.title && <p className="mt-1 text-sm font-medium text-foreground/80">{row.original_title}</p>}
+            <p className="mt-1 text-xs text-muted-foreground">{[row.year, row.media_type === "tv" ? "Série" : "Filme"].filter(Boolean).join(" · ")}</p>
             <p className="mt-1 truncate text-[11px] text-muted-foreground">Fonte: {source ? source.source_url : "texto/captura desta sessão"}</p>
             {row.status !== "saved" && libInfo && <p className="mt-2 text-xs text-primary">{libInfo.mine ? "Já está na biblioteca e você já indicou · confirmar renova sua indicação" : "Já está na biblioteca · você ainda não indicou"}</p>}
             <p className="mt-2 text-xs text-muted-foreground">{label(row)}</p>
