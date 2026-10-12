@@ -1,5 +1,5 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
-import { findImportTitle } from "./tmdb.server";
+import { findImportTitle, findSpokenTitle } from "./tmdb.server";
 
 const antebellum = { id: 627290, title: "A Escolhida", original_title: "Antebellum", release_date: "2020-09-18" };
 const undertone = { id: 1480387, title: "Undertone", original_title: "Undertone", release_date: "2026-03-13" };
@@ -38,5 +38,18 @@ describe("title recognition from a spoken list", () => {
     searchResults({ Oculto: [], "The Endless": [endless] });
     const result = await findImportTitle({ title: "The Endless", originalTitle: "The Endless", mentionedTitle: "Oculto", year: 2017, mediaType: "movie" });
     expect(result?.tmdbId).toBe(430231);
+  });
+});
+
+describe("explicit spoken name recovery", () => {
+  it("finds Undertone from the transcript's 'se chama underton' when AI misses it", async () => {
+    searchResults({ underton: [], undertone: [{ ...undertone, media_type: "movie" }] });
+    const result = await findSpokenTitle("mas se ainda assim você quer desafiar o coisa ruim ele se chama underton tá na HBO Max");
+    expect(result).toMatchObject({ tmdbId: 1480387, title: "Undertone" });
+  });
+
+  it("does not return a film unrelated to the spoken name", async () => {
+    searchResults({ underton: [{ ...antebellum, media_type: "movie" }], undertone: [] });
+    expect(await findSpokenTitle("ele se chama underton tá na HBO Max")).toBeNull();
   });
 });
