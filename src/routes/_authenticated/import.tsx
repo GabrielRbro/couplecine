@@ -7,6 +7,7 @@ import { Check, ChevronLeft, ChevronRight, ImagePlus, LoaderCircle, Search, Spar
 import { toast } from "sonner";
 import { supabase } from "@/integrations/supabase/client";
 import { AnimatedSheet } from "@/components/app/AnimatedSheet";
+import { SuperReaction } from "@/components/app/SuperReaction";
 import { AppShell } from "@/components/app/AppShell";
 import { BackButton } from "@/components/app/ui";
 import { Poster } from "@/components/app/MediaCard";
@@ -14,6 +15,7 @@ import { Button } from "@/components/ui/button";
 import { getTitlePreview, searchCatalog } from "@/lib/catalog.functions";
 import { analyzeSession, autoAnalyzeSession, confirmCandidate, correctCandidate, createImportSession, fetchSessionCaptions, resolveCandidateChoice, resolveSession } from "@/lib/import.functions";
 import { parseChoiceNote } from "@/lib/import-choices";
+import { reviewStartIndex } from "@/lib/import-review";
 import { carouselIndexes, parseSocial } from "@/lib/social-url";
 import { shareFallbackText } from "@/lib/share-fallback";
 import { captureTikTokPhotos } from "@/lib/tiktok-photo";
@@ -523,11 +525,14 @@ function ReviewStack({ cands, lib, spaceId, sessionId, sources, onChanged, onBac
   const correctFn = useServerFn(correctCandidate);
   const chooseFn = useServerFn(resolveCandidateChoice);
   const find = useServerFn(searchCatalog);
+  const initialIndex = reviewStartIndex(cands);
+  const [burst, setBurst] = useState<{emoji:string;origin:{x:number;y:number}} | null>(null);
+  const burstDone = useRef<(() => void) | null>(null);
   const [finishPrompt,setFinishPrompt]=useState(false);
   const [finishing,setFinishing]=useState(false);
-  const lastCard=useRef(0);
+  const lastCard=useRef(Math.min(initialIndex, Math.max(0, cands.length - 1)));
   const previewFn=useServerFn(getTitlePreview);
-  const [index, setIndex] = useState(() => Math.max(0, cands.findIndex((c) => c.status === "pending" || c.status === "error")));
+  const [index, setIndex] = useState(initialIndex);
   const [fixing, setFixing] = useState(false);
   const [query, setQuery] = useState("");
   const [options, setOptions] = useState<{ mediaType: "movie" | "tv"; tmdbId: number; title: string; year: number | null; posterPath: string | null }[]>([]);
@@ -543,6 +548,15 @@ function ReviewStack({ cands, lib, spaceId, sessionId, sources, onChanged, onBac
 
   const go = (to: number) => { setDir(to > index ? 1 : -1); setIndex(to); setFixing(false); };
   const nextOpen = (from: number) => { const n = cands.findIndex((c, j) => j > from && (c.status === "pending" || c.status === "error")); go(n === -1 ? cands.length : n); };
+  const playReaction = (emoji: string, origin: {x:number;y:number}) => new Promise<void>((resolve) => {
+    burstDone.current = resolve;
+    setBurst({ emoji, origin });
+  });
+  const finishReaction = () => {
+    setBurst(null);
+    burstDone.current?.();
+    burstDone.current = null;
+  };
 
   async function act(c: Cand, fn: () => Promise<unknown>, advance = false) {
     setWorking(c.id);
@@ -593,9 +607,9 @@ function ReviewStack({ cands, lib, spaceId, sessionId, sources, onChanged, onBac
       <div className="pointer-events-none absolute inset-x-0 top-0 h-[32rem] bg-gradient-to-b from-background/20 via-background/50 to-background" />
       <div className="relative">
         <div className="grid grid-cols-[1fr_auto_1fr] items-center">
-          <Button variant="ghost" size="icon" aria-label="Voltar à sessão" className="h-11 w-11" onClick={onBack}><ChevronLeft /></Button>
+          <Button variant="ghost" size="icon" aria-label="Voltar à sessão" className="h-11 w-11" disabled={busy} onClick={onBack}><ChevronLeft /></Button>
           <span className="text-xs text-muted-foreground">{index + 1}/{cands.length}</span>
-          <Button variant="ghost" className="min-h-11 justify-self-end text-xs" onClick={() => go(cands.length)}>Resumo</Button>
+          <Button variant="ghost" className="min-h-11 justify-self-end text-xs" disabled={busy} onClick={() => go(cands.length)}>Resumo</Button>
         </div>
         <AnimatePresence mode="wait" initial={false} custom={dir}>
           <motion.section key={row.id + row.tmdb_id} custom={dir} initial={reduce ? { opacity: 0 } : { opacity: 0, x: 28 * dir }} animate={{ opacity: 1, x: 0 }} exit={reduce ? { opacity: 0 } : { opacity: 0, x: -28 * dir }} transition={{ duration: reduce ? 0.01 : 0.2, ease: [0.22, 1, 0.36, 1] }} className="mt-4 text-center">
@@ -637,16 +651,16 @@ function ReviewStack({ cands, lib, spaceId, sessionId, sources, onChanged, onBac
             : <Button variant="secondary" aria-label={row.status === "skipped" ? "Voltar a pendente" : "Pular"} className="min-h-14" disabled={busy} onClick={() => act(row, async () => { const { error } = await supabase.from("import_candidates").update({ status: row.status === "skipped" ? "pending" : "skipped" }).eq("id", row.id); if (error) throw error; }, row.status !== "skipped")}>{row.status === "skipped" ? <Undo2 /> : <X />}</Button>}
           {([["fire", "🔥"], ["like", "👍"], ["neutral", "😐"]] as const).map(([r, e]) => (
             <Button key={r} variant="secondary" aria-label={row.status === "saved" ? `Mudar reação para ${e}` : `Indicar com ${e}`} aria-pressed={row.status === "saved" && row.reaction === r} disabled={busy || !!choices} className={`min-h-14 text-2xl emoji ${row.status === "saved" && row.reaction === r ? "ring-2 ring-primary" : ""}`}
-              onClick={() => {void (row.status === "saved" ? act(row, () => rpc("import_set_reaction", { _candidate: row.id, _reaction: r })) : act(row, () => confirmFn({ data: { candidateId: row.id, reaction: r } }), true));}}>{e}</Button>
+              onClick={(event) => {const box=event.currentTarget.getBoundingClientRect();const animation=()=>playReaction(e,{x:box.x+box.width/2,y:box.y+box.height/2});void (row.status === "saved" ? act(row, async () => {await Promise.all([rpc("import_set_reaction", { _candidate: row.id, _reaction: r }),animation()]);}) : act(row, async () => {await Promise.all([confirmFn({ data: { candidateId: row.id, reaction: r } }),animation()]);}, true));}}>{e}</Button>
           ))}
         </div>
 
         <button type="button" aria-pressed={seen} disabled={busy || seenBusy === row.id} onClick={toggleSeen} className={`pressable mt-5 flex min-h-14 w-full items-center justify-center gap-2 rounded-xl border px-4 text-sm ${seen ? "border-primary bg-primary/15 text-primary" : "border-border text-muted-foreground"}`}><Check className="h-4 w-4" />Já assisti antes</button>
 
         <div className="mt-4 flex items-center justify-between">
-          <Button variant="ghost" className="min-h-11" disabled={index === 0} onClick={() => go(index - 1)}><ChevronLeft />Anterior</Button>
-          <Button variant="ghost" className="min-h-11 text-xs" onClick={() => { if (row.status === "saved") { toast("Desfaça a confirmação antes de corrigir."); return; } setFixing((v) => !v); setQuery(row.title); setOptions([]); }}><Search className="h-4 w-4" />Corrigir</Button>
-          <Button variant="ghost" className="min-h-11" onClick={() => go(index + 1)}>Próxima<ChevronRight /></Button>
+          <Button variant="ghost" className="min-h-11" disabled={busy || index === 0} onClick={() => go(index - 1)}><ChevronLeft />Anterior</Button>
+          <Button variant="ghost" className="min-h-11 text-xs" disabled={busy} onClick={() => { if (row.status === "saved") { toast("Desfaça a confirmação antes de corrigir."); return; } setFixing((v) => !v); setQuery(row.title); setOptions([]); }}><Search className="h-4 w-4" />Corrigir</Button>
+          <Button variant="ghost" className="min-h-11" disabled={busy} onClick={() => go(index + 1)}>Próxima<ChevronRight /></Button>
         </div>
 
         <AnimatePresence initial={false}>{fixing && (
@@ -656,6 +670,7 @@ function ReviewStack({ cands, lib, spaceId, sessionId, sources, onChanged, onBac
           </motion.div>
         )}</AnimatePresence>
       </div>
+      {burst && <SuperReaction {...burst} onComplete={finishReaction} />}
     </main>
   );
 }
