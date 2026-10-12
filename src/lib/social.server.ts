@@ -135,19 +135,24 @@ type PhotoImage = { mimeType: "image/jpeg" | "image/png" | "image/webp"; base64:
  * Resolve only a canonical public photo post through TikWM's public media endpoint, then
  * download the signed TikTok CDN images. URLs from that response are never fetched unchecked. */
 export async function fetchTikTokPhotoImages(ref: SocialRef): Promise<{ caption: string | null; images: PhotoImage[] } | null> {
-  const full = ref.platform === "tiktok-short" ? await expandShort(ref.canonical).catch(() => null) : ref;
-  if (full?.platform !== "tiktok" || full.kind !== "photo") return null;
+  // The shortlink redirect is sometimes blocked in the hosted worker even when
+  // the public media endpoint can resolve that exact share URL itself.
+  if (ref.platform !== "tiktok-short" && (ref.platform !== "tiktok" || ref.kind !== "photo")) return null;
   const ctrl = new AbortController();
   const timer = setTimeout(() => ctrl.abort(), 8000);
-  let data: { id?: unknown; title?: unknown; images?: unknown };
+  let data: { id?: unknown; title?: unknown; images?: unknown; author?: { unique_id?: unknown } };
   try {
-    const res = await fetch(`https://tikwm.com/api/?url=${encodeURIComponent(full.canonical)}`, {
+    const res = await fetch(`https://tikwm.com/api/?url=${encodeURIComponent(ref.canonical)}`, {
       redirect: "manual", signal: ctrl.signal, headers: { Accept: "application/json", "User-Agent": "Mozilla/5.0" },
     });
     if (!res.ok || res.status >= 300 || Number(res.headers.get("content-length")) > 100_000) return null;
     const body = await readLimited(res, 100_000);
     const json = JSON.parse(new TextDecoder().decode(body)) as { code?: unknown; data?: typeof data };
-    if (json.code !== 0 || String(json.data?.id) !== full.id || !Array.isArray(json.data?.images)) return null;
+    if (json.code !== 0 || !Array.isArray(json.data?.images)) return null;
+    const postId = String(json.data.id);
+    if (ref.platform === "tiktok" && postId !== ref.id) return null;
+    if (ref.platform === "tiktok-short" && (!/^\d{8,25}$/.test(postId) ||
+      !/^[\w.-]{1,40}$/.test(String(json.data.author?.unique_id)))) return null;
     data = json.data!;
   } catch { return null; }
   finally { clearTimeout(timer); }
