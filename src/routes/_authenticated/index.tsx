@@ -2,7 +2,7 @@ import { createFileRoute, Link } from "@tanstack/react-router";
 import { useRef, useState } from "react";
 import { markShared } from "@/lib/shared-transition";
 import { UnratedPile } from "@/components/app/UnratedPile";
-import { ArrowRight, Heart, Plus, Settings, Star } from "lucide-react";
+import { ArrowRight, Heart, Plus, Settings, Star, Upload } from "lucide-react";
 import { useQuery } from "@tanstack/react-query";
 import { supabase } from "@/integrations/supabase/client";
 import { HomeSkeleton } from "@/components/app/ui";
@@ -123,6 +123,11 @@ function ContinueCard({
 function Home() {
   const { data: space } = useSpace();
   const { data: works = [], isLoading } = useLibrary(space?.spaceId);
+  const imports = useQuery({ queryKey: ["open-import-sessions", space?.spaceId], enabled: !!space?.spaceId, staleTime: 20_000, queryFn: async () => {
+    const { count, error } = await supabase.from("import_sessions").select("id", { count: "exact", head: true }).eq("space_id", space!.spaceId!).neq("status", "completed");
+    if (error) throw error;
+    return count ?? 0;
+  }});
   // Only the most recent *revealed* Match result; open sessions are never read here.
   const lastMatch = useQuery({
     queryKey: ["last-match", space?.spaceId],
@@ -188,7 +193,7 @@ function Home() {
         </div>
       </header>
 
-      <section className="mt-4 grid grid-cols-2 gap-2" aria-label="Atalhos">
+      <section className="mt-4 grid grid-cols-3 gap-2" aria-label="Atalhos">
         {unrated[0] ? (
           <button onClick={() => setPile(true)} className={`${quick} text-left`}>
             <Star className="h-5 w-5 text-primary" />
@@ -211,6 +216,7 @@ function Home() {
               : "Nenhum ainda"}
           </span>
         </Link>
+        {imports.data ? <Link to="/import" className={quick}><Upload className="h-5 w-5 text-primary" /><span className="text-xs font-semibold">Importações</span><span className="text-[11px] text-muted-foreground">{imports.data} em aberto</span></Link> : <div className={`${quick} opacity-55`}><Upload className="h-5 w-5 text-primary" /><span className="text-xs font-semibold">Importações</span><span className="text-[11px] text-muted-foreground">Nenhuma aberta</span></div>}
       </section>
 
       <section className="mt-7">

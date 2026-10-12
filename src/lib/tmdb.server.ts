@@ -332,6 +332,7 @@ export async function findTitle(guess: {
   if (!items.length) return null;
   const normalize = (title: string) => title.normalize("NFD").replace(/\p{Diacritic}/gu, "").toLowerCase().replace(/[^\p{L}\p{N}]+/gu, " ").trim();
   const query = normalize(guess.title);
+  const queryWords = query.split(" ").filter((word) => word.length >= 4);
   const score = (item: TmdbSearchItem) => {
     const title = Math.max(...[item.title, item.originalTitle ?? ""].map((text) => {
       const t = normalize(text);
@@ -342,7 +343,8 @@ export async function findTitle(guess: {
     return title + (guess.year && item.year ? Math.max(0, 12 - Math.abs(item.year - guess.year) * 4) : 0);
   };
   const best = items.filter(item => !guess.year || item.year === guess.year).sort((a,b) => score(b)-score(a))[0];
-  return best && score(best) >= 45 ? best : null;
+  const sharesMeaningfulWord = best && [best.title, best.originalTitle ?? ""].map(normalize).some((title) => queryWords.some((word) => title.split(" ").includes(word)));
+  return best && score(best) >= 58 && (queryWords.length === 0 || sharesMeaningfulWord) ? best : null;
 }
 
 function normalizedTitle(value: string) {
@@ -428,7 +430,9 @@ export async function findImportTitleWithChoices(guess: ImportTitleGuess): Promi
   const alternatives = eligible.filter((item) => item.tmdbId !== selected.tmdbId || item.mediaType !== selected.mediaType)
     .filter((item) => {
       const names = [item.title, item.originalTitle ?? ""].map(normalizedTitle);
-      return !!(heard && names.includes(heard)) || names.some((name) => canonical.includes(name));
+      const exactName = !!(heard && names.includes(heard)) || names.some((name) => canonical.includes(name));
+      const closeYear = !guess.year || !item.year || Math.abs(item.year - guess.year) <= 3;
+      return item.mediaType === selected.mediaType && exactName && closeYear;
     }).sort((a, b) => {
       const score = (item: TmdbSearchItem) => (guess.year && item.year && Math.abs(item.year - guess.year) <= 1 ? 10 : 0) + Math.min(9, Math.log10(1 + (item.voteCount ?? 0)));
       return score(b) - score(a);
