@@ -360,12 +360,23 @@ export async function findImportTitle(guess: {
   for (const list of lists) for (const item of list) byId.set(`${item.mediaType}:${item.tmdbId}`, item);
   const canonical = aliases.map(normalizedTitle);
   const heard = spoken ? normalizedTitle(spoken) : null;
-  const candidates = [...byId.values()].filter((item) => {
+  const original = guess.originalTitle ? normalizedTitle(guess.originalTitle) : null;
+  const distinctOriginal = original && original !== normalizedTitle(guess.title);
+  let candidates = [...byId.values()].filter((item) => {
     const names = [item.title, item.originalTitle ?? ""].map(normalizedTitle);
     if (!canonical.some((alias) => names.includes(alias))) return false;
     if (!heard) return true;
-    return spokenIds.has(`${item.mediaType}:${item.tmdbId}`) || names.some((name) => transcriptionClose(heard, name));
+    if (spokenIds.has(`${item.mediaType}:${item.tmdbId}`) || names.some((name) => transcriptionClose(heard, name))) return true;
+    // Search can miss translated names. A distinct original title and a close release
+    // year together corroborate an independently queried catalog result.
+    return !!(distinctOriginal && names[1] === original && guess.year && item.year && Math.abs(item.year - guess.year) <= 1);
   });
+  // A localized word from automatic subtitles may itself be an unrelated film.
+  // When TMDB also confirms the distinct original title, that identity wins.
+  if (original) {
+    const originalMatches = candidates.filter((item) => normalizedTitle(item.originalTitle ?? "") === original);
+    if (originalMatches.length) candidates = originalMatches;
+  }
   candidates.sort((a, b) => {
     const rank = (item: TmdbSearchItem) => {
       const names = [item.title, item.originalTitle ?? ""].map(normalizedTitle);

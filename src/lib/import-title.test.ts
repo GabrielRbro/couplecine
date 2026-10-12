@@ -4,6 +4,7 @@ import { findImportTitle, findSpokenTitle } from "./tmdb.server";
 const antebellum = { id: 627290, title: "A Escolhida", original_title: "Antebellum", release_date: "2020-09-18" };
 const undertone = { id: 1480387, title: "Undertone", original_title: "Undertone", release_date: "2026-03-13" };
 const endless = { id: 430231, title: "O Culto", original_title: "The Endless", release_date: "2017-04-21" };
+const coherence = { id: 220289, title: "Coherence", original_title: "Coherence", release_date: "2014-09-19" };
 
 beforeEach(() => vi.stubEnv("TMDB_API_KEY", "test-key"));
 afterEach(() => vi.unstubAllGlobals());
@@ -38,6 +39,28 @@ describe("title recognition from a spoken list", () => {
     searchResults({ Oculto: [], "The Endless": [endless] });
     const result = await findImportTitle({ title: "The Endless", originalTitle: "The Endless", mentionedTitle: "Oculto", year: 2017, mediaType: "movie" });
     expect(result?.tmdbId).toBe(430231);
+  });
+
+  it("prefers Coherence to an unrelated film called Coerência", async () => {
+    const wrong = { id: 509040, title: "Coerência", original_title: "Coerência", release_date: "2016-01-01" };
+    searchResults({ coerência: [wrong], "Coerência": [wrong], Coherence: [coherence] });
+    const result = await findImportTitle({ title: "Coerência", originalTitle: "Coherence", mentionedTitle: "coerência", year: 2013, mediaType: "movie" });
+    expect(result?.tmdbId).toBe(220289);
+  });
+
+  it("prefers O Culto / The Endless to an unrelated film called Oculto", async () => {
+    const wrong = { id: 567802, title: "Oculto", original_title: "Oculto", release_date: "2018-01-01" };
+    searchResults({ oculto: [wrong, endless], Oculto: [wrong, endless], "The Endless": [endless] });
+    const result = await findImportTitle({ title: "Oculto", originalTitle: "The Endless", mentionedTitle: "oculto", year: 2017, mediaType: "movie" });
+    expect(result?.tmdbId).toBe(430231);
+  });
+
+  it("keeps the spoken exact match if the alleged original title is not corroborated", async () => {
+    const wrongOriginal = { id: 123456, title: "The Keeping Hours", original_title: "The Keeping Hours", release_date: "2017-01-01" };
+    const named = { id: 789012, title: "Faces da Verdade", original_title: "Faces da Verdade", release_date: "2008-01-01" };
+    searchResults({ "Faces da Verdade": [named], "The Keeping Hours": [wrongOriginal] });
+    const result = await findImportTitle({ title: "Faces da Verdade", originalTitle: "The Keeping Hours", mentionedTitle: "Faces da Verdade", mediaType: "movie" });
+    expect(result?.tmdbId).toBe(789012);
   });
 });
 

@@ -164,14 +164,16 @@ async function sha256Hex(bytes: Uint8Array<ArrayBuffer>) {
 
 type ImportGuess = AiTitleGuess & { mentionedTitle?: string | null; originalTitle?: string | null };
 
-function groundedImportGuesses(items: ImportGuess[], text?: string): ImportGuess[] {
+function groundedImportGuesses(items: ImportGuess[], text?: string, hasImage = false): ImportGuess[] {
   const normalize = (value: string) => ` ${value.normalize("NFD").replace(/\p{Diacritic}/gu, "").toLowerCase().replace(/[^\p{L}\p{N}]+/gu, " ").trim()} `;
   const source = text ? normalize(text) : null;
   return items.slice(0, 10).filter((item) => {
     if (typeof item.title !== "string" || !item.title.trim()) return false;
     if (item.mediaType != null && item.mediaType !== "movie" && item.mediaType !== "tv") return false;
     if (!source) return true;
-    if (typeof item.mentionedTitle === "string" && item.mentionedTitle.trim()) return source.includes(normalize(item.mentionedTitle));
+    if (typeof item.mentionedTitle === "string" && item.mentionedTitle.trim())
+      return source.includes(normalize(item.mentionedTitle)) || hasImage;
+    if (hasImage) return true;
     // A named film at the end of a transcript cannot be replaced by a plot-based guess.
     return !/\b(?:se chama|chamado|chamada|quatro filmes|cinco filmes|top cinco)\b/i.test(source);
   });
@@ -197,13 +199,13 @@ export async function runImportAnalysis(opts: { supabase: Parameters<typeof gemi
       supabase: opts.supabase,
       userId: opts.userId,
       feature: "import",
-      system: `Identifique filmes e séries a partir da descrição, fala legendada ou imagem (pt-BR). Leia TODA a evidência, inclusive o fim. Para listas, extraia cada título citado na ordem em que aparece: se a fala disser "quatro filmes" ou "top cinco", procure os quatro ou cinco nomes, sem saltar nenhum. Não inclua outra obra para preencher a quantidade. Quando houver nome falado, "mentionedTitle" deve reproduzir SOMENTE as palavras exatas desse nome na evidência, inclusive erros da transcrição automática (ex.: "underton"); "title" deve ser o título real da obra e "originalTitle" o título original real quando tiver certeza. Não substitua um filme nomeado por outro que se encaixe na descrição. Se um filme não for nomeado, use mentionedTitle:null e identifique-o só quando o enredo/elenco/direção permitirem alta confiança sem conflito com nenhum nome falado. Ano: null quando não souber; não presuma ano de lançamento pela data do vídeo. Responda só JSON {"items":[{"title":string,"originalTitle":string|null,"mentionedTitle":string|null,"year":number|null,"mediaType":"movie"|"tv"|null}]}. Máximo 10 obras distintas.`,
+      system: `Identifique filmes e séries a partir da descrição, fala legendada ou imagem (pt-BR). Leia TODA a evidência, inclusive o fim. Se houver imagem, LEIA os títulos escritos nela literalmente e dê prioridade a esses nomes quando a transcrição automática da fala discordar; "mentionedTitle" deve ser o nome visível na imagem. Para listas, extraia cada título citado na ordem em que aparece: se a fala disser "quatro filmes" ou "top cinco", procure os quatro ou cinco nomes, sem saltar nenhum. Não inclua outra obra para preencher a quantidade. Sem imagem, quando houver nome falado, "mentionedTitle" deve reproduzir SOMENTE as palavras exatas desse nome na evidência, inclusive erros da transcrição automática (ex.: "underton"); "title" deve ser o título real da obra e "originalTitle" o título original real quando tiver certeza. Não substitua um filme nomeado por outro que se encaixe na descrição. Se um filme não for nomeado, use mentionedTitle:null e identifique-o só quando o enredo/elenco/direção permitirem alta confiança sem conflito com nenhum nome falado. Ano: null quando não souber; não presuma ano de lançamento pela data do vídeo. Responda só JSON {"items":[{"title":string,"originalTitle":string|null,"mentionedTitle":string|null,"year":number|null,"mediaType":"movie"|"tv"|null}]}. Máximo 10 obras distintas.`,
       parts,
       cacheTtlHours: 24 * 14,
-      cacheSeed: `import-v4:${opts.text ? "t" : ""}${opts.image ? `i:${opts.image.mimeType}` : ""}:${textHash}:${imageHash}`,
+      cacheSeed: `import-v5:${opts.text ? "t" : ""}${opts.image ? `i:${opts.image.mimeType}` : ""}:${textHash}:${imageHash}`,
     });
     const match = (guess: AiTitleGuess) => findImportTitle(guess as ImportGuess);
-    const guesses = groundedImportGuesses(Array.isArray(res.items) ? res.items : [], opts.text);
+    const guesses = groundedImportGuesses(Array.isArray(res.items) ? res.items : [], opts.text, !!opts.image);
     let items = await validate(guesses, opts.spaceId, opts.supabase, match);
     const expected = mentionedListSize(opts.text);
     if (!items.length && !expected && opts.text) {
@@ -217,12 +219,12 @@ export async function runImportAnalysis(opts: { supabase: Parameters<typeof gemi
           supabase: opts.supabase,
           userId: opts.userId,
           feature: "import",
-          system: `Extraia SOMENTE os títulos que faltam desta lista de ${expected} filmes/séries. Leia a fala inteira, inclusive os primeiros e os últimos títulos. Não repita os títulos já identificados; se não conseguir verificar o nome falado, retorne menos itens. Responda apenas JSON {"items":[{"title":string,"originalTitle":string|null,"mentionedTitle":string|null,"year":number|null,"mediaType":"movie"|"tv"|null}]}. mentionedTitle deve ser a expressão exata do nome na legenda; ano null se não for certo. Nunca substitua um nome mencionado por filme de enredo parecido.`,
-          parts: [{ text: `${opts.text ?? ""}\n\nTítulos já identificados no catálogo: ${items.map((item) => `${item.title} / ${item.originalTitle ?? ""}`).join("; ")}` }],
+          system: `Extraia SOMENTE os títulos que faltam desta lista de ${expected} filmes/séries. Leia a fala inteira e, se houver imagem, prefira os nomes escritos nela em caso de divergência com a legenda automática. Não repita os títulos já identificados; se não conseguir verificar o nome, retorne menos itens. Responda apenas JSON {"items":[{"title":string,"originalTitle":string|null,"mentionedTitle":string|null,"year":number|null,"mediaType":"movie"|"tv"|null}]}. mentionedTitle deve ser o nome exato visível ou falado; ano null se não for certo. Nunca substitua um nome mencionado por filme de enredo parecido.`,
+          parts: [{ text: `${opts.text ?? ""}\n\nTítulos já identificados no catálogo: ${items.map((item) => `${item.title} / ${item.originalTitle ?? ""}`).join("; ")}` }, ...(opts.image ? [{ inline_data: { mime_type: opts.image.mimeType, data: opts.image.base64 } }] : [])],
           cacheTtlHours: 24 * 14,
-          cacheSeed: `import-v4-recovery:${textHash}:${imageHash}:${items.map((item) => item.tmdbId).join(",")}`,
+          cacheSeed: `import-v5-recovery:${textHash}:${imageHash}:${items.map((item) => item.tmdbId).join(",")}`,
         });
-        const additional = groundedImportGuesses(Array.isArray(recovery.items) ? recovery.items : [], opts.text);
+        const additional = groundedImportGuesses(Array.isArray(recovery.items) ? recovery.items : [], opts.text, !!opts.image);
         if (additional.length) {
           const more = await validate(additional, opts.spaceId, opts.supabase, match);
           const seen = new Set(items.map((item) => `${item.mediaType}:${item.tmdbId}`));
