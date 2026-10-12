@@ -65,7 +65,7 @@ async function expandShort(start: string): Promise<SocialRef | null> {
 
 const decode = (s: string) => s.replace(/&quot;/g, '"').replace(/&#x27;|&#39;/g, "'").replace(/&amp;/g, "&").replace(/&lt;/g, "<").replace(/&gt;/g, ">").replace(/&#(\d+);/g, (_, n) => String.fromCodePoint(Number(n))).replace(/&#x([0-9a-f]+);/gi, (_, n) => String.fromCodePoint(parseInt(n, 16)));
 
-export type CaptionResult = { platform: "instagram" | "tiktok"; canonical: string; author: string | null; caption: string | null; status: "ok" | "blocked" | "unavailable"; message: string | null; imgIndex?: number | null; videoProbed?: boolean };
+export type CaptionResult = { platform: "instagram" | "tiktok"; canonical: string; author: string | null; caption: string | null; status: "ok" | "blocked" | "unavailable" | "photo_unavailable"; message: string | null; imgIndex?: number | null; videoProbed?: boolean };
 
 export const VIDEO_PROBE_STATUS = "ok_video_probe_v1";
 
@@ -153,7 +153,7 @@ export async function fetchCaption(ref: SocialRef): Promise<CaptionResult> {
     const caption = embedCaption || page?.caption || "";
     const evidence = [caption, ...(page?.speech ? [`Legendas automáticas do vídeo:\n${page.speech}`] : [])].filter(Boolean).join("\n\n").slice(0, 4000);
     if (evidence) return { platform: "tiktok", canonical: ref.canonical, author: embedAuthor ?? page?.author ?? null, caption: evidence, status: "ok", message: null, videoProbed: !!page?.speech };
-    return { platform: "tiktok", canonical: ref.canonical, author: null, caption: null, status: res?.status === 429 ? "blocked" : "unavailable", message: ref.kind === "photo" ? "O TikTok não forneceu dados deste post de fotos. Envie capturas das imagens." : "O TikTok não forneceu a legenda deste post. Envie uma captura ou cole a legenda." };
+    return { platform: "tiktok", canonical: ref.canonical, author: null, caption: null, status: ref.kind === "photo" ? "photo_unavailable" : res?.status === 429 ? "blocked" : "unavailable", message: ref.kind === "photo" ? "O TikTok não forneceu as imagens deste carrossel. Selecione as páginas com filmes de uma vez." : "O TikTok não forneceu a legenda deste post. Envie uma captura ou cole a legenda." };
   }
   return { ...(await instagram(ref)), imgIndex: ref.imgIndex };
 }

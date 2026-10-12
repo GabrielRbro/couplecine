@@ -1,5 +1,5 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
-import { findImportTitle, findSpokenTitle } from "./tmdb.server";
+import { findImportTitle, findImportTitleWithChoices, findSpokenTitle } from "./tmdb.server";
 
 const antebellum = { id: 627290, title: "A Escolhida", original_title: "Antebellum", release_date: "2020-09-18" };
 const undertone = { id: 1480387, title: "Undertone", original_title: "Undertone", release_date: "2026-03-13" };
@@ -46,6 +46,8 @@ describe("title recognition from a spoken list", () => {
     searchResults({ coerência: [wrong], "Coerência": [wrong], Coherence: [coherence] });
     const result = await findImportTitle({ title: "Coerência", originalTitle: "Coherence", mentionedTitle: "coerência", year: 2013, mediaType: "movie" });
     expect(result?.tmdbId).toBe(220289);
+    const review = await findImportTitleWithChoices({ title: "Coerência", originalTitle: "Coherence", mentionedTitle: "coerência", year: 2013, mediaType: "movie" });
+    expect(review?.reviewAlternatives?.map((item) => item.tmdbId)).toEqual([509040]);
   });
 
   it("prefers O Culto / The Endless to an unrelated film called Oculto", async () => {
@@ -53,6 +55,8 @@ describe("title recognition from a spoken list", () => {
     searchResults({ oculto: [wrong, endless], Oculto: [wrong, endless], "The Endless": [endless] });
     const result = await findImportTitle({ title: "Oculto", originalTitle: "The Endless", mentionedTitle: "oculto", year: 2017, mediaType: "movie" });
     expect(result?.tmdbId).toBe(430231);
+    const review = await findImportTitleWithChoices({ title: "Oculto", originalTitle: "The Endless", mentionedTitle: "oculto", year: 2017, mediaType: "movie" });
+    expect(review?.reviewAlternatives?.map((item) => item.tmdbId)).toEqual([567802]);
   });
 
   it("keeps the spoken exact match if the alleged original title is not corroborated", async () => {

@@ -7,6 +7,8 @@ import { explicitTitle } from "./explicit-title";
 import { extractSocial, sourceUrl } from "./social-url";
 import { runImportAnalysis } from "./ai.functions";
 import { ensureWork } from "./catalog.functions";
+import { choiceNote, parseChoiceNote } from "./import-choices";
+import type { ImportMatch } from "./tmdb.server";
 
 /**
  * Import sessions are personal (created_by) and persisted: reload/PWA close resumes without repeating
@@ -14,7 +16,7 @@ import { ensureWork } from "./catalog.functions";
  * Session/candidate rows are written server-side (service role) after verifying the caller's membership;
  * user-facing confirm/undo run as RPCs under the caller's identity.
  */
-type Item = TmdbSearchItem;
+type Item = TmdbSearchItem & Partial<Pick<ImportMatch, "mentionedTitle" | "reviewAlternatives">>;
 
 function captionPatch(previous: { caption: string | null; caption_status: string | null }, result: Awaited<ReturnType<typeof fetchCaption>> | null) {
   // A failed enrichment must not erase a description that was already readable.
@@ -38,7 +40,7 @@ async function ownSession(supabase: { from: (t: "import_sessions") => any }, ses
 async function addCandidates(sessionId: string, spaceId: string, userId: string, items: Item[], sourcePostId: string | null) {
   const db = await admin();
   const { count } = await db.from("import_candidates").select("id", { count: "exact", head: true }).eq("session_id", sessionId);
-  const rows = items.map((f, i) => ({ session_id: sessionId, space_id: spaceId, created_by: userId, source_post_id: sourcePostId, position: (count ?? 0) + i, media_type: f.mediaType, tmdb_id: f.tmdbId, title: f.title, original_title: f.originalTitle, year: f.year, poster_path: f.posterPath, backdrop_path: f.backdropPath }));
+  const rows = items.map((f, i) => ({ session_id: sessionId, space_id: spaceId, created_by: userId, source_post_id: sourcePostId, position: (count ?? 0) + i, media_type: f.mediaType, tmdb_id: f.tmdbId, title: f.title, original_title: f.originalTitle, year: f.year, poster_path: f.posterPath, backdrop_path: f.backdropPath, note: choiceNote(f) }));
   // Same work from the same source in this session is one candidate; distinct sources keep separate provenance.
   for (const r of rows) {
     const { error } = await db.from("import_candidates").insert(r);
@@ -167,6 +169,7 @@ export const autoAnalyzeSession = createServerFn({ method: "POST" })
       const db = await admin();
       let found = 0;
       let sawCaption = false;
+      let photoUnavailable = false;
       for (const id of s.source_post_ids.slice(0, 3)) {
         const p = byId.get(id);
         if (!p) continue;
@@ -180,7 +183,9 @@ export const autoAnalyzeSession = createServerFn({ method: "POST" })
             const { error: updateError } = await db.from("source_posts").update(patch).eq("id", id);
             if (updateError) throw new Error("Não foi possível guardar a legenda.");
           }
+          if (result?.status === "photo_unavailable") photoUnavailable = true;
         }
+        if (p.caption_status === "photo_unavailable") photoUnavailable = true;
         if (!caption) continue;
         sawCaption = true;
         const items = await recognize(caption);
@@ -195,7 +200,7 @@ export const autoAnalyzeSession = createServerFn({ method: "POST" })
       }
       if (!found && s.source_post_ids.length && !freeText && !sawCaption) {
         await refreshStatus(s.id);
-        return { ok: false as const, reason: "Este post não trouxe descrição ou legenda pública. Confira o link recebido ou envie uma captura do vídeo." };
+        return { ok: false as const, reason: photoUnavailable ? "Este carrossel não liberou as imagens para leitura pelo link. Selecione as páginas com filmes de uma vez." : "Este post não trouxe descrição ou legenda pública. Confira o link recebido ou envie uma captura do vídeo." };
       }
       await refreshStatus(s.id);
       if (!found) return { ok: false as const, reason: "Não consegui identificar uma obra com segurança. Tente novamente ou envie uma captura." };
@@ -248,6 +253,33 @@ export const correctCandidate = createServerFn({ method: "POST" })
     return { ok: true };
   });
 
+/** Resolve a catalog namesake before confirming an indication. The alternative is
+ * looked up again by ID so client-side metadata cannot choose an invented work. */
+export const resolveCandidateChoice = createServerFn({ method: "POST" })
+  .middleware([requireSupabaseAuth])
+  .inputValidator((d) => z.object({ candidateId: z.string().uuid(), mediaType: z.enum(["movie", "tv"]), tmdbId: z.number().int().positive() }).parse(d))
+  .handler(async ({ data, context }) => {
+    const { data: c } = await context.supabase.from("import_candidates").select("id,media_type,tmdb_id,note,status").eq("id", data.candidateId).maybeSingle();
+    if (!c || c.status !== "pending") throw new Error("Opção indisponível para esta obra.");
+    const note = c.note;
+    const choices = parseChoiceNote(note);
+    if (!choices) throw new Error("Esta obra não tem opções pendentes.");
+    const current = c.media_type === data.mediaType && c.tmdb_id === data.tmdbId;
+    if (!current && !choices.alternatives.some((a) => a.mediaType === data.mediaType && a.tmdbId === data.tmdbId))
+      throw new Error("Escolha uma das opções exibidas.");
+    if (!note) throw new Error("Esta obra não tem opções pendentes.");
+    if (current) {
+      const { data: updated, error } = await (await admin()).from("import_candidates").update({ note: null, updated_at: new Date().toISOString() }).eq("id", c.id).eq("status", "pending").eq("note", note).select("id").maybeSingle();
+      if (error || !updated) throw new Error("A escolha mudou. Atualize a sessão e tente de novo.");
+      return { ok: true };
+    }
+    const t = await lookupTmdb(data.mediaType, data.tmdbId);
+    if (!t) throw new Error("Obra não encontrada no TMDB.");
+    const { data: updated, error } = await (await admin()).from("import_candidates").update({ media_type: t.mediaType, tmdb_id: t.tmdbId, title: t.title, original_title: t.originalTitle, year: t.year, poster_path: t.posterPath, backdrop_path: t.backdropPath, corrected: true, note: null, updated_at: new Date().toISOString() }).eq("id", c.id).eq("status", "pending").eq("note", note).select("id").maybeSingle();
+    if (error || !updated) throw new Error(error?.code === "23505" ? "Essa obra já está nesta sessão." : "A escolha mudou. Atualize a sessão e tente de novo.");
+    return { ok: true };
+  });
+
 /** Confirm: ensure the TMDB-validated work, then one transactional RPC (indication, reaction, seen, source link, status).
  * Idempotent: a saved candidate returns its stored result. Works are never deleted on failure; the note says what may remain. */
 export const confirmCandidate = createServerFn({ method: "POST" })
@@ -255,8 +287,9 @@ export const confirmCandidate = createServerFn({ method: "POST" })
   .inputValidator((d) => z.object({ candidateId: z.string().uuid(), reaction: z.enum(["fire", "like", "neutral"]) }).parse(d))
   .handler(async ({ data, context }) => {
     const { supabase, userId } = context;
-    const { data: c } = await supabase.from("import_candidates").select("id, space_id, media_type, tmdb_id, seen, status, work_id").eq("id", data.candidateId).maybeSingle();
+    const { data: c } = await supabase.from("import_candidates").select("id, space_id, media_type, tmdb_id, seen, status, work_id, note").eq("id", data.candidateId).maybeSingle();
     if (!c) throw new Error("Candidato não encontrado.");
+    if (parseChoiceNote(c.note)) throw new Error("Escolha primeiro qual dos filmes é o certo.");
     if (c.status === "saved") return { status: "saved", indication: undefined, idempotent: true };
     if (c.status !== "pending" && c.status !== "error") throw new Error("Volte esta obra para pendente antes de confirmar.");
     const { data: before } = await supabase.from("works").select("id").eq("space_id", c.space_id).eq("media_type", c.media_type).eq("tmdb_id", c.tmdb_id).maybeSingle();

@@ -57,6 +57,19 @@ describe("TikTok public caption fallback", () => {
     expect(fetch).toHaveBeenCalledTimes(1);
   });
 
+  it("identifies a photo carousel whose public page and oEmbed expose no images or titles", async () => {
+    const short = "https://vt.tiktok.com/ZSbwF86NW/";
+    const full = "https://www.tiktok.com/@vtindica_/photo/7686999788637736213";
+    vi.stubGlobal("fetch", vi.fn(async (input: string) => {
+      if (input === short) return new Response(null, { status: 301, headers: { location: `${full}?image_index=2` } });
+      if (input.includes("/oembed?")) return new Response("rate limit", { status: 429 });
+      if (input === full) return new Response('<script id="__UNIVERSAL_DATA_FOR_REHYDRATION__">{"__DEFAULT_SCOPE__":{}}</script>');
+      throw new Error("Unexpected URL");
+    }));
+    const result = await fetchCaption(parseSocial(short)!);
+    expect(result).toMatchObject({ canonical: full, caption: null, status: "photo_unavailable" });
+  });
+
   it("adds native TikTok speech when the post description does not name a work", async () => {
     const full = "https://www.tiktok.com/@cinema_em_questao/video/7673536585962523922";
     const vttUrl = "https://v16-webapp.tiktokcdn-eu.com/subtitles/track.vtt?signature=test";

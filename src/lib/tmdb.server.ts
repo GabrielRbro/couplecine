@@ -337,13 +337,17 @@ function transcriptionClose(a: string, b: string) {
 /** Import matching: corroborate the title heard in a transcript against TMDB's
  * translated/alternative-title search and an independent canonical-title query.
  * Guessed years rank ties but never discard a title (release years often differ). */
-export async function findImportTitle(guess: {
+type ImportTitleGuess = {
   title: string;
   originalTitle?: string | null;
   mentionedTitle?: string | null;
   year?: number | null;
   mediaType?: "movie" | "tv" | null;
-}): Promise<TmdbSearchItem | null> {
+};
+
+export type ImportMatch = TmdbSearchItem & { mentionedTitle?: string; reviewAlternatives?: TmdbSearchItem[] };
+
+export async function findImportTitleWithChoices(guess: ImportTitleGuess): Promise<ImportMatch | null> {
   const spoken = guess.mentionedTitle?.trim();
   const aliases = [...new Set([guess.title, guess.originalTitle].filter((x): x is string => typeof x === "string" && !!x.trim()).map((x) => x.trim()))];
   if (!aliases.length) return null;
@@ -371,6 +375,7 @@ export async function findImportTitle(guess: {
     // year together corroborate an independently queried catalog result.
     return !!(distinctOriginal && names[1] === original && guess.year && item.year && Math.abs(item.year - guess.year) <= 1);
   });
+  const eligible = candidates;
   // A localized word from automatic subtitles may itself be an unrelated film.
   // When TMDB also confirms the distinct original title, that identity wins.
   if (original) {
@@ -387,7 +392,23 @@ export async function findImportTitle(guess: {
     };
     return rank(b) - rank(a);
   });
-  return candidates[0] ?? null;
+  const selected = candidates[0];
+  if (!selected) return null;
+  // Keep only an actual catalog namesake, not a loosely related search hit.
+  // A review choice is never automatically added to the user's library.
+  const alternatives = eligible.filter((item) => item.tmdbId !== selected.tmdbId || item.mediaType !== selected.mediaType)
+    .filter((item) => {
+      const names = [item.title, item.originalTitle ?? ""].map(normalizedTitle);
+      return !!(heard && names.includes(heard)) || names.some((name) => canonical.includes(name));
+    }).sort((a, b) => {
+      const score = (item: TmdbSearchItem) => (guess.year && item.year && Math.abs(item.year - guess.year) <= 1 ? 10 : 0) + Math.min(9, Math.log10(1 + (item.voteCount ?? 0)));
+      return score(b) - score(a);
+    }).slice(0, 2);
+  return { ...selected, ...(spoken ? { mentionedTitle: spoken } : {}), ...(alternatives.length ? { reviewAlternatives: alternatives } : {}) };
+}
+
+export async function findImportTitle(guess: ImportTitleGuess): Promise<TmdbSearchItem | null> {
+  return findImportTitleWithChoices(guess);
 }
 
 /** A single explicitly named film can survive an AI misread: look up the
