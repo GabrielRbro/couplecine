@@ -379,6 +379,25 @@ export async function findImportTitle(guess: {
   return candidates[0] ?? null;
 }
 
+/** A single explicitly named film can survive an AI misread: look up the
+ * transcribed word itself, then its common final-silent-e spelling. Accept
+ * only a catalog title within one character of what was actually spoken. */
+export async function findSpokenTitle(text: string): Promise<TmdbSearchItem | null> {
+  const named = text.match(/\b(?:se chama|chama-se)\s+([\p{L}]{4,35})(?=\s|$)/iu)?.[1];
+  if (!named) return null;
+  const heard = normalizedTitle(named);
+  const queries = [named, ...(!/e$/i.test(named) && named.length >= 6 ? [`${named}e`] : [])];
+  for (const query of queries) {
+    const data = await call("/search/multi", { query, include_adult: "false", page: "1" });
+    const matches = (Array.isArray(data["results"]) ? data["results"] as Json[] : [])
+      .map((r) => mapListItem(r)).filter((item): item is TmdbSearchItem => !!item)
+      .filter((item) => [item.title, item.originalTitle ?? ""].some((name) => transcriptionClose(heard, normalizedTitle(name))))
+      .sort((a, b) => (b.voteCount ?? 0) - (a.voteCount ?? 0));
+    if (matches[0]) return matches[0];
+  }
+  return null;
+}
+
 function chooseLogo(images: Json | undefined): string | null {
   const logos = Array.isArray(images?.["logos"]) ? images["logos"] as Json[] : [];
   const rank = (lang: unknown) => lang === "pt" || lang === "pt-BR" ? 0 : lang === "en" ? 1 : lang == null ? 2 : 9;

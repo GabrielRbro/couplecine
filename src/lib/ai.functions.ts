@@ -2,7 +2,7 @@ import { createServerFn } from "@tanstack/react-start";
 import { z } from "zod";
 import { requireSupabaseAuth } from "@/integrations/supabase/auth-middleware";
 import { AiUnavailable, GEMINI_SECRET, geminiConfig, geminiJson, testGemini, type AiTitleGuess } from "./gemini.server";
-import { findImportTitle, findTitle, lookupTmdb, type TmdbSearchItem } from "./tmdb.server";
+import { findImportTitle, findSpokenTitle, findTitle, lookupTmdb, type TmdbSearchItem } from "./tmdb.server";
 
 const AI_MESSAGE: Record<string, string> = {
   not_configured: "Pesquisa inteligente não configurada. Adicione a chave do Gemini em Configurações.",
@@ -206,6 +206,10 @@ export async function runImportAnalysis(opts: { supabase: Parameters<typeof gemi
     const guesses = groundedImportGuesses(Array.isArray(res.items) ? res.items : [], opts.text);
     let items = await validate(guesses, opts.spaceId, opts.supabase, match);
     const expected = mentionedListSize(opts.text);
+    if (!items.length && !expected && opts.text) {
+      const spoken = await findSpokenTitle(opts.text).catch(() => null);
+      if (spoken) items = await validate([{ title: spoken.title, mediaType: spoken.mediaType }], opts.spaceId, opts.supabase, async () => spoken);
+    }
     if (expected && items.length < expected) {
       // One bounded recovery pass: ask only for names still missing from an explicit list.
       try {
