@@ -26,7 +26,9 @@ async function boundedFetch(url: string, readBody = true, subtitle = false) {
   try {
     // The hosted edge runtime rejects redirect: "error". Manual prevents an unchecked hop;
     // only expandShort explicitly follows a Location after validating the next host.
-    const res = await fetch(url, { redirect: "manual", signal: ctrl.signal, headers: { "User-Agent": UA, Accept: "text/html,application/json" } });
+    // TikTok omits native subtitleInfos from its default hosted-worker page variant.
+    // A language preference yields the caption tracks for the same public post.
+    const res = await fetch(url, { redirect: "manual", signal: ctrl.signal, headers: { "User-Agent": UA, Accept: "text/html,application/json", "Accept-Language": "pt-BR,pt;q=0.9,en;q=0.8" } });
     if (!readBody || !res.ok) return { res, body: "" };
     const reader = res.body?.getReader();
     let size = 0;
@@ -70,7 +72,9 @@ export const VIDEO_PROBE_STATUS = "ok_video_probe_v1";
 export function needsCaptionFetch(p: { source_url: string; caption: string | null; caption_status: string | null; caption_fetched_at: string | null }, now = Date.now()) {
   if (p.caption) {
     const ref = parseSocial(p.source_url);
-    return p.caption_status !== VIDEO_PROBE_STATUS && !!ref && ref.platform !== "instagram" && !explicitTitle(p.caption);
+    if (!ref || ref.platform === "instagram" || explicitTitle(p.caption)) return false;
+    if (p.caption_status === VIDEO_PROBE_STATUS && p.caption.includes("Legendas automáticas do vídeo:\n")) return false;
+    return !p.caption_fetched_at || now - new Date(p.caption_fetched_at).getTime() >= 2 * 60_000;
   }
   return !p.caption_fetched_at || now - new Date(p.caption_fetched_at).getTime() >= 2 * 60_000;
 }
@@ -148,7 +152,7 @@ export async function fetchCaption(ref: SocialRef): Promise<CaptionResult> {
     const page = await tiktokPageCaption(ref);
     const caption = embedCaption || page?.caption || "";
     const evidence = [caption, ...(page?.speech ? [`Legendas automáticas do vídeo:\n${page.speech}`] : [])].filter(Boolean).join("\n\n").slice(0, 4000);
-    if (evidence) return { platform: "tiktok", canonical: ref.canonical, author: embedAuthor ?? page?.author ?? null, caption: evidence, status: "ok", message: null, videoProbed: !!page };
+    if (evidence) return { platform: "tiktok", canonical: ref.canonical, author: embedAuthor ?? page?.author ?? null, caption: evidence, status: "ok", message: null, videoProbed: !!page?.speech };
     return { platform: "tiktok", canonical: ref.canonical, author: null, caption: null, status: res?.status === 429 ? "blocked" : "unavailable", message: ref.kind === "photo" ? "O TikTok não forneceu dados deste post de fotos. Envie capturas das imagens." : "O TikTok não forneceu a legenda deste post. Envie uma captura ou cole a legenda." };
   }
   return { ...(await instagram(ref)), imgIndex: ref.imgIndex };

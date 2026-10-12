@@ -7,7 +7,10 @@ it("rechecks an older ambiguous TikTok description once, preserving the retry co
   const source_url = "https://www.tiktok.com/@film/video/7673536585962523922";
   const old = { source_url, caption: "A história desse filme é incrível", caption_status: "ok", caption_fetched_at: "2026-10-01T00:00:00Z" };
   expect(needsCaptionFetch(old)).toBe(true);
-  expect(needsCaptionFetch({ ...old, caption_status: VIDEO_PROBE_STATUS })).toBe(false);
+  expect(needsCaptionFetch({ ...old, caption: "Descrição genérica\n\nLegendas automáticas do vídeo:\nRed Rooms", caption_status: VIDEO_PROBE_STATUS })).toBe(false);
+  expect(needsCaptionFetch({ ...old, caption: "Descrição genérica", caption_status: VIDEO_PROBE_STATUS, caption_fetched_at: "2026-10-11T20:00:00Z" }, Date.parse("2026-10-11T20:01:00Z"))).toBe(false);
+  expect(needsCaptionFetch({ ...old, caption: "Descrição genérica", caption_status: VIDEO_PROBE_STATUS, caption_fetched_at: "2026-10-11T20:00:00Z" }, Date.parse("2026-10-11T20:03:00Z"))).toBe(true);
+  expect(needsCaptionFetch({ ...old, caption: "Descrição genérica\n\nLegendas automáticas do vídeo:\nRed Rooms", caption_status: VIDEO_PROBE_STATUS })).toBe(false);
   expect(needsCaptionFetch({ ...old, caption: "Zodíaco (2007) #filmes" })).toBe(false);
   expect(needsCaptionFetch({ ...old, caption: null, caption_status: "blocked", caption_fetched_at: "2026-10-11T20:00:00Z" }, Date.parse("2026-10-11T20:01:00Z"))).toBe(false);
 });
@@ -64,6 +67,7 @@ describe("TikTok public caption fallback", () => {
     const page = `<script id="__UNIVERSAL_DATA_FOR_REHYDRATION__">${JSON.stringify({ __DEFAULT_SCOPE__: { "webapp.video-detail": { itemInfo: { itemStruct: item } } } })}</script>`;
     const fetch = vi.fn(async (input: string, options?: RequestInit) => {
       expect(options?.redirect).toBe("manual");
+      expect(options?.headers).toMatchObject({ "Accept-Language": "pt-BR,pt;q=0.9,en;q=0.8" });
       if (input.includes("/oembed?")) return new Response(JSON.stringify({ title: item.desc }));
       if (input === full) return new Response(page);
       if (input === vttUrl) return new Response("WEBVTT\n\n00:00:01.000 --> 00:00:02.000\nO filme é Zodíaco\n\n00:00:02.000 --> 00:00:03.000\nde David Fincher\n");
@@ -73,6 +77,14 @@ describe("TikTok public caption fallback", () => {
     const result = await fetchCaption(parseSocial(full)!);
     expect(result).toMatchObject({ status: "ok", caption: "Esse suspense me surpreendeu\n\nLegendas automáticas do vídeo:\nO filme é Zodíaco de David Fincher" });
     expect(fetch).toHaveBeenCalledTimes(3);
+  });
+
+  it("retries a page whose generic description had no native speech", async () => {
+    const full = "https://www.tiktok.com/@film/video/7673536585962523922";
+    const item = { id: "7673536585962523922", desc: "Esse filme é sinistro", video: { subtitleInfos: [] } };
+    const page = `<script id="__UNIVERSAL_DATA_FOR_REHYDRATION__">${JSON.stringify({ __DEFAULT_SCOPE__: { "webapp.video-detail": { itemInfo: { itemStruct: item } } } })}</script>`;
+    vi.stubGlobal("fetch", vi.fn(async (input: string) => input.includes("/oembed?") ? new Response("rate", { status: 429 }) : new Response(page)));
+    expect(await fetchCaption(parseSocial(full)!)).toMatchObject({ status: "ok", caption: item.desc, videoProbed: false });
   });
 
   it("uses a second safe track if the preferred one fails, without treating VTT notes as speech", async () => {

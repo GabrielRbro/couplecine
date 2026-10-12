@@ -1,4 +1,5 @@
 import { createFileRoute } from "@tanstack/react-router";
+import { fetchCaption, parseSocial } from "@/lib/social.server";
 
 // Temporary, fixed-post network diagnostic. Remove after checking the hosted worker.
 export const Route = createFileRoute("/api/public/tiktok-caption-check")({
@@ -36,7 +37,9 @@ export const Route = createFileRoute("/api/public/tiktok-caption-check")({
           tracks.push({ format: track.Format, lang: track.LanguageCodeName, status: res.status, length: body.length, vtt: body.startsWith("WEBVTT"), redRooms: body.includes("Red Rooms") });
         } catch (e) { tracks.push({ format: track.Format, lang: track.LanguageCodeName, error: e instanceof Error ? e.name : "error" }); }
       }
-      return Response.json({ page: page.status, htmlLength: html.length, description: data?.__DEFAULT_SCOPE__?.["webapp.video-detail"]?.itemInfo?.itemStruct?.desc?.length ?? null, tracks, variants });
+      const result = await fetchCaption(parseSocial(url)!);
+      return Response.json({ page: page.status, htmlLength: html.length, description: data?.__DEFAULT_SCOPE__?.["webapp.video-detail"]?.itemInfo?.itemStruct?.desc?.length ?? null, tracks, variants,
+        captionResult: { status: result.status, videoProbed: result.videoProbed, length: result.caption?.length ?? 0, redRooms: result.caption?.includes("Red Rooms") ?? false } });
     } catch (e) { return Response.json({ error: e instanceof Error ? e.name : "error" }); }
   } } },
 });
