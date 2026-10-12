@@ -2,7 +2,7 @@ import { createServerFn } from "@tanstack/react-start";
 import { z } from "zod";
 import { requireSupabaseAuth } from "@/integrations/supabase/auth-middleware";
 import { AiUnavailable, GEMINI_SECRET, geminiConfig, geminiJson, testGemini, type AiTitleGuess } from "./gemini.server";
-import { findImportTitle, findSpokenTitle, findTitle, lookupTmdb, type TmdbSearchItem } from "./tmdb.server";
+import { findImportTitleWithChoices, findSpokenTitle, findTitle, lookupTmdb, type TmdbSearchItem } from "./tmdb.server";
 
 const AI_MESSAGE: Record<string, string> = {
   not_configured: "Pesquisa inteligente não configurada. Adicione a chave do Gemini em Configurações.",
@@ -204,7 +204,7 @@ export async function runImportAnalysis(opts: { supabase: Parameters<typeof gemi
       cacheTtlHours: 24 * 14,
       cacheSeed: `import-v5:${opts.text ? "t" : ""}${opts.image ? `i:${opts.image.mimeType}` : ""}:${textHash}:${imageHash}`,
     });
-    const match = (guess: AiTitleGuess) => findImportTitle(guess as ImportGuess);
+    const match = (guess: AiTitleGuess) => findImportTitleWithChoices(guess as ImportGuess);
     const guesses = groundedImportGuesses(Array.isArray(res.items) ? res.items : [], opts.text, !!opts.image);
     let items = await validate(guesses, opts.spaceId, opts.supabase, match);
     const expected = mentionedListSize(opts.text);

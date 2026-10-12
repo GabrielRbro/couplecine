@@ -11,7 +11,8 @@ import { BackButton } from "@/components/app/ui";
 import { Poster } from "@/components/app/MediaCard";
 import { Button } from "@/components/ui/button";
 import { searchCatalog } from "@/lib/catalog.functions";
-import { analyzeSession, autoAnalyzeSession, confirmCandidate, correctCandidate, createImportSession, fetchSessionCaptions, resolveSession } from "@/lib/import.functions";
+import { analyzeSession, autoAnalyzeSession, confirmCandidate, correctCandidate, createImportSession, fetchSessionCaptions, resolveCandidateChoice, resolveSession } from "@/lib/import.functions";
+import { parseChoiceNote } from "@/lib/import-choices";
 import { carouselIndexes, parseSocial } from "@/lib/social-url";
 import { shareFallbackText } from "@/lib/share-fallback";
 import { tmdbImage } from "@/lib/format";
@@ -61,6 +62,23 @@ function readImage(file: File | undefined, done: (img: Img) => void) {
   const reader = new FileReader();
   reader.onload = () => done({ name: file.name, mimeType: file.type as Img["mimeType"], base64: String(reader.result).split(",")[1] ?? "" });
   reader.readAsDataURL(file);
+}
+
+async function readImages(files: FileList | null, done: (images: Img[]) => void) {
+  if (!files?.length) return;
+  const selected = Array.from(files);
+  if (selected.length > 10) { toast.error("Selecione até 10 imagens por vez."); return; }
+  if (selected.some((file) => !["image/png", "image/jpeg", "image/webp"].includes(file.type) || file.size > MAX_IMAGE)) {
+    toast.error("Use imagens PNG, JPEG ou WebP de até 4 MB cada."); return;
+  }
+  const images = await Promise.all(selected.map((file) => new Promise<Img>((resolve, reject) => {
+    const reader = new FileReader();
+    reader.onerror = () => reject(new Error("Não foi possível ler uma imagem."));
+    reader.onload = () => resolve({ name: file.name, mimeType: file.type as Img["mimeType"], base64: String(reader.result).split(",")[1] ?? "" });
+    reader.readAsDataURL(file);
+  }))).catch(() => null);
+  if (!images) { toast.error("Não foi possível ler as imagens."); return; }
+  done(images);
 }
 
 function ImportPage() {
@@ -214,7 +232,8 @@ function SessionView({ id }: { id: string }) {
   const autoStarted = useRef(false);
   const [autoError, setAutoError] = useState<string | null>(null);
   const [manualHelp, setManualHelp] = useState(false);
-  const [image, setImage] = useState<Img | null>(() => pendingImages.get(id) ?? null);
+  const [images, setImages] = useState<Img[]>(() => { const pending = pendingImages.get(id); return pending ? [pending] : []; });
+  const [imageProgress, setImageProgress] = useState(0);
   const [busy, setBusy] = useState<string | null>(null);
   const [notice, setNotice] = useState<string | null>(null);
   const [reviewing, setReviewing] = useState(false);
@@ -293,7 +312,7 @@ function SessionView({ id }: { id: string }) {
         } catch (e) { setAutoError(e instanceof Error ? e.message : "Não foi possível tentar novamente."); }
         finally { setBusy(null); void refresh(); }
       }}>{busy === "retry" ? <LoaderCircle className="animate-spin" /> : <Search />}Tentar novamente</Button>
-      <Button variant="secondary" className="mt-5 min-h-11" onClick={() => setManualHelp(true)}>Enviar captura ou texto</Button>
+      <Button variant="secondary" className="mt-5 min-h-11" onClick={() => setManualHelp(true)}>{sources.some((p) => p.caption_status === "photo_unavailable") ? "Selecionar fotos do carrossel" : "Enviar captura ou texto"}</Button>
       <Button asChild variant="ghost" className="mt-5 min-h-11"><Link to="/import" search={{}}>Voltar</Link></Button>
     </main>;
 
@@ -324,7 +343,7 @@ function SessionView({ id }: { id: string }) {
             {idx ? <p className="mt-1 text-xs text-primary">Imagem {idx} do carrossel. A imagem não é lida: envie a captura dessa imagem.</p> : null}
             {!hasCands && <button type="button" aria-pressed={skipped.has(p.id)} disabled={!!busy} onClick={() => run("skip" + p.id, async () => { const { error } = await supabase.rpc("import_skip_source", { _session: id, _source: p.id, _skip: !skipped.has(p.id) }); if (error) throw new Error("Não foi possível salvar."); })} className={`mt-2 min-h-11 text-xs underline-offset-2 hover:underline ${skipped.has(p.id) ? "text-primary" : "text-muted-foreground"}`}>{skipped.has(p.id) ? "Fonte ignorada · desfazer" : "Ignorar esta fonte (sem obra identificável)"}</button>}
             {p.caption ? <><p className="mt-2 text-[11px] text-muted-foreground">Texto e legenda automática do post (a transcrição pode errar nomes)</p><p className="mt-1 max-h-40 overflow-y-auto whitespace-pre-wrap rounded-xl bg-background/60 p-2 text-sm">{p.caption}</p></>
-              : p.caption_status ? <p role="status" className="mt-2 text-xs text-muted-foreground">{p.caption_status === "blocked" ? "A rede bloqueou a leitura pública. Envie uma captura ou cole a legenda." : "Legenda indisponível. Envie uma captura ou cole a legenda."}</p> : null}
+              : p.caption_status ? <p role="status" className="mt-2 text-xs text-muted-foreground">{p.caption_status === "photo_unavailable" ? "As fotos deste carrossel não vieram pelo link. Selecione até 10 páginas com filmes de uma vez." : p.caption_status === "blocked" ? "A rede bloqueou a leitura pública. Envie uma captura ou cole a legenda." : "Legenda indisponível. Envie uma captura ou cole a legenda."}</p> : null}
             {p.caption && <Button variant="secondary" className="mt-2 min-h-11 w-full" disabled={!!busy} onClick={() => run(p.id, () => analyzeFn({ data: { sessionId: id, sourcePostId: p.id } }))}>{busy === p.id ? <LoaderCircle className="animate-spin" /> : <Sparkles />}Analisar legenda com IA</Button>}
           </div>
         );
@@ -340,12 +359,24 @@ function SessionView({ id }: { id: string }) {
         </div>
       )}
 
-      <input ref={fileRef} type="file" accept="image/png,image/jpeg,image/webp" hidden onChange={(e) => { readImage(e.target.files?.[0], setImage); e.target.value = ""; }} />
-      {sources.length > 0 && <p className="mt-3 text-xs text-muted-foreground">Captura com a lista na tela: o texto visível tem prioridade sobre erros da legenda automática.</p>}
+      <input ref={fileRef} type="file" accept="image/png,image/jpeg,image/webp" multiple hidden onChange={(e) => { void readImages(e.target.files, setImages); e.target.value = ""; }} />
+      {sources.length > 0 && <p className="mt-3 text-xs text-muted-foreground">Escolha a captura com os nomes na tela ou até 10 imagens de um carrossel. Cada página será analisada; o texto visível tem prioridade sobre erros da legenda automática.</p>}
       <div className="mt-3 flex items-center gap-2">
-        <Button variant="secondary" className="min-h-11" onClick={() => fileRef.current?.click()}><ImagePlus />{image ? "Trocar captura" : "Escolher captura"}</Button>
-        {image && <Button className="min-h-11 flex-1" disabled={!!busy} onClick={() => run("img", async () => { const sourcePostId = sources.length === 1 && sources[0]?.caption ? sources[0].id : undefined; const r = await analyzeFn({ data: { sessionId: id, ...(sourcePostId ? { sourcePostId } : {}), image: { mimeType: image.mimeType, base64: image.base64 } } }); if (r.ok) { pendingImages.delete(id); setImage(null); } return r; })}>{busy === "img" ? <LoaderCircle className="animate-spin" /> : <Sparkles />}Conferir com captura</Button>}
+        <Button variant="secondary" className="min-h-11" disabled={!!busy} onClick={() => fileRef.current?.click()}><ImagePlus />{images.length ? "Trocar imagens" : "Escolher imagens"}</Button>
+        {images.length > 0 && <Button className="min-h-11 flex-1" disabled={!!busy} onClick={() => run("img", async () => {
+          const sourcePostId = sources.length === 1 && sources[0]?.caption ? sources[0].id : undefined;
+          let found = 0;
+          for (const [index, image] of images.entries()) {
+            setImageProgress(index + 1);
+            const r = await analyzeFn({ data: { sessionId: id, ...(sourcePostId ? { sourcePostId } : {}), image: { mimeType: image.mimeType, base64: image.base64 } } });
+            if (!r.ok) return r;
+            found += r.found;
+          }
+          pendingImages.delete(id); setImages([]); setImageProgress(0);
+          return { ok: true, found };
+        })}>{busy === "img" ? <LoaderCircle className="animate-spin" /> : <Sparkles />}{busy === "img" ? `${imageProgress} de ${images.length}` : `Analisar ${images.length} ${images.length === 1 ? "imagem" : "imagens"}`}</Button>}
       </div>
+      {images.length > 0 && <p className="mt-1 text-[11px] text-muted-foreground">{images.map((image) => image.name).join(" · ")}</p>}
 
       {notice && <p role="status" className="mt-4 rounded-xl border border-border bg-card p-3 text-sm text-muted-foreground">{notice}</p>}
 
@@ -368,6 +399,7 @@ function ReviewStack({ cands, lib, spaceId, sources, onChanged, onBack, onDone }
   const reduce = useReducedMotion();
   const confirmFn = useServerFn(confirmCandidate);
   const correctFn = useServerFn(correctCandidate);
+  const chooseFn = useServerFn(resolveCandidateChoice);
   const find = useServerFn(searchCatalog);
   const [index, setIndex] = useState(() => Math.max(0, cands.findIndex((c) => c.status === "pending" || c.status === "error")));
   const [fixing, setFixing] = useState(false);
@@ -385,7 +417,7 @@ function ReviewStack({ cands, lib, spaceId, sources, onChanged, onBack, onDone }
   }
   const rpc = async (name: "import_undo" | "import_set_reaction" | "import_set_seen", args: Record<string, unknown>) => { const { error } = await supabase.rpc(name, args as never); if (error) throw new Error("Não foi possível salvar. Tente de novo."); };
 
-  const label = (c: Cand) => c.status === "saved" ? (c.effects?.indication === "renewed" ? "Você já tinha indicado · indicação renovada" : "Indicada por você") : c.status === "skipped" ? "Pulada" : c.status === "error" ? c.note ?? "Erro" : "Pendente";
+  const label = (c: Cand) => c.status === "saved" ? (c.effects?.indication === "renewed" ? "Você já tinha indicado · indicação renovada" : "Indicada por você") : c.status === "skipped" ? "Pulada" : c.status === "error" ? c.note ?? "Erro" : parseChoiceNote(c.note) ? "Escolha qual filme é o certo" : "Pendente";
   const summary = { saved: cands.filter((c) => c.status === "saved").length, skipped: cands.filter((c) => c.status === "skipped").length, open: cands.filter((c) => c.status === "pending" || c.status === "error").length };
 
   if (!row) return (
@@ -403,6 +435,7 @@ function ReviewStack({ cands, lib, spaceId, sources, onChanged, onBack, onDone }
   const source = sources.find((p) => p.id === row.source_post_id);
   const backdrop = tmdbImage(row.backdrop_path ?? row.poster_path, "w780");
   const busy = working === row.id;
+  const choices = row.status === "pending" ? parseChoiceNote(row.note) : null;
   return (
     <main className="relative mx-auto min-h-[100dvh] max-w-md overflow-hidden px-4 pb-32 pt-[max(env(safe-area-inset-top),16px)]">
       {backdrop && <img src={backdrop} alt="" aria-hidden className="pointer-events-none absolute inset-x-0 top-0 h-80 w-full object-cover opacity-40" />}
@@ -428,6 +461,22 @@ function ReviewStack({ cands, lib, spaceId, sources, onChanged, onBack, onDone }
           </motion.section>
         </AnimatePresence>
 
+        {choices && <section className="mt-5 rounded-2xl border border-primary/40 bg-card p-3" aria-label="Comparar filmes com nomes parecidos">
+          <h3 className="text-center text-sm font-semibold">Qual destes filmes aparece no post?</h3>
+          <p className="mt-1 text-center text-xs text-muted-foreground">{choices.mentionedTitle ? `A fala foi entendida como “${choices.mentionedTitle}”.` : "Há mais de uma obra com esse nome."} Compare as capas, os anos e os títulos originais.</p>
+          <div className="mt-3 grid grid-cols-2 gap-2">
+            {([{ mediaType: row.media_type, tmdbId: row.tmdb_id, title: row.title, originalTitle: row.original_title, year: row.year, posterPath: row.poster_path, overview: choices.selectedOverview }, ...choices.alternatives] as const).map((option) =>
+              <button key={`${option.mediaType}:${option.tmdbId}`} type="button" disabled={busy} onClick={() => act(row, () => chooseFn({ data: { candidateId: row.id, mediaType: option.mediaType, tmdbId: option.tmdbId } }))} className="pressable flex min-w-0 flex-col items-center rounded-xl border border-border bg-background p-2 text-center hover:border-primary focus-visible:outline-2 focus-visible:outline-primary">
+                <div className="w-full max-w-28"><Poster path={option.posterPath} title={option.title} /></div>
+                <strong className="mt-2 text-xs">{option.title}</strong>
+                <span className="text-[11px] text-muted-foreground">{option.year ?? "Ano desconhecido"}</span>
+                {option.originalTitle && option.originalTitle !== option.title && <span className="mt-1 text-[11px] text-muted-foreground">Original: {option.originalTitle}</span>}
+                {option.overview && <span className="mt-1 line-clamp-3 text-[11px] text-muted-foreground">{option.overview}</span>}
+                <span className="mt-auto pt-2 text-xs font-semibold text-primary">Escolher este</span>
+              </button>)}
+          </div>
+        </section>}
+
         <button type="button" aria-pressed={row.seen} disabled={busy} onClick={() => act(row, () => rpc("import_set_seen", { _candidate: row.id, _seen: !row.seen }))} className={`pressable mx-auto mt-5 flex min-h-11 items-center gap-2 rounded-full border px-4 text-xs ${row.seen ? "border-primary bg-primary/15 text-primary" : "border-border text-muted-foreground"}`}><Check className="h-4 w-4" />Já assisti antes</button>
 
         <div className="mt-4 grid grid-cols-4 gap-2">
@@ -435,7 +484,7 @@ function ReviewStack({ cands, lib, spaceId, sources, onChanged, onBack, onDone }
             ? <Button variant="secondary" aria-label="Desfazer" className="min-h-14" disabled={busy} onClick={() => act(row, () => rpc("import_undo", { _candidate: row.id }))}><Undo2 /></Button>
             : <Button variant="secondary" aria-label={row.status === "skipped" ? "Voltar a pendente" : "Pular"} className="min-h-14" disabled={busy} onClick={() => act(row, async () => { const { error } = await supabase.from("import_candidates").update({ status: row.status === "skipped" ? "pending" : "skipped" }).eq("id", row.id); if (error) throw error; }, row.status !== "skipped")}>{row.status === "skipped" ? <Undo2 /> : <X />}</Button>}
           {([["fire", "🔥"], ["like", "👍"], ["neutral", "😐"]] as const).map(([r, e]) => (
-            <Button key={r} variant="secondary" aria-label={row.status === "saved" ? `Mudar reação para ${e}` : `Indicar com ${e}`} aria-pressed={row.status === "saved" && row.reaction === r} disabled={busy} className={`min-h-14 text-2xl emoji ${row.status === "saved" && row.reaction === r ? "ring-2 ring-primary" : ""}`}
+            <Button key={r} variant="secondary" aria-label={row.status === "saved" ? `Mudar reação para ${e}` : `Indicar com ${e}`} aria-pressed={row.status === "saved" && row.reaction === r} disabled={busy || !!choices} className={`min-h-14 text-2xl emoji ${row.status === "saved" && row.reaction === r ? "ring-2 ring-primary" : ""}`}
               onClick={() => row.status === "saved" ? act(row, () => rpc("import_set_reaction", { _candidate: row.id, _reaction: r })) : act(row, () => confirmFn({ data: { candidateId: row.id, reaction: r } }), true)}>{busy ? <LoaderCircle className="animate-spin" /> : e}</Button>
           ))}
         </div>
