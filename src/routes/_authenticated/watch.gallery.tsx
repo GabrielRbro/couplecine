@@ -7,14 +7,37 @@ import { markShared } from "@/lib/shared-transition";
 import { useQuery, useQueryClient } from "@tanstack/react-query";
 import { useServerFn } from "@tanstack/react-start";
 import { getGalleryLogos } from "@/lib/catalog.functions";
-import { CalendarDays, Clock3, SlidersHorizontal, X } from "lucide-react";
+import {
+  Baby,
+  CalendarDays,
+  Clapperboard,
+  Clock3,
+  Compass,
+  Eye,
+  Ghost,
+  Heart,
+  Landmark,
+  Laugh,
+  Music,
+  Rocket,
+  Search,
+  ShieldAlert,
+  SlidersHorizontal,
+  Sparkles,
+  Swords,
+  Theater,
+  Users,
+  WandSparkles,
+  Zap,
+  type LucideIcon,
+} from "lucide-react";
 import { AnimatePresence, motion, useReducedMotion } from "motion/react";
 import { TouchSlider } from "@/components/app/TouchSlider";
 import { AnimatedSheet } from "@/components/app/AnimatedSheet";
 import { ScrollToTop } from "@/components/app/ScrollToTop";
 import { AppShell } from "@/components/app/AppShell";
 import { Button } from "@/components/ui/button";
-import { FilterPills, TogglePill } from "@/components/app/ui";
+import { FilterPills } from "@/components/app/ui";
 import { EmptyState } from "@/components/app/MediaCard";
 import { formatRuntime, REACTION_EMOJI, tmdbImage } from "@/lib/format";
 import {
@@ -41,8 +64,11 @@ export const Route = createFileRoute("/_authenticated/watch/gallery")({
   validateSearch: z.object({
     kind: z.enum(["all", "movie", "tv"]).catch("all").default("all"),
     duration: z.number().catch(0).default(0),
-    genre: z.string().catch("").default(""),
-    decade: z.number().int().min(1880).max(2100).catch(0).default(0),
+    genres: z.preprocess((value) => Array.isArray(value) ? value : typeof value === "string" && value ? [value] : [], z.array(z.string()).max(20)).catch([]).default([]),
+    decades: z.preprocess((value) => {
+      const values = Array.isArray(value) ? value : value == null || value === "" ? [] : [value];
+      return values.map(Number).filter((item) => Number.isInteger(item) && item >= 1880 && item <= 2100);
+    }, z.array(z.number().int()).max(30)).catch([]).default([]),
     both: z.boolean().catch(false).default(false),
   }),
   component: () => (
@@ -52,13 +78,38 @@ export const Route = createFileRoute("/_authenticated/watch/gallery")({
   ),
 });
 
+const GENRE_ICONS: Record<string, LucideIcon> = {
+  "Ação": Zap,
+  "Aventura": Compass,
+  "Animação": Sparkles,
+  "Comédia": Laugh,
+  "Crime": ShieldAlert,
+  "Documentário": Clapperboard,
+  "Drama": Theater,
+  "Família": Users,
+  "Fantasia": WandSparkles,
+  "Ficção científica": Rocket,
+  "Guerra": Swords,
+  "História": Landmark,
+  "Infantil": Baby,
+  "Mistério": Search,
+  "Música": Music,
+  "Romance": Heart,
+  "Terror": Ghost,
+  "Thriller": Eye,
+};
+
 function normalizedGenres(genres: string[]) {
   const out = new Set<string>();
   for (const genre of genres) {
     const key = genre.normalize("NFD").replace(/\p{Diacritic}/gu, "").toLocaleLowerCase("pt-BR");
-    if (key.includes("sci-fi") || key.includes("ficcao cientifica")) out.add("Ficção científica");
-    if (key.includes("fantasia")) out.add("Fantasia");
-    else if (!key.includes("sci-fi")) out.add(genre);
+    if (key.includes("sci-fi") || key.includes("ficcao cientifica") || key.includes("science fiction")) out.add("Ficção científica");
+    if (key.includes("fantasia") || key.includes("fantasy")) out.add("Fantasia");
+    if (key.includes("acao") || key.includes("action")) out.add("Ação");
+    if (key.includes("aventura") || key.includes("adventure")) out.add("Aventura");
+    if (key.includes("guerra") || key.includes("war")) out.add("Guerra");
+    const compound = /sci-fi|ficcao cientifica|science fiction|fantasia|fantasy|acao e aventura|action\s*(?:&|e)\s*adventure|guerra e politica|war\s*(?:&|e)\s*politics/.test(key);
+    if (!compound) out.add(genre);
   }
   return [...out];
 }
@@ -173,22 +224,30 @@ function GalleryPage() {
   useEffect(() => { if (logoQuery.data) { const resolved=logoQuery.data; Object.entries(resolved).forEach(([id, logo]) => qc.setQueryData(["gallery-logo", id], logo)); setLogos((old) => ({ ...old, ...resolved })); qc.setQueriesData<LibraryWork[]>({queryKey:["library",space?.spaceId]},(old)=>old?.map((w)=>Object.prototype.hasOwnProperty.call(resolved,w.id) ? {...w,work_metadata_cache:[{...w.work_metadata_cache[0],seasons:w.work_metadata_cache[0]?.seasons ?? null,logoPath:resolved[w.id] ?? null,logoChecked:true,expires_at:new Date(Date.now()+7*864e5).toISOString()}]} : w)); } }, [logoQuery.data]);
   const urlFilters = Route.useSearch();
   const [draft,setDraft] = useState<typeof urlFilters | null>(null);
-  const { kind, duration, genre, decade, both: bothLike } = draft ?? urlFilters;
+  const { kind, duration, genres: selectedGenres, decades: selectedDecades, both: bothLike } = draft ?? urlFilters;
   const nav = useNavigate({ from: "/watch/gallery" });
-  const set = (patch: Partial<{ kind: "all" | "movie" | "tv"; duration: number; genre: string; decade: number; both: boolean }>) => {
-    const current = { kind, duration, genre, decade, both: bothLike };
-    if (Object.entries(patch).every(([k, v]) => current[k as keyof typeof current] === v)) return;
+  const set = (patch: Partial<{ kind: "all" | "movie" | "tv"; duration: number; genres: string[]; decades: number[]; both: boolean }>) => {
+    const current = { kind, duration, genres: selectedGenres, decades: selectedDecades, both: bothLike };
     if (sheet) { setDraft({...current,...patch}); return; }
     void nav({to:".",search:(p)=>({...p,...patch}),replace:true,viewTransition:false});
   };
-  const setKind = (k: "all" | "movie" | "tv") => set({ kind: k, genre: genre && !pool.some((w) => (k === "all" || w.media_type === k) && normalizedGenres(w.genres).includes(genre)) ? "" : genre });
-  const setGenre = (g: string) => set({ genre: g });
+  const setKind = (k: "all" | "movie" | "tv") => {
+    const available = pool.filter((w) => k === "all" || w.media_type === k);
+    set({
+      kind: k,
+      genres: selectedGenres.filter((genre) => available.some((work) => normalizedGenres(work.genres).includes(genre))),
+      decades: selectedDecades.filter((decade) => available.some((work) => work.release_year !== null && work.release_year >= decade && work.release_year < decade + 10)),
+    });
+  };
+  const toggleGenre = (genre: string) => set({ genres: selectedGenres.includes(genre) ? selectedGenres.filter((item) => item !== genre) : [...selectedGenres, genre] });
+  const toggleDecade = (decade: number) => set({ decades: selectedDecades.includes(decade) ? selectedDecades.filter((item) => item !== decade) : [...selectedDecades, decade] });
   const setBothLike = (f: (v: boolean) => boolean) => set({ both: f(bothLike) });
-  const [sheet, setSheet] = useState(false);
-  const closeFilters = () => closeOverlaysThen(() => {
-    setSheet(false);
+  const [sheet, setSheet] = useState<"filters" | "duration" | null>(null);
+  const [filterSection, setFilterSection] = useState<"genres" | "decades">("genres");
+  const closeSheet = () => closeOverlaysThen(() => {
+    setSheet(null);
     setDraft(null);
-    void nav({to:".",search:{kind,duration,genre,decade,both:bothLike},replace:true,viewTransition:false});
+    void nav({to:".",search:{kind,duration,genres:selectedGenres,decades:selectedDecades,both:bothLike},replace:true,viewTransition:false});
   });
   useEffect(() => {
     if (sheet || !draft) return;
@@ -205,13 +264,13 @@ function GalleryPage() {
     [pool, kind],
   );
   if (!space) return null;
-  const advanced = (genre ? 1 : 0) + (decade ? 1 : 0) + (bothLike ? 1 : 0) + (kind === "movie" && duration > 0 ? 1 : 0);
+  const advanced = selectedGenres.length + selectedDecades.length + (bothLike ? 1 : 0);
   const list = pool.filter(
     (w) =>
       (kind === "all" || w.media_type === kind) &&
       (kind !== "movie" || !duration || (w.runtime_minutes !== null && w.runtime_minutes <= duration)) &&
-      (!genre || normalizedGenres(w.genres).includes(genre)) &&
-      (!decade || (w.release_year !== null && w.release_year >= decade && w.release_year < decade + 10)) &&
+      (!selectedGenres.length || normalizedGenres(w.genres).some((genre) => selectedGenres.includes(genre))) &&
+      (!selectedDecades.length || (w.release_year !== null && selectedDecades.some((decade) => w.release_year! >= decade && w.release_year! < decade + 10))) &&
       (!bothLike ||
         w.interests.filter((i) => i.reaction === "fire" || i.reaction === "like").length >=
           (space.partner ? 2 : 1)),
@@ -223,29 +282,19 @@ function GalleryPage() {
       </span>
       <h1 className="mt-1 font-display text-2xl font-semibold">Galeria</h1>
       <p className="mt-0.5 text-sm text-muted-foreground">O que vamos assistir?</p>
-      <div className="mt-3">
-        <div className="flex min-h-11 items-center gap-2">
-          <div className="min-w-0 flex-1 overflow-x-auto no-scrollbar">
-            <FilterPills options={[["all", "Todos"], ["movie", "Filmes"], ["tv", "Séries"]] as const} value={kind} onChange={setKind} />
-          </div>
-          <Button variant={advanced ? "secondary" : "ghost"} size="icon" aria-label="Filtros avançados" onClick={() => setSheet(true)} className="relative h-11 w-11 shrink-0 rounded-full border border-border">
-            <SlidersHorizontal className="h-4 w-4" />
-            {advanced > 0 && <span className="absolute right-0 top-0 flex h-4 min-w-4 items-center justify-center rounded-full bg-primary text-[10px] text-primary-foreground">{advanced}</span>}
-          </Button>
-        </div>
+      <div className="no-scrollbar -mx-4 mt-3 flex min-h-11 items-center gap-2 overflow-x-auto px-4 py-1">
+        <FilterPills options={[["all", "Todos"], ["movie", "Filmes"], ["tv", "Séries"]] as const} value={kind} onChange={setKind} />
         {kind === "movie" && (
-          <Button variant={duration ? "secondary" : "ghost"} className="mt-2 min-h-11 w-full justify-start rounded-full border border-border px-4 text-xs" onClick={() => setSheet(true)}>
+          <Button variant={duration ? "secondary" : "ghost"} className="min-h-11 shrink-0 rounded-full border border-border px-3 text-xs" onClick={() => setSheet("duration")}>
             <Clock3 className="h-4 w-4" />
-            Duração
-            <span className="ml-auto text-muted-foreground">{duration ? formatRuntime(duration) : "Sem limite"}</span>
+            {duration ? formatRuntime(duration) : "Duração"}
           </Button>
         )}
+        <Button variant={advanced ? "secondary" : "ghost"} size="icon" aria-label="Filtros" onClick={() => setSheet("filters")} className="relative h-11 w-11 shrink-0 rounded-full border border-border">
+          <SlidersHorizontal className="h-4 w-4" />
+          {advanced > 0 && <span className="absolute right-0 top-0 flex h-4 min-w-4 items-center justify-center rounded-full bg-primary text-[10px] text-primary-foreground">{advanced}</span>}
+        </Button>
       </div>
-      <motion.div layout className="flex flex-wrap gap-2">
-        <AnimatePresence initial={false}>
-          {([{id:"genre",label:genre,active:!!genre,clear:()=>set({genre:""})}, {id:"decade",label:decade ? decadeLabel(decade) : "",active:!!decade,clear:()=>set({decade:0})}, {id:"both",label:"Os dois curtiram",active:bothLike,clear:()=>set({both:false})}]).filter((chip)=>chip.active).map((chip)=><motion.div key={chip.id} initial={{opacity:0,scale:.95}} animate={{opacity:1,scale:1}} exit={{opacity:0,scale:.95}}><Button variant="secondary" className="min-h-11 rounded-full px-3 text-xs" aria-label={`Remover filtro ${chip.label}`} onClick={chip.clear}>{chip.label}<X className="h-3 w-3" /></Button></motion.div>)}
-        </AnimatePresence>
-      </motion.div>
       <div className="mt-4 space-y-4">
         <AnimatePresence initial={false} mode="popLayout">
           {list.map((w) => (
@@ -276,13 +325,41 @@ function GalleryPage() {
           </Link>
         </div>
       )}
-      <AnimatedSheet open={sheet} onClose={closeFilters} labelledBy="gal-filters" panelClassName="max-h-[85dvh] overflow-y-auto pb-[max(env(safe-area-inset-bottom),20px)]">
-        <div className="flex items-center justify-between"><h2 id="gal-filters" className="text-base font-semibold">Filtros</h2><Button variant="ghost" className="min-h-11 px-2 text-xs text-primary" onClick={()=>set({genre:"",decade:0,duration:0,both:false})}>Limpar tudo</Button></div>
-        <section className="mt-4" aria-label="Gêneros"><h3 className="text-xs text-muted-foreground">Gênero</h3><div className="mt-2 flex max-h-40 flex-wrap gap-2 overflow-y-auto">{["", ...genres].map((g) => <Button key={g} variant={genre === g ? "secondary" : "outline"} className="min-h-11 text-xs" onClick={() => setGenre(g)}>{g || "Todos os gêneros"}</Button>)}</div></section>
-        <section className="mt-5" aria-label="Década"><h3 className="flex items-center gap-2 text-xs text-muted-foreground"><CalendarDays className="h-4 w-4" />Década</h3><div className="mt-2 flex flex-wrap gap-2"><Button variant={decade === 0 ? "secondary" : "outline"} className="min-h-11 text-xs" onClick={() => set({decade:0})}>Todas</Button>{decades.map((d) => <Button key={d} variant={decade === d ? "secondary" : "outline"} className="min-h-11 text-xs" onClick={() => set({decade:d})}>{decadeLabel(d)}</Button>)}</div></section>
-        {kind === "movie" && <section className="mt-5" aria-label="Duração"><h3 className="flex items-center gap-2 text-xs text-muted-foreground"><Clock3 className="h-4 w-4" />Duração máxima</h3><p className="mt-3 text-center font-display text-3xl font-semibold text-primary">{duration ? formatRuntime(duration) : "Sem limite"}</p><TouchSlider label="Duração máxima em minutos" min={40} max={240} step={10} value={duration || 240} valueText={formatRuntime(duration) ?? "Sem limite"} onChange={(value)=>set({duration:value})} /><Button variant="ghost" className="min-h-11 w-full text-xs" onClick={()=>set({duration:0})}>Sem limite</Button></section>}
-        <div className="mt-5"><TogglePill on={bothLike} onClick={() => setBothLike((v) => !v)}>Os dois curtiram</TogglePill></div>
-        <div className="mt-5 grid grid-cols-[auto_1fr] gap-3"><Button variant="outline" className="min-h-12" onClick={()=>set({genre:"",decade:0,duration:0,both:false})}>Limpar</Button><Button className="min-h-12" onClick={closeFilters}>Ver {list.length} {list.length === 1 ? "obra" : "obras"}</Button></div>
+      <AnimatedSheet open={sheet === "filters"} onClose={closeSheet} labelledBy="gal-filters" panelClassName="flex h-[min(72dvh,620px)] flex-col overflow-hidden pb-[max(env(safe-area-inset-bottom),20px)]">
+        <h2 id="gal-filters" className="text-base font-semibold">Filtros</h2>
+        <div className="mt-4 grid grid-cols-2 gap-2" role="tablist" aria-label="Categoria do filtro">
+          <Button role="tab" aria-selected={filterSection === "genres"} variant={filterSection === "genres" ? "secondary" : "ghost"} className="min-h-11 justify-start rounded-xl" onClick={() => setFilterSection("genres")}><Sparkles className="h-4 w-4" />Gêneros{selectedGenres.length > 0 && <span className="ml-auto text-xs text-primary">{selectedGenres.length}</span>}</Button>
+          <Button role="tab" aria-selected={filterSection === "decades"} variant={filterSection === "decades" ? "secondary" : "ghost"} className="min-h-11 justify-start rounded-xl" onClick={() => setFilterSection("decades")}><CalendarDays className="h-4 w-4" />Décadas{selectedDecades.length > 0 && <span className="ml-auto text-xs text-primary">{selectedDecades.length}</span>}</Button>
+        </div>
+        <div className="mt-3 min-h-0 flex-1 overflow-y-auto overscroll-contain pr-1">
+          {filterSection === "genres" ? (
+            <div className="grid grid-cols-2 gap-2" role="group" aria-label="Gêneros">
+              {genres.map((genre) => {
+                const Icon = GENRE_ICONS[genre] ?? Clapperboard;
+                const active = selectedGenres.includes(genre);
+                return <button key={genre} type="button" aria-pressed={active} onClick={() => toggleGenre(genre)} className={`pressable flex min-h-12 items-center gap-2 rounded-xl border px-3 text-left text-xs ${active ? "border-primary bg-primary/15 text-primary" : "border-border bg-background text-muted-foreground"}`}><Icon className="h-4 w-4 shrink-0" /><span className="min-w-0 leading-tight">{genre}</span></button>;
+              })}
+            </div>
+          ) : (
+            <div className="grid grid-cols-3 gap-2" role="group" aria-label="Décadas">
+              {decades.map((decade) => {
+                const active = selectedDecades.includes(decade);
+                return <button key={decade} type="button" aria-pressed={active} onClick={() => toggleDecade(decade)} className={`pressable min-h-12 rounded-xl border px-3 text-xs ${active ? "border-primary bg-primary/15 font-semibold text-primary" : "border-border bg-background text-muted-foreground"}`}>{decadeLabel(decade)}</button>;
+              })}
+            </div>
+          )}
+        </div>
+        <button type="button" role="checkbox" aria-checked={bothLike} onClick={() => setBothLike((value) => !value)} className="pressable mt-3 flex min-h-14 w-full items-center justify-between rounded-xl border border-border bg-background px-4 text-left text-sm">
+          <span><strong className="block font-medium">Os dois curtiram</strong><span className="mt-0.5 block text-[11px] text-muted-foreground">Mostrar só escolhas em comum</span></span>
+          <span aria-hidden className={`flex h-5 w-5 items-center justify-center rounded border border-primary/60 ${bothLike ? "bg-primary text-primary-foreground" : "bg-primary/10 text-primary"}`}>{bothLike && <span className="text-xs">✓</span>}</span>
+        </button>
+        <div className="mt-3 grid grid-cols-[auto_1fr] gap-3"><Button variant="outline" className="min-h-12" onClick={()=>set({genres:[],decades:[],both:false})}>Limpar</Button><Button className="min-h-12" onClick={closeSheet}>Ver {list.length} {list.length === 1 ? "obra" : "obras"}</Button></div>
+      </AnimatedSheet>
+      <AnimatedSheet open={sheet === "duration"} onClose={closeSheet} labelledBy="gal-duration" panelClassName="pb-[max(env(safe-area-inset-bottom),20px)]">
+        <h2 id="gal-duration" className="flex items-center gap-2 text-base font-semibold"><Clock3 className="h-4 w-4 text-primary" />Duração máxima</h2>
+        <p className="mt-5 text-center font-display text-3xl font-semibold text-primary">{duration ? formatRuntime(duration) : "Sem limite"}</p>
+        <TouchSlider label="Duração máxima em minutos" min={40} max={240} step={10} value={duration || 240} valueText={formatRuntime(duration) ?? "Sem limite"} onChange={(value)=>set({duration:value})} />
+        <div className="mt-3 grid grid-cols-[auto_1fr] gap-3"><Button variant="outline" className="min-h-12" onClick={()=>set({duration:0})}>Sem limite</Button><Button className="min-h-12" onClick={closeSheet}>Aplicar</Button></div>
       </AnimatedSheet>
     </div>
   );

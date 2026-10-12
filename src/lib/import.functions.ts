@@ -2,7 +2,7 @@ import { createServerFn } from "@tanstack/react-start";
 import { z } from "zod";
 import { requireSupabaseAuth } from "@/integrations/supabase/auth-middleware";
 import { findImdb, findTitle, lookupTmdb, type TmdbSearchItem } from "./tmdb.server";
-import { fetchCaption, fetchTikTokPhotoImages, needsCaptionFetch, VIDEO_PROBE_STATUS } from "./social.server";
+import { fetchCaption, fetchTikTokPhotoImages, fetchTikTokVideo, needsCaptionFetch, VIDEO_PROBE_STATUS } from "./social.server";
 import { explicitTitle } from "./explicit-title";
 import { extractSocial, sourceUrl } from "./social-url";
 import { runImportAnalysis } from "./ai.functions";
@@ -189,9 +189,16 @@ export const autoAnalyzeSession = createServerFn({ method: "POST" })
           }
           if (photoRef?.platform === "tiktok" && photoRef.kind === "photo") photoUnavailable = true;
         }
-        if (!caption) continue;
+        const videoRef = photoRef?.platform === "tiktok" && photoRef.kind === "video"
+          ? photoRef
+          : ref?.platform === "tiktok-short" ? ref : null;
+        const video = videoRef
+          ? await fetchTikTokVideo(videoRef).catch(() => null)
+          : null;
+        if (!caption && !video) continue;
         sawCaption = true;
-        const items = await recognize(caption);
+        const visual = video ? await runImportAnalysis({ supabase: context.supabase, userId: context.userId, spaceId: s.space_id, ...(caption ? { text: caption } : {}), video }) : null;
+        const items = visual?.ok && visual.items.length ? visual.items : caption ? await recognize(caption) : [];
         if (items.length) await addCandidates(s.id, s.space_id, s.created_by, items, id);
         found += items.length;
       }

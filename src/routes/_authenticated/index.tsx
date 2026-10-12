@@ -123,7 +123,7 @@ function ContinueCard({
 function Home() {
   const { data: space } = useSpace();
   const { data: works = [], isLoading } = useLibrary(space?.spaceId);
-  const imports = useQuery({ queryKey: ["open-import-sessions", space?.spaceId], enabled: !!space?.spaceId, staleTime: 20_000, queryFn: async () => {
+  const imports = useQuery({ queryKey: ["import-sessions", space?.spaceId, "count"], enabled: !!space?.spaceId, staleTime: 0, refetchOnMount: "always", queryFn: async () => {
     const { count, error } = await supabase.from("import_sessions").select("id", { count: "exact", head: true }).eq("space_id", space!.spaceId!).neq("status", "completed");
     if (error) throw error;
     return count ?? 0;

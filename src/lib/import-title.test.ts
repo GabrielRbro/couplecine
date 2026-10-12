@@ -48,7 +48,7 @@ describe("title recognition from a spoken list", () => {
   });
 
   it("prefers Coherence to an unrelated film called Coerência", async () => {
-    const wrong = { id: 509040, title: "Coerência", original_title: "Coerência", release_date: "2016-01-01" };
+    const wrong = { id: 509040, title: "Coerência", original_title: "Coerência", release_date: "2016-01-01", poster_path: "/coerencia.jpg", vote_count: 12, popularity: 2 };
     searchResults({ coerência: [wrong], "Coerência": [wrong], Coherence: [coherence] });
     const result = await findImportTitle({ title: "Coerência", originalTitle: "Coherence", mentionedTitle: "coerência", year: 2013, mediaType: "movie" });
     expect(result?.tmdbId).toBe(220289);
@@ -57,7 +57,7 @@ describe("title recognition from a spoken list", () => {
   });
 
   it("prefers O Culto / The Endless to an unrelated film called Oculto", async () => {
-    const wrong = { id: 567802, title: "Oculto", original_title: "Oculto", release_date: "2018-01-01" };
+    const wrong = { id: 567802, title: "Oculto", original_title: "Oculto", release_date: "2018-01-01", poster_path: "/oculto.jpg", vote_count: 12, popularity: 2 };
     searchResults({ oculto: [wrong, endless], Oculto: [wrong, endless], "The Endless": [endless] });
     const result = await findImportTitle({ title: "Oculto", originalTitle: "The Endless", mentionedTitle: "oculto", year: 2017, mediaType: "movie" });
     expect(result?.tmdbId).toBe(430231);
@@ -71,6 +71,25 @@ describe("title recognition from a spoken list", () => {
     searchResults({ "Faces da Verdade": [named], "The Keeping Hours": [wrongOriginal] });
     const result = await findImportTitle({ title: "Faces da Verdade", originalTitle: "The Keeping Hours", mentionedTitle: "Faces da Verdade", mediaType: "movie" });
     expect(result?.tmdbId).toBe(789012);
+  });
+
+  it("does not offer an original-title namesake when the localized title already proves the match", async () => {
+    const correct = { id: 763165, title: "O Próprio Enterro", original_title: "The Burial", release_date: "2023-10-06", poster_path: "/correct.jpg", vote_count: 650, popularity: 18 };
+    const wrong = { id: 999001, title: "The Burial", original_title: "The Burial", release_date: "2023-03-04", poster_path: "/wrong.jpg", vote_count: 25, popularity: 4 };
+    searchResults({ "O Próprio Enterro": [correct], "The Burial": [correct, wrong] });
+    const result = await findImportTitleWithChoices({ title: "O Próprio Enterro", originalTitle: "The Burial", mentionedTitle: "O Próprio Enterro", year: 2023, mediaType: "movie" });
+    expect(result?.tmdbId).toBe(763165);
+    expect(result?.reviewAlternatives).toBeUndefined();
+  });
+
+  it("omits unsupported namesakes without a poster from human review", async () => {
+    const first = { id: 101, title: "The Incident", original_title: "The Incident", release_date: "2015-06-01", poster_path: "/first.jpg", vote_count: 80, popularity: 4 };
+    const valid = { id: 102, title: "O Incidente", original_title: "El Incidente", release_date: "2014-05-17", poster_path: "/second.jpg", vote_count: 240, popularity: 8 };
+    const short = { id: 103, title: "The Incident", original_title: "The Incident", release_date: "2013-01-01", poster_path: null, vote_count: 0, popularity: 0 };
+    searchResults({ "The Incident": [first, short], "O Incidente": [valid], "El Incidente": [valid] });
+    const result = await findImportTitleWithChoices({ title: "The Incident", mentionedTitle: "The Incident", mediaType: "movie" });
+    expect(result?.tmdbId).toBe(101);
+    expect(result?.reviewAlternatives?.map((item) => item.tmdbId) ?? []).not.toContain(103);
   });
 });
 
