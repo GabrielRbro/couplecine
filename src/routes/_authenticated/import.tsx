@@ -31,6 +31,7 @@ const pendingImages = new Map<string, Img>();
 type Reaction = "fire" | "like" | "neutral";
 type Cand = { id: string; source_post_id: string | null; media_type: "movie" | "tv"; tmdb_id: number; title: string; original_title: string | null; year: number | null; poster_path: string | null; backdrop_path: string | null; status: "pending" | "skipped" | "saved" | "error"; reaction: Reaction | null; seen: boolean; corrected: boolean; work_id: string | null; effects: { indication?: "created" | "renewed" } | null; note: string | null };
 type Source = { id: string; platform: string; source_url: string; caption: string | null; caption_status: string | null; caption_fetched_at: string | null };
+type OpenSession = { id: string; status: string; origin: string; shared_title: string | null; shared_text: string | null; shared_url: string | null; updated_at: string; import_candidates: { status: string }[] | null };
 const STATUS: Record<string, string> = { analyzing: "Analisando", review: "Em revisão", needs_help: "Precisa de ajuda", interrupted: "Interrompida", completed: "Concluída" };
 
 function hasDifferentOriginalTitle(title: string, originalTitle: string | null) {
@@ -75,7 +76,7 @@ function ImportLoading({ message }: { message: string }) {
       </div>
       <p className="text-[11px] font-semibold uppercase tracking-[0.24em] text-primary">AppCinema</p>
       <h1 className="mt-3 text-2xl font-semibold">Organizando as obras</h1>
-      <p role="status" className="mt-3 max-w-64 text-sm leading-relaxed text-muted-foreground">{message}</p>
+      <p role="status" className="mt-3 flex h-12 max-w-64 items-center justify-center text-sm leading-relaxed text-muted-foreground line-clamp-2">{message}</p>
       <LoaderCircle aria-hidden className="mt-6 h-5 w-5 animate-spin text-primary" />
     </main>
   );
@@ -110,6 +111,42 @@ async function readImages(files: FileList | null, done: (images: Img[]) => void)
 function ImportPage() {
   const search = Route.useSearch();
   return search.session ? <SessionView key={search.session} id={search.session} /> : <EntryView />;
+}
+
+function sessionLabel(session: OpenSession) {
+  return session.shared_title || (session.shared_url?.includes("instagram") ? "Post do Instagram" : session.shared_url?.includes("tiktok") ? "Post do TikTok" : session.origin === "capture" ? "Captura" : "Compartilhamento");
+}
+
+function ImportHub({ sessions, loading, notice }: { sessions: OpenSession[]; loading: boolean; notice?: string | null }) {
+  const qc = useQueryClient();
+  const [ending, setEnding] = useState<string | "all" | null>(null);
+  const end = async (ids: string[]) => {
+    setEnding(ids.length > 1 ? "all" : ids[0] ?? null);
+    try {
+      await Promise.all(ids.map(async (id) => {
+        const { data, error } = await supabase.rpc("import_finish_remaining", { _session: id });
+        if (error || data !== "completed") throw new Error("Não foi possível encerrar uma sessão.");
+      }));
+      toast.success(ids.length > 1 ? "Sessões encerradas" : "Sessão encerrada");
+      await qc.invalidateQueries({ queryKey: ["import-sessions"] });
+    } catch (error) {
+      toast.error(error instanceof Error ? error.message : "Não foi possível encerrar a sessão.");
+    } finally {
+      setEnding(null);
+    }
+  };
+  return <main className="mx-auto max-w-md px-4 pb-[calc(var(--nav-space)+24px)] pt-5">
+    <header><p className="text-[11px] font-semibold uppercase tracking-[0.2em] text-primary">Importações</p><h1 className="mt-2 text-2xl font-semibold">Sessões abertas</h1><p className="mt-2 text-sm text-muted-foreground">Continue uma análise ou encerre o que não quiser revisar. Há espaço para até três sessões.</p></header>
+    {notice && <p role="status" className="mt-5 rounded-xl border border-border bg-card px-4 py-3 text-sm text-muted-foreground">{notice}</p>}
+    {loading ? <div className="mt-6 space-y-3"><div className="skeleton h-36 w-full" /><div className="skeleton h-36 w-full" /></div> : sessions.length ? <>
+      <div className="mt-6 flex items-center justify-between"><p className="text-xs text-muted-foreground">{sessions.length}/3 em aberto</p>{sessions.length > 1 && <Button variant="ghost" className="min-h-11 text-xs text-muted-foreground" disabled={!!ending} onClick={() => void end(sessions.map((session) => session.id))}>{ending === "all" && <LoaderCircle className="animate-spin" />}Encerrar todas</Button>}</div>
+      <div className="mt-2 space-y-3">{sessions.map((session, index) => {
+        const candidates = session.import_candidates ?? [];
+        const pending = candidates.filter((candidate) => candidate.status === "pending" || candidate.status === "error").length;
+        return <section key={session.id} className="rounded-2xl border border-border bg-card p-4"><div className="flex items-start gap-3"><span className="flex h-8 w-8 shrink-0 items-center justify-center rounded-full bg-primary/15 text-xs font-semibold text-primary">{index + 1}</span><div className="min-w-0 flex-1"><h2 className="truncate text-sm font-semibold">{sessionLabel(session)}</h2><p className="mt-1 text-xs text-muted-foreground">{STATUS[session.status] ?? "Em andamento"} · {pending} {pending === 1 ? "obra pendente" : "obras pendentes"}</p><p className="mt-1 text-[11px] text-muted-foreground">Atualizada em {new Date(session.updated_at).toLocaleDateString("pt-BR")}</p></div></div><div className="mt-4 grid grid-cols-2 gap-2"><Button asChild className="min-h-11"><Link to="/import" search={{ session: session.id }} viewTransition={false}>Continuar</Link></Button><Button variant="outline" className="min-h-11" disabled={!!ending} onClick={() => void end([session.id])}>{ending === session.id && <LoaderCircle className="animate-spin" />}Encerrar</Button></div></section>;
+      })}</div>
+    </> : <div className="mt-6 rounded-2xl border border-dashed border-border p-6 text-center"><p className="font-medium">Nenhuma sessão aberta</p><p className="mt-2 text-sm text-muted-foreground">Compartilhe um post do TikTok ou Instagram para começar uma nova análise.</p></div>}
+  </main>;
 }
 
 function useStartSession() {
@@ -181,7 +218,7 @@ function EntryView() {
     },
     getNextPageParam: (last, all) => (last.length === PAGE ? all.length * PAGE : undefined),
   });
-  const openSessions = sessions.data?.pages.flat() ?? [];
+  const openSessions = (sessions.data?.pages.flat() ?? []) as OpenSession[];
 
   const backlog = useInfiniteQuery({
     queryKey: ["source-backlog", space?.spaceId],
@@ -203,15 +240,7 @@ function EntryView() {
 
   if (shared && !shareFailed) return <>{replacement ? replacementSheet : <ImportLoading message="Recebendo o post para começar a análise…" />}</>;
 
-  // Keep /import exclusively as a Web Share Target. The old dashboard for
-  // manual imports, pending links and saved sessions is intentionally hidden.
-  if (!shared || shareFailed) return (
-    <main className="mx-auto flex min-h-[60dvh] max-w-md flex-col items-center justify-center px-6 text-center">
-      <h1 className="text-xl font-semibold">Compartilhe um post para analisar</h1>
-      <p className="mt-3 text-sm text-muted-foreground">No TikTok ou Instagram, abra Compartilhar e escolha o AppCinema. Os títulos encontrados aparecerão para revisão.</p>
-      {shareFailed && <p role="status" className="mt-5 text-sm text-muted-foreground">Não foi possível receber este compartilhamento. Tente enviá-lo novamente pelo aplicativo.</p>}
-    </main>
-  );
+  if (!shared || shareFailed) return <ImportHub sessions={openSessions} loading={sessions.isLoading} notice={shareFailed ? "Não foi possível receber este compartilhamento. Tente enviá-lo novamente pelo aplicativo." : null} />;
 
   return (
     <main className="mx-auto max-w-md px-4 pb-32 pt-[max(env(safe-area-inset-top),16px)]">
