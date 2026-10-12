@@ -161,10 +161,10 @@ function Home() {
   );
 
   const quick =
-    "pressable flex min-h-24 flex-col items-start justify-between gap-1 rounded-xl border border-border bg-card p-3";
+    "pressable flex min-h-20 flex-col items-start justify-between gap-1 rounded-xl border border-border bg-card p-2.5";
 
   return (
-    <div className="px-4 pt-6">
+    <div className="px-4 pt-4">
       <header className="flex items-center justify-between">
         <div>
           <p className="text-sm text-muted-foreground">{greeting()},</p>
@@ -188,7 +188,7 @@ function Home() {
         </div>
       </header>
 
-      <section className="mt-5 grid grid-cols-3 gap-2" aria-label="Atalhos">
+      <section className="mt-4 grid grid-cols-3 gap-2" aria-label="Atalhos">
         {unrated[0] ? (
           <button onClick={() => setPile(true)} className={`${quick} text-left`}>
             <Star className="h-5 w-5 text-primary" />

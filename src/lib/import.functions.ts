@@ -31,7 +31,7 @@ async function admin() {
   return (await import("@/integrations/supabase/client.server")).supabaseAdmin;
 }
 
-async function ownSession(supabase: { from: (t: "import_sessions") => any }, sessionId: string) {
+async function ownSession(supabase: Awaited<ReturnType<typeof admin>>, sessionId: string) {
   const { data, error } = await supabase.from("import_sessions").select("*").eq("id", sessionId).maybeSingle();
   if (error || !data) throw new Error("Sessão não encontrada.");
   return data as { id: string; space_id: string; created_by: string; status: string; origin: string; shared_title: string | null; shared_text: string | null; shared_url: string | null; source_post_ids: string[]; ai_done: boolean };
@@ -66,36 +66,16 @@ async function refreshStatus(sessionId: string, fallback: "needs_help" | "interr
  * clientToken makes a reload of the same in-flight share idempotent; a later share uses a new token = new session. */
 export const createImportSession = createServerFn({ method: "POST" })
   .middleware([requireSupabaseAuth])
-  .inputValidator((d) => z.object({ spaceId: z.string().uuid(), origin: z.enum(["share", "manual", "capture"]), title: z.string().max(300).optional(), text: z.string().max(4000).optional(), url: z.string().max(2000).optional(), sourcePostId: z.string().uuid().optional(), clientToken: z.string().regex(/^[0-9a-f-]{36}$/).optional() }).parse(d))
+  .inputValidator((d) => z.object({ spaceId: z.string().uuid(), origin: z.enum(["share", "manual", "capture"]), title: z.string().max(300).optional(), text: z.string().max(4000).optional(), url: z.string().max(2000).optional(), sourcePostId: z.string().uuid().optional(), clientToken: z.string().regex(/^[0-9a-f-]{36}$/).optional(), replaceSessionId: z.string().uuid().optional() }).parse(d))
   .handler(async ({ data, context }) => {
     const { supabase, userId } = context;
     const { data: member, error: me } = await supabase.from("space_members").select("id").eq("space_id", data.spaceId).eq("user_id", userId).maybeSingle();
     if (me || !member) throw new Error("Sem acesso a este espaço.");
-    const db = await admin();
-    if (data.clientToken) {
-      const { data: prior } = await db.from("import_sessions").select("id").eq("created_by", userId).eq("client_token", data.clientToken).maybeSingle();
-      if (prior) return { sessionId: prior.id as string, reused: true };
-    }
-    const ids: string[] = [];
-    if (data.sourcePostId) {
-      // The source must belong to this space (checked as the caller, RLS + explicit space filter).
-      const { data: src } = await supabase.from("source_posts").select("id").eq("id", data.sourcePostId).eq("space_id", data.spaceId).maybeSingle();
-      if (!src) throw new Error("Link salvo não encontrado neste espaço.");
-      ids.push(src.id);
-    }
-    for (const r of extractSocial([data.url, data.text, data.title].filter(Boolean).join("\n"), 12)) {
-      // One source per space+post (shortcode reuse for legacy /p/ rows); first author kept.
-      const { data: id, error } = await supabase.rpc("import_source_for", { _space: data.spaceId, _platform: r.platform === "instagram" ? "instagram" : "tiktok", _url: sourceUrl(r), _shortcode: r.platform === "instagram" ? r.id : null, _reel: r.platform === "instagram" && r.kind === "reel" } as never);
-      if (error || !id) throw new Error("Não foi possível guardar o link.");
-      if (!ids.includes(id as string)) ids.push(id as string);
-    }
-    const { data: s, error } = await db.from("import_sessions").insert({ space_id: data.spaceId, created_by: userId, origin: data.origin, shared_title: data.title ?? null, shared_text: data.text ?? null, shared_url: data.url ?? null, source_post_ids: ids, client_token: data.clientToken ?? null }).select("id").single();
-    if (error?.code === "23505" && data.clientToken) {
-      const { data: prior } = await db.from("import_sessions").select("id").eq("created_by", userId).eq("client_token", data.clientToken).maybeSingle();
-      if (prior) return { sessionId: prior.id as string, reused: true };
-    }
-    if (error || !s) throw new Error("Não foi possível criar a sessão.");
-    return { sessionId: s.id as string, reused: false };
+    const refs = extractSocial([data.url, data.text, data.title].filter(Boolean).join("\n"), 12).map((r) => ({ platform: r.platform === "instagram" ? "instagram" : "tiktok", url: sourceUrl(r), shortcode: r.platform === "instagram" ? r.id : null, reel: r.platform === "instagram" && r.kind === "reel" }));
+    const { data: result, error } = await supabase.rpc("import_session_start", { _space: data.spaceId, _origin: data.origin, ...(data.title ? {_title:data.title} : {}), ...(data.text ? {_text:data.text} : {}), ...(data.url ? {_url:data.url} : {}), ...(data.sourcePostId ? {_source:data.sourcePostId} : {}), ...(data.clientToken ? {_token:data.clientToken} : {}), ...(data.replaceSessionId ? {_replace:data.replaceSessionId} : {}), _refs: refs });
+    if (error || !result) throw new Error("Não foi possível criar a sessão. Tente de novo.");
+    return result as unknown as { sessionId: string; reused: boolean; limit?: false } | { limit: true; oldestId: string; oldestTitle: string };
+
   });
 
 /** Deterministic step (no AI): TMDB links / IMDb ids in the session's own text. */

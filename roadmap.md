@@ -1,5 +1,11 @@
 # Roadmap
 
+## Refinamentos focados — 12/10/2026
+- [ ] Backdrop morph e entrada radial Match sem transição global; poster preservado.
+- [ ] Biblioteca X, Galeria filtros/chips e Back replace, Rever alinhado a Assistidos, Home compacta, ficha sem link Nuvio e PriorWatch slim.
+- [ ] Importações: limite atômico de 3 com confirmação, Entry visual, revisão/meta/burst, resumo com retorno e conclusão explícita.
+- [ ] QA isolado/mobile e checks automáticos; sem Gemini, writes reais ou publicação. Share Target Android já comprovado pelo usuário, preservado.
+
 Concluído: Lotes 1–4, 5A–5D, Rodada 6, MCP.
 
 ## Rodada 7 — estabilização/refino

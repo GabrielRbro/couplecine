@@ -6,14 +6,14 @@ import { markShared } from "@/lib/shared-transition";
 import { useQuery, useQueryClient } from "@tanstack/react-query";
 import { useServerFn } from "@tanstack/react-start";
 import { getGalleryLogos } from "@/lib/catalog.functions";
-import { SlidersHorizontal } from "lucide-react";
+import { SlidersHorizontal, X } from "lucide-react";
 import { AnimatePresence, motion, useReducedMotion } from "motion/react";
 import { TouchSlider } from "@/components/app/TouchSlider";
 import { AnimatedSheet } from "@/components/app/AnimatedSheet";
 import { ScrollToTop } from "@/components/app/ScrollToTop";
 import { AppShell } from "@/components/app/AppShell";
 import { Button } from "@/components/ui/button";
-import { FilterPills, ScrollRow, TogglePill } from "@/components/app/ui";
+import { FilterPills, TogglePill } from "@/components/app/ui";
 import { EmptyState } from "@/components/app/MediaCard";
 import { formatRuntime, REACTION_EMOJI, tmdbImage } from "@/lib/format";
 import {
@@ -161,18 +161,17 @@ function GalleryPage() {
     if (Object.entries(patch).every(([k, v]) => current[k as keyof typeof current] === v)) return;
     nav({ to: ".", search: (p) => ({ ...p, ...patch }), replace: true, viewTransition: false });
   };
-  const setKind = (k: "all" | "movie" | "tv") => set({ kind: k });
-  const [durationSheet, setDurationSheet] = useState(false);
+  const setKind = (k: "all" | "movie" | "tv") => set({ kind: k, genre: genre && !pool.some((w) => (k === "all" || w.media_type === k) && w.genres.includes(genre)) ? "" : genre });
   const setGenre = (g: string) => set({ genre: g });
   const setBothLike = (f: (v: boolean) => boolean) => set({ both: f(bothLike) });
   const [sheet, setSheet] = useState(false);
   const pool = works.filter(isIndicated);
   const genres = useMemo(
-    () => [...new Set(pool.flatMap((w) => w.genres))].sort((a, b) => a.localeCompare(b, "pt-BR")),
-    [pool],
+    () => [...new Set(pool.filter((w) => kind === "all" || w.media_type === kind).flatMap((w) => w.genres))].sort((a, b) => a.localeCompare(b, "pt-BR")),
+    [pool, kind],
   );
   if (!space) return null;
-  const advanced = (genre ? 1 : 0) + (bothLike ? 1 : 0);
+  const advanced = (genre ? 1 : 0) + (bothLike ? 1 : 0) + (kind === "movie" && duration > 0 ? 1 : 0);
   const list = pool.filter(
     (w) =>
       (kind === "all" || w.media_type === kind) &&
@@ -189,25 +188,18 @@ function GalleryPage() {
       </span>
       <h1 className="mt-1 font-display text-2xl font-semibold">Galeria</h1>
       <p className="mt-0.5 text-sm text-muted-foreground">O que vamos assistir?</p>
-      <ScrollRow className="mt-3">
-        <FilterPills
-          options={
-            [
-              ["all", "Todos"],
-              ["movie", "Filmes"],
-              ["tv", "Séries"],
-            ] as const
-          }
-          value={kind}
-          onChange={setKind}
-        />
-        <AnimatePresence initial={false}>{kind === "movie" && <motion.div key="duration-chip" className="shrink-0 overflow-hidden" initial={{width:0,opacity:0,x:-8}} animate={{width:"auto",opacity:1,x:0}} exit={{width:0,opacity:0,x:-8}} transition={{duration:.2}}><TogglePill on={duration > 0} onClick={() => setDurationSheet(true)}>Duração{duration ? ` · ${formatRuntime(duration)}` : ""}</TogglePill></motion.div>}</AnimatePresence>
-        <motion.div layout><TogglePill on={advanced > 0} onClick={() => setSheet(true)}>
-          <span className="inline-flex items-center gap-1">
-            <SlidersHorizontal className="h-3.5 w-3.5" /> Filtros{advanced ? ` · ${advanced}` : ""}
-          </span>
-        </TogglePill></motion.div>
-      </ScrollRow>
+      <div className="mt-3 flex min-h-11 items-center gap-2">
+        <FilterPills options={[["all", "Todos"], ["movie", "Filmes"], ["tv", "Séries"]] as const} value={kind} onChange={setKind} />
+        <Button variant={advanced ? "secondary" : "ghost"} size="icon" aria-label="Filtros avançados" onClick={() => setSheet(true)} className="relative ml-auto h-11 w-11 shrink-0 rounded-full border border-border">
+          <SlidersHorizontal className="h-4 w-4" />
+          {advanced > 0 && <span className="absolute right-0 top-0 flex h-4 min-w-4 items-center justify-center rounded-full bg-primary text-[10px] text-primary-foreground">{advanced}</span>}
+        </Button>
+      </div>
+      <motion.div layout className="flex flex-wrap gap-2">
+        <AnimatePresence initial={false}>
+          {([{id:"genre",label:genre,active:!!genre,clear:()=>set({genre:""})}, {id:"duration",label:formatRuntime(duration),active:kind==="movie" && duration>0,clear:()=>set({duration:0})}, {id:"both",label:"Os dois curtiram",active:bothLike,clear:()=>set({both:false})}]).filter((chip)=>chip.active).map((chip)=><motion.div key={chip.id} initial={{opacity:0,scale:.95}} animate={{opacity:1,scale:1}} exit={{opacity:0,scale:.95}}><Button variant="secondary" className="min-h-11 rounded-full px-3 text-xs" aria-label={`Remover filtro ${chip.label}`} onClick={chip.clear}>{chip.label}<X className="h-3 w-3" /></Button></motion.div>)}
+        </AnimatePresence>
+      </motion.div>
       <div className="mt-4 space-y-4">
         <AnimatePresence initial={false} mode="popLayout">
           {list.map((w) => (
@@ -238,26 +230,17 @@ function GalleryPage() {
           </Link>
         </div>
       )}
-      <AnimatedSheet open={durationSheet} onClose={() => setDurationSheet(false)} labelledBy="gallery-duration"><h2 id="gallery-duration" className="font-semibold">Duração máxima</h2><p className="mt-5 text-center font-display text-4xl font-semibold text-primary">{duration ? `${Math.floor(duration / 60)}h${String(duration % 60).padStart(2,"0")}` : "Sem limite"}</p><TouchSlider label="Duração máxima em minutos" min={40} max={240} step={10} value={duration || 240} valueText={duration ? formatRuntime(duration) ?? undefined : "Sem limite"} onChange={(value)=>set({duration:value})} /><Button variant="outline" className="mt-3 min-h-11 w-full" onClick={() => set({duration:0})}>Sem limite</Button><Button className="mt-3 min-h-11 w-full" onClick={() => setDurationSheet(false)}>Aplicar</Button></AnimatedSheet>
-      <AnimatedSheet open={sheet} onClose={() => setSheet(false)} labelledBy="gal-filters">
+      <AnimatedSheet open={sheet} onClose={() => setSheet(false)} labelledBy="gal-filters" panelClassName="max-h-[85dvh] overflow-y-auto pb-[max(env(safe-area-inset-bottom),20px)]">
         <h2 id="gal-filters" className="text-base font-semibold">
           Filtros
         </h2>
-        <label className="mt-4 block text-xs text-muted-foreground" htmlFor="gal-genre">
+        <p className="mt-4 block text-xs text-muted-foreground">
           Gênero
-        </label>
+        </p>
         <div className="mt-2 flex max-h-48 flex-wrap gap-2 overflow-y-auto">{["", ...genres].map((g) => <Button key={g} variant={genre === g ? "secondary" : "outline"} className="min-h-11 text-xs" onClick={() => setGenre(g)}>{g || "Todos os gêneros"}</Button>)}</div>
-        <div className="mt-4">
-          <TogglePill on={bothLike} onClick={() => setBothLike((v) => !v)}>
-            Os dois curtiram
-          </TogglePill>
-        </div>
-        <button
-          onClick={() => setSheet(false)}
-          className="pressable mt-5 min-h-11 w-full rounded-lg bg-primary text-sm font-semibold text-primary-foreground"
-        >
-          Ver {list.length} {list.length === 1 ? "obra" : "obras"}
-        </button>
+        {kind === "movie" && <section className="mt-4" aria-label="Duração"><h3 className="text-xs text-muted-foreground">Duração máxima</h3><p className="mt-3 text-center font-display text-3xl font-semibold text-primary">{duration ? formatRuntime(duration) : "Sem limite"}</p><TouchSlider label="Duração máxima em minutos" min={40} max={240} step={10} value={duration || 240} valueText={formatRuntime(duration) ?? "Sem limite"} onChange={(value)=>set({duration:value})} /><Button variant="ghost" className="min-h-11 w-full text-xs" onClick={()=>set({duration:0})}>Sem limite</Button></section>}
+        <div className="mt-4"><TogglePill on={bothLike} onClick={() => setBothLike((v) => !v)}>Os dois curtiram</TogglePill></div>
+        <div className="mt-5 grid grid-cols-[auto_1fr] gap-3"><Button variant="outline" className="min-h-12" onClick={()=>set({genre:"",duration:0,both:false})}>Limpar</Button><Button className="min-h-12" onClick={()=>setSheet(false)}>Ver {list.length} {list.length === 1 ? "obra" : "obras"}</Button></div>
       </AnimatedSheet>
     </div>
   );

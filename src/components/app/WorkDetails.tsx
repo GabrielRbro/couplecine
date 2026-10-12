@@ -280,7 +280,7 @@ export function WorkDetails({
         ) : (
           <div className="h-full w-full bg-gradient-to-br from-accent to-card" />
         )}
-        <div className="absolute inset-0 bg-gradient-to-b from-background/30 via-transparent to-background" />
+        <div style={sharedBackdrop.viewTransitionName ? { viewTransitionName: "detail-scrim" } : undefined} className="absolute inset-0 bg-gradient-to-b from-background/30 via-transparent to-background" />
         <div
           style={{ viewTransitionName: "detail-controls" }}
           className="absolute inset-0 pointer-events-none [&_button]:pointer-events-auto"
@@ -414,11 +414,6 @@ export function WorkDetails({
           </section>
         )}
         {meta.error && <p className="text-xs text-muted-foreground">{meta.error.message}</p>}
-        <section>
-          <h2 className="mb-2 font-semibold">Posts relacionados</h2>
-          <p className="text-xs text-muted-foreground">Importação de posts chega numa próxima fase.</p>
-        </section>
-        <NuvioLink mediaType={work.media_type} tmdbId={work.tmdb_id} />
       </div>
       <AnimatedSheet
         open={picking}
@@ -622,12 +617,13 @@ function PriorWatch({
   }
   return (
     <div className="flex flex-col items-center gap-2 text-center text-sm">
-      <button
+      <Button variant="ghost"
         onClick={toggle}
-        className={`hit pressable inline-flex min-h-11 items-center justify-center gap-1.5 rounded-full border px-4 py-2 text-sm ${mine ? "border-primary text-primary" : "border-border text-muted-foreground"}`}
+        aria-pressed={mine}
+        className={`pressable inline-flex h-10 w-full items-center justify-center gap-1.5 rounded-lg border px-3 text-[11px] ${mine ? "border-primary/35 bg-primary/10 text-primary" : "border-border text-muted-foreground"}`}
       >
         {mine && <Check className="h-3.5 w-3.5" />} Eu já assisti antes
-      </button>
+      </Button>
       {theirs && (
         <span className="text-xs text-muted-foreground">
           {firstName(space.partner?.display_name)} já assistiu antes
@@ -1229,17 +1225,3 @@ function IndicationsBlock({
   );
 }
 
-/** Canonical Nuvio TV deep link (beta 1.1.0+ parser). Copy-only: no remote send/playback claims. */
-function NuvioLink({ mediaType, tmdbId }: { mediaType: "movie" | "tv"; tmdbId: number }) {
-  const link = `nuvio://tmdb/${mediaType}/${tmdbId}`;
-  return (
-    <section>
-      <h2 className="mb-1 font-semibold">Nuvio TV</h2>
-      <p className="text-xs text-muted-foreground">Link da ficha para abrir no dispositivo com Nuvio TV (versão beta 1.1.0 ou mais nova). Não envia à TV nem inicia reprodução.</p>
-      <div className="mt-2 flex items-center gap-2">
-        <code className="min-w-0 flex-1 truncate rounded-lg border border-border bg-card px-2 py-2 text-xs">{link}</code>
-        <Button variant="secondary" className="min-h-11" onClick={() => { void navigator.clipboard?.writeText(link).then(() => toast("Link copiado"), () => toast.error("Não foi possível copiar")); }}>Copiar</Button>
-      </div>
-    </section>
-  );
-}
