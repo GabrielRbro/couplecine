@@ -16,6 +16,22 @@ it("rechecks an older ambiguous TikTok description once, preserving the retry co
 });
 
 describe("TikTok public caption fallback", () => {
+  it("reads a photo share URL directly when TikTok's shortlink redirect is blocked", async () => {
+    const short = "https://vt.tiktok.com/ZSbwrPmMh/";
+    const imageUrl = "https://p16-common-sign.tiktokcdn-us.com/tos-alisg-i-photomode-sg/a~tplv-photomode-image.jpeg";
+    const fetch = vi.fn(async (input: string) => {
+      if (input.startsWith("https://tikwm.com/api/?")) return Response.json({ code: 0, data: {
+        id: "7686999788637736213", author: { unique_id: "vtindica_" }, title: "Filmes essenciais", images: [imageUrl],
+      } });
+      if (input === imageUrl) return new Response(new Uint8Array([0xff, 0xd8, 1]), { headers: { "content-type": "image/jpeg" } });
+      throw new Error("The TikTok redirect must not be required");
+    });
+    vi.stubGlobal("fetch", fetch);
+    expect(await fetchTikTokPhotoImages(parseSocial(short)!)).toMatchObject({ caption: "Filmes essenciais", images: [{ mimeType: "image/jpeg" }] });
+    expect(decodeURIComponent(fetch.mock.calls[0]![0])).toContain(short);
+    expect(fetch).toHaveBeenCalledTimes(2);
+  });
+
   it("downloads every photo in order from a public carousel without user screenshots", async () => {
     const full = "https://www.tiktok.com/@vtindica_/photo/7686999788637736213";
     const first = "https://p16-common-sign.tiktokcdn-us.com/tos-alisg-i-photomode-sg/a~tplv-photomode-image.jpeg?signature=one";
