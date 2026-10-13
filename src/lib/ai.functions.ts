@@ -7,6 +7,8 @@ import { findImportTitleWithChoices, findSpokenTitle, findTitle, lookupTmdb, typ
 const AI_MESSAGE: Record<string, string> = {
   not_configured: "Pesquisa inteligente não configurada. Adicione a chave do Gemini em Configurações.",
   rate_limited: "Limite de uso da IA atingido por agora. Use a busca normal.",
+  temporarily_unavailable: "A IA está instável agora. Tente novamente em instantes.",
+  provider_unauthorized: "Não foi possível acessar o Gemini com a chave atual. Verifique-a em Configurações.",
   failed: "A IA não respondeu. Use a busca normal.",
   bad_output: "A IA respondeu de forma inválida. Tente reformular.",
 };
